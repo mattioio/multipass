@@ -222,9 +222,19 @@ function showScreen(key) {
   }
 }
 
+function getWebSocketUrl() {
+  const override = window.localStorage?.getItem("multipass_ws_url");
+  if (override) return override;
+  const host = window.location.hostname;
+  if (host === "localhost" || host === "127.0.0.1") {
+    const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+    return `${protocol}://${window.location.host}`;
+  }
+  return "wss://api.loreandorder.com";
+}
+
 function connect() {
-  const protocol = location.protocol === "https:" ? "wss" : "ws";
-  state.ws = new WebSocket(`${protocol}://${location.host}`);
+  state.ws = new WebSocket(getWebSocketUrl());
 
   state.ws.addEventListener("open", () => {
     if (state.lastRoomCode && state.mode === "online") {
