@@ -14,6 +14,22 @@ import { createToastController } from "./ui/shared/toast.js";
 const LOCAL_REJOIN_KEY = "multipass_last_local_match";
 const ONLINE_UI_PREFS_KEY = "multipass_online_ui_prefs";
 const SEAT_TOKEN_KEY = "multipass_seat_token";
+const SCREEN_TO_HASH = Object.freeze({
+  landing: "#landing",
+  local: "#local",
+  host: "#host",
+  join: "#join",
+  lobby: "#lobby",
+  pick: "#pick",
+  wait: "#wait",
+  game: "#game",
+  shuffle: "#shuffle",
+  winner: "#winner"
+});
+const HASH_TO_SCREEN = Object.freeze(
+  Object.fromEntries(Object.entries(SCREEN_TO_HASH).map(([screen, hash]) => [hash, screen]))
+);
+const ROOM_REQUIRED_SCREENS = new Set(["lobby", "pick", "wait", "game", "shuffle", "winner"]);
 
 function createInitialState() {
   return {
@@ -78,6 +94,43 @@ const showActionToast = toast.showActionToast;
 const hideActionToast = toast.hideActionToast;
 const actionToastCta = toast.actionToastCta;
 
+function parseScreenHash(hash = window.location.hash) {
+  const normalized = String(hash || "").trim().toLowerCase();
+  return HASH_TO_SCREEN[normalized] || null;
+}
+
+function toScreenHash(screen) {
+  return SCREEN_TO_HASH[screen] || SCREEN_TO_HASH.landing;
+}
+
+function sameHistoryState(expected = {}) {
+  const current = window.history.state;
+  if (!current || typeof current !== "object") return false;
+  return Object.entries(expected).every(([key, value]) => current[key] === value);
+}
+
+function writeScreenHash(screen, options = {}) {
+  const mode = options.mode || "push";
+  const historyState = options.historyState || {};
+  const allowSameHashPush = Boolean(options.allowSameHashPush);
+  if (mode === "none") return;
+
+  const nextHash = toScreenHash(screen);
+  const currentHash = window.location.hash || "";
+  const nextState = { screen, ...historyState };
+  const currentPath = `${window.location.pathname}${window.location.search}`;
+  const nextUrl = `${currentPath}${nextHash}`;
+
+  if (mode === "replace") {
+    if (currentHash === nextHash && sameHistoryState(nextState)) return;
+    window.history.replaceState(nextState, "", nextUrl);
+    return;
+  }
+
+  if (!allowSameHashPush && currentHash === nextHash) return;
+  window.history.pushState(nextState, "", nextUrl);
+}
+
 function applyMode(mode, persist = false) {
   document.body.dataset.mode = mode;
   document.body.dataset.uiVariant = mode === "dark" ? "neon_night" : "soft";
@@ -109,11 +162,72 @@ function initModeToggle() {
   }
 }
 
-function showScreen(key) {
+function normalizeTargetScreen(screen) {
+  if (!screen || !(screen in screens)) return "landing";
+  if (ROOM_REQUIRED_SCREENS.has(screen) && !state.room) return "landing";
+  if (screen === "game" && (!state.room?.game || state.room.round?.status === "shuffling")) {
+    return state.room ? resolveScreen(state.room) : "landing";
+  }
+  if (screen === "winner") {
+    const gameState = state.room?.game?.state;
+    const ended = Boolean(gameState?.winnerId || gameState?.draw);
+    return ended ? "winner" : (state.room ? resolveScreen(state.room) : "landing");
+  }
+  if (screen === "shuffle" && state.room?.round?.status !== "shuffling") {
+    return state.room ? resolveScreen(state.room) : "landing";
+  }
+  return screen;
+}
+
+function handleBrowserNavigation(targetScreen) {
+  const normalizedTarget = normalizeTargetScreen(targetScreen);
+
+  const navigatingAwayFromRoom = !ROOM_REQUIRED_SCREENS.has(normalizedTarget);
+  if (navigatingAwayFromRoom && state.room) {
+    if (isLocalMode()) {
+      leaveLocalMatch({ saveForRejoin: true, history: "replace" });
+    } else {
+      leaveRoom({ history: "replace" });
+    }
+    return;
+  }
+
+  showScreen(normalizedTarget, { history: "none" });
+  writeScreenHash(normalizedTarget, { mode: "replace" });
+}
+
+function initHashRouting() {
+  window.addEventListener("hashchange", () => {
+    const target = parseScreenHash(window.location.hash) || "landing";
+    handleBrowserNavigation(target);
+  });
+
+  window.addEventListener("popstate", (event) => {
+    const routeScreen = parseScreenHash(window.location.hash);
+    const stateScreen = event.state?.screen;
+    const target = normalizeTargetScreen(routeScreen || stateScreen || "landing");
+
+    handleBrowserNavigation(target);
+  });
+
+  const initialTarget = normalizeTargetScreen(parseScreenHash(window.location.hash) || "landing");
+  showScreen(initialTarget, { history: "none" });
+  writeScreenHash(initialTarget, { mode: "replace" });
+}
+
+function showScreen(key, options = {}) {
+  const historyMode = options.history || "push";
+  const historyState = options.historyState || {};
+  const allowSameHashPush = Boolean(options.allowSameHashPush);
   state.activeScreen = key;
   localStorage.setItem("multipass_last_screen", key);
   Object.entries(screens).forEach(([name, element]) => {
     element.classList.toggle("active", name === key);
+  });
+  writeScreenHash(key, {
+    mode: historyMode,
+    historyState,
+    allowSameHashPush
   });
   updateHeroActions();
   updateHeroRoomCodeVisibility();
@@ -125,13 +239,14 @@ function getHeroActionConfig() {
     if (state.localStep === "p2") {
       return { label: "Back", action: () => {
         state.localStep = "p1";
+        writeScreenHash("local", { mode: "replace", historyState: { localStep: "p1" } });
         renderLocalSetup();
       } };
     }
-    return { label: "Back", action: () => showScreen("landing") };
+    return { label: "Back", action: () => showScreen("landing", { history: "push" }) };
   }
   if (state.activeScreen === "host" || state.activeScreen === "join") {
-    return { label: "Back", action: () => showScreen("landing") };
+    return { label: "Back", action: () => showScreen("landing", { history: "push" }) };
   }
   if (isLocalMode() && state.room && (
     state.activeScreen === "lobby" ||
@@ -149,13 +264,13 @@ function getHeroActionConfig() {
     return { label: "Back", action: () => {
       state.keepPickOpen = false;
       if (isLocalMode()) {
-        showScreen("lobby");
+        showScreen("lobby", { history: "push" });
         return;
       }
       if (state.room?.code) {
         setPreferredRoomScreen(state.room.code, "lobby");
       }
-      showScreen("lobby");
+      showScreen("lobby", { history: "push" });
     } };
   }
   if (state.activeScreen === "game") {
@@ -244,7 +359,7 @@ function connect() {
       updateRejoinCard();
       const nextScreen = resolveScreen(state.room);
       if (nextScreen === "shuffle" && state.activeScreen !== "shuffle") {
-        showScreen("shuffle");
+        showScreen("shuffle", { history: "replace" });
       }
       renderRoom();
       const endSignature = getEndSignature(state.room);
@@ -252,7 +367,7 @@ function connect() {
         state.lastWinSignature = endSignature;
         const dismissedSignature = getDismissedWinnerSignature(state.room?.code);
         if (dismissedSignature !== endSignature) {
-          showScreen("winner");
+          showScreen("winner", { history: "replace" });
           return;
         }
       }
@@ -260,12 +375,12 @@ function connect() {
         clearTimeout(state.shuffleTimer);
         state.shuffleTimer = setTimeout(() => {
           if (state.activeScreen === "shuffle") {
-            showScreen("game");
+            showScreen("game", { history: "replace" });
           }
         }, 900);
         return;
       }
-      showScreen(nextScreen);
+      showScreen(nextScreen, { history: "replace" });
       return;
     }
 
@@ -304,7 +419,7 @@ function connect() {
           localStorage.removeItem("multipass_last_room");
           updateRejoinCard();
           showToast("Room expired.");
-          showScreen("landing");
+          showScreen("landing", { history: "replace" });
           return;
         }
         if (message.message === "Pick a fruit.") {
@@ -314,7 +429,7 @@ function connect() {
             joinCodeInput.value = state.lastRoomCode;
           }
           showToast("Pick a fruit to rejoin.");
-          showScreen("join");
+          showScreen("join", { history: "replace" });
           return;
         }
       }
@@ -529,7 +644,7 @@ function hydrateLocalFromSnapshot(snapshot) {
     segmentCount: 6
   };
   renderRoom();
-  showScreen(resolveScreen(state.room));
+  showScreen(resolveScreen(state.room), { history: "replace" });
 }
 
 function createLocalRoom(fruitOne, fruitTwo) {
@@ -623,10 +738,10 @@ function handleLocalUpdate() {
   const endSignature = getEndSignature(state.room);
   if (endSignature && endSignature !== state.lastWinSignature) {
     state.lastWinSignature = endSignature;
-    showScreen("winner");
+    showScreen("winner", { history: "replace" });
     return;
   }
-  showScreen(resolveScreen(state.room));
+  showScreen(resolveScreen(state.room), { history: "replace" });
 }
 
 function orderPlayersByFirst(players, firstPlayerId) {
@@ -732,9 +847,10 @@ function displayEmoji(player) {
   return fruit ? fruit.emoji : "🙂";
 }
 
-function leaveRoom() {
+function leaveRoom(options = {}) {
+  const historyMode = options.history || "push";
   if (isLocalMode()) {
-    leaveLocalMatch({ saveForRejoin: false });
+    leaveLocalMatch({ saveForRejoin: false, history: historyMode });
     return;
   }
 
@@ -752,12 +868,12 @@ function leaveRoom() {
   state.you = null;
   state.autoJoinCode = null;
   document.body.removeAttribute("data-theme");
-  showScreen("landing");
+  showScreen("landing", { history: historyMode });
 }
 
-function leaveLocalMatch({ saveForRejoin }) {
+function leaveLocalMatch({ saveForRejoin, history = "push" } = {}) {
   if (!isLocalMode() || !state.room) {
-    showScreen("landing");
+    showScreen("landing", { history });
     return;
   }
   if (saveForRejoin) {
@@ -773,7 +889,7 @@ function leaveLocalMatch({ saveForRejoin }) {
   state.localWheel = { angle: 0, targetAngle: 0, winnerId: null, segmentCount: 6 };
   document.body.removeAttribute("data-theme");
   updateLocalRejoinCard();
-  showScreen("landing");
+  showScreen("landing", { history });
 }
 
 function renderRoom() {
@@ -1505,7 +1621,11 @@ function setup() {
     state.localHasSpun = false;
     state.localSpinInProgress = false;
     state.localWheel = { angle: 0, targetAngle: 0, winnerId: null, segmentCount: 6 };
-    handleLocalUpdate();
+    state.localStep = "p1";
+    saveLocalRejoinSnapshot(state.room);
+    updateLocalRejoinCard();
+    renderRoom();
+    showScreen("lobby", { history: "push" });
   });
   updateHostPicker();
   updateJoinPicker();
@@ -1520,17 +1640,17 @@ function setup() {
     state.localSpinInProgress = false;
     state.localWheel = { angle: 0, targetAngle: 0, winnerId: null, segmentCount: 6 };
     updateLocalPickers();
-    showScreen("local");
+    showScreen("local", { history: "push" });
   });
   document.getElementById("go-host").addEventListener("click", () => {
     state.mode = "online";
-    showScreen("host");
+    showScreen("host", { history: "push" });
   });
   document.getElementById("go-join").addEventListener("click", () => {
     state.mode = "online";
     resetJoinFlow();
     renderJoinSetup();
-    showScreen("join");
+    showScreen("join", { history: "push" });
   });
   document.getElementById("create-room").addEventListener("click", () => {
     state.mode = "online";
@@ -1625,7 +1745,7 @@ function setup() {
       state.keepPickOpen = true;
       if (isLocalMode()) {
         advanceLocalRoundByAlternation();
-        showScreen("pick");
+        showScreen("pick", { history: "push" });
         return;
       }
       if (state.room?.code) {
@@ -1644,7 +1764,7 @@ function setup() {
         setPreferredRoomScreen(state.room.code, "lobby");
         setDismissedWinnerSignature(state.room.code, getEndSignature(state.room));
       }
-      showScreen("lobby");
+      showScreen("lobby", { history: "push" });
     });
   }
 
@@ -1658,7 +1778,7 @@ function setup() {
       if (!isLocalMode() && state.room?.code) {
         setPreferredRoomScreen(state.room.code, "pick");
       }
-      showScreen("pick");
+      showScreen("pick", { history: "push" });
     });
   }
 
@@ -1708,6 +1828,7 @@ function setup() {
 
   updateRejoinCard();
   updateLocalRejoinCard();
+  initHashRouting();
   updateHeroActions();
   updateHeroRoomCodeVisibility();
   connect();

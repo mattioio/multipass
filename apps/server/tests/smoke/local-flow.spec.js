@@ -13,10 +13,10 @@ test("local happy path: setup -> lobby -> pick -> shuffle -> game", async ({ pag
   await page.getByRole("button", { name: "Pick a game" }).click();
 
   await expect(page.locator("#screen-pick.active")).toBeVisible();
-  await page.locator('#game-list .game-card:has-text("Tic Tac Toe")').first().click();
+  await page.getByRole("button", { name: "Play Tic Tac Toe" }).click();
 
   await expect(page.locator("#screen-shuffle.active")).toBeVisible();
-  await page.getByRole("button", { name: "Spin that wheel!" }).click();
+  await page.locator("#shuffle-spin").click();
 
   await expect(page.locator("#screen-game.active")).toBeVisible();
   await expect(page.locator("#ttt-board .ttt-cell")).toHaveCount(9);

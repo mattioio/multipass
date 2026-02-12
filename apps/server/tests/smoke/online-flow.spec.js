@@ -18,6 +18,7 @@ test("online happy path: host + guest choose game -> shuffle/game", async ({ bro
   await guestPage.goto("http://127.0.0.1:3000/");
   await guestPage.getByRole("button", { name: "Join a room" }).click();
   await guestPage.locator("#join-code").fill(roomCode);
+  await guestPage.getByRole("button", { name: "Continue" }).click();
   await guestPage.locator('#join-fruit-picker .fruit-option[data-fruit="kiwi"]').click();
   await guestPage.getByRole("button", { name: "Join room" }).click();
 
@@ -30,8 +31,8 @@ test("online happy path: host + guest choose game -> shuffle/game", async ({ bro
   await expect(hostPage.locator("#screen-pick.active")).toBeVisible();
   await expect(guestPage.locator("#screen-pick.active")).toBeVisible();
 
-  await hostPage.locator('#game-list .game-card:has-text("Tic Tac Toe")').first().click();
-  await guestPage.locator('#game-list .game-card:has-text("Tic Tac Toe")').first().click();
+  await hostPage.getByRole("button", { name: "Play Tic Tac Toe" }).click();
+  await guestPage.getByRole("button", { name: "Play Tic Tac Toe" }).click();
 
   await expect(hostPage.locator("#screen-game.active")).toBeVisible();
   await expect(guestPage.locator("#screen-game.active")).toBeVisible();
