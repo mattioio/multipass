@@ -7,6 +7,7 @@ test("online happy path: host + guest choose game -> shuffle/game", async ({ bro
   const guestPage = await guestContext.newPage();
 
   await hostPage.goto("http://127.0.0.1:3000/");
+  await hostPage.getByRole("tab", { name: "Online" }).click();
   await hostPage.getByRole("button", { name: "Host a room" }).click();
   await hostPage.locator('#host-fruit-picker .fruit-option[data-fruit="banana"]').click();
   await hostPage.getByRole("button", { name: "Create room" }).click();
@@ -16,6 +17,7 @@ test("online happy path: host + guest choose game -> shuffle/game", async ({ bro
   const roomCode = (await hostPage.locator("#room-code").textContent())?.trim() || "";
 
   await guestPage.goto("http://127.0.0.1:3000/");
+  await guestPage.getByRole("tab", { name: "Online" }).click();
   await guestPage.getByRole("button", { name: "Join a room" }).click();
   await guestPage.locator("#join-code").fill(roomCode);
   await guestPage.getByRole("button", { name: "Continue" }).click();

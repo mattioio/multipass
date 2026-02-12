@@ -30,43 +30,57 @@
       </header>
       <main>
         <section id="screen-landing" class="screen active">
-          <div class="landing-grid">
-            <div class="card landing-card local-card">
-              <div class="landing-card-header landing-card-header-local" aria-hidden="true">
-                <img src="/src/assets/local.svg" alt="" />
-              </div>
-              <h2 class="landing-title">Local play</h2>
-              <p class="subtext">Pass the device and play together on one screen.</p>
-              <button id="go-local" class="glow-button">Start</button>
-              <div id="local-rejoin-card" class="rejoin-card hidden">
-                <h3>Resume local match</h3>
-                <p id="local-rejoin-summary" class="subtext">Resume where you left off.</p>
-                <div class="button-row">
-                  <button id="local-rejoin-room" class="glow-button">Resume</button>
-                  <button id="local-clear-rejoin" class="ghost">Discard</button>
-                </div>
-              </div>
+          <div class="landing-segmented-wrap">
+            <div class="landing-segmented" role="tablist" aria-label="Choose play mode">
+              <button id="landing-tab-local" class="landing-segment active" role="tab" type="button" aria-selected="true" aria-controls="landing-card-local">
+                Local
+              </button>
+              <button id="landing-tab-online" class="landing-segment" role="tab" type="button" aria-selected="false" aria-controls="landing-card-online">
+                Online
+              </button>
             </div>
-            <div class="card landing-card online-card">
-              <div class="landing-card-header landing-card-header-online" aria-hidden="true">
-                <img src="/src/assets/online.svg" alt="" />
-              </div>
-              <h2 class="landing-title">Online play</h2>
-              <p class="subtext">Host a room or join a friend with a 4-letter code.</p>
-              <div class="button-row">
-                <button id="go-host" class="glow-button">Host a room</button>
-                <button id="go-join" class="ghost">Join a room</button>
-              </div>
-              <div id="rejoin-card" class="rejoin-card hidden">
-                <h3>Rejoin your room</h3>
-                <p class="subtext">Jump back in where you left off.</p>
-                <div class="rejoin-pill">
-                  <span class="room-label">Room code</span>
-                  <span id="rejoin-code" class="code-hero">----</span>
+          </div>
+          <div id="local-rejoin-card" class="rejoin-card hidden landing-rejoin-card">
+            <div class="landing-rejoin-content">
+              <h3>Resume local match</h3>
+              <p id="local-rejoin-summary" class="subtext">Started just now.</p>
+            </div>
+            <div class="button-row landing-rejoin-actions">
+              <button id="local-rejoin-room" class="glow-button banner-action">Resume</button>
+              <button id="local-clear-rejoin" class="ghost compact-action banner-action">Leave</button>
+            </div>
+          </div>
+          <div class="landing-carousel">
+            <div id="landing-track" class="landing-track" data-mode="local">
+              <div id="landing-card-local" class="card landing-card local-card" role="tabpanel" aria-labelledby="landing-tab-local">
+                <div class="landing-card-header landing-card-header-local" aria-hidden="true">
+                  <img src="/src/assets/local.svg" alt="" />
                 </div>
+                <h2 class="landing-title">Local play</h2>
+                <p class="subtext">Pass the device and play together on one screen.</p>
+                <button id="go-local" class="glow-button">Start</button>
+              </div>
+              <div id="landing-card-online" class="card landing-card online-card" role="tabpanel" aria-labelledby="landing-tab-online">
+                <div class="landing-card-header landing-card-header-online" aria-hidden="true">
+                  <img src="/src/assets/online.svg" alt="" />
+                </div>
+                <h2 class="landing-title">Online play</h2>
+                <p class="subtext">Host a room or join a friend with a 4-letter code.</p>
                 <div class="button-row">
-                  <button id="rejoin-room" class="glow-button">Rejoin now</button>
-                  <button id="clear-rejoin" class="ghost">Clear</button>
+                  <button id="go-host" class="glow-button">Host a room</button>
+                  <button id="go-join" class="ghost">Join a room</button>
+                </div>
+                <div id="rejoin-card" class="rejoin-card hidden">
+                  <h3>Rejoin your room</h3>
+                  <p class="subtext">Jump back in where you left off.</p>
+                  <div class="rejoin-pill">
+                    <span class="room-label">Room code</span>
+                    <span id="rejoin-code" class="code-hero">----</span>
+                  </div>
+                  <div class="button-row">
+                    <button id="rejoin-room" class="glow-button">Rejoin now</button>
+                    <button id="clear-rejoin" class="ghost">Clear</button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -94,45 +108,45 @@
                   <button class="fruit-option square-option theme-banana" data-fruit="banana" type="button">
                     <span class="fruit-shell">
                       <span class="fruit-inner">
-                        <span class="player-art" aria-hidden="true"><img src="/src/assets/player.png" alt="" /></span>
+                        <span class="player-art" aria-hidden="true"><img src="/src/assets/player.svg" alt="" /></span>
                         <span class="fruit-lower-third">
                           <span class="fruit-name">Mr Yellow</span>
                         </span>
                       </span>
-                      <span class="lock-badge" aria-hidden="true">🔒<span>Player 1 Locked</span></span>
+                      <span class="lock-badge" aria-hidden="true">🔒<span>Player 1</span></span>
                     </span>
                   </button>
                   <button class="fruit-option square-option theme-strawberry" data-fruit="strawberry" type="button">
                     <span class="fruit-shell">
                       <span class="fruit-inner">
-                        <span class="player-art" aria-hidden="true"><img src="/src/assets/player.png" alt="" /></span>
+                        <span class="player-art" aria-hidden="true"><img src="/src/assets/player.svg" alt="" /></span>
                         <span class="fruit-lower-third">
                           <span class="fruit-name">Mr Red</span>
                         </span>
                       </span>
-                      <span class="lock-badge" aria-hidden="true">🔒<span>Player 1 Locked</span></span>
+                      <span class="lock-badge" aria-hidden="true">🔒<span>Player 1</span></span>
                     </span>
                   </button>
                   <button class="fruit-option square-option theme-kiwi" data-fruit="kiwi" type="button">
                     <span class="fruit-shell">
                       <span class="fruit-inner">
-                        <span class="player-art" aria-hidden="true"><img src="/src/assets/player.png" alt="" /></span>
+                        <span class="player-art" aria-hidden="true"><img src="/src/assets/player.svg" alt="" /></span>
                         <span class="fruit-lower-third">
                           <span class="fruit-name">Mr Green</span>
                         </span>
                       </span>
-                      <span class="lock-badge" aria-hidden="true">🔒<span>Player 1 Locked</span></span>
+                      <span class="lock-badge" aria-hidden="true">🔒<span>Player 1</span></span>
                     </span>
                   </button>
                   <button class="fruit-option square-option theme-blueberry" data-fruit="blueberry" type="button">
                     <span class="fruit-shell">
                       <span class="fruit-inner">
-                        <span class="player-art" aria-hidden="true"><img src="/src/assets/player.png" alt="" /></span>
+                        <span class="player-art" aria-hidden="true"><img src="/src/assets/player.svg" alt="" /></span>
                         <span class="fruit-lower-third">
                           <span class="fruit-name">Mr Blue</span>
                         </span>
                       </span>
-                      <span class="lock-badge" aria-hidden="true">🔒<span>Player 1 Locked</span></span>
+                      <span class="lock-badge" aria-hidden="true">🔒<span>Player 1</span></span>
                     </span>
                   </button>
                 </div>
@@ -152,45 +166,45 @@
               <button class="fruit-option theme-banana" data-fruit="banana" type="button">
                 <span class="fruit-shell">
                   <span class="fruit-inner">
-                    <span class="player-art" aria-hidden="true"><img src="/src/assets/player.png" alt="" /></span>
+                    <span class="player-art" aria-hidden="true"><img src="/src/assets/player.svg" alt="" /></span>
                     <span class="fruit-lower-third">
                       <span class="fruit-name">Mr Yellow</span>
                     </span>
                   </span>
-                  <span class="lock-badge" aria-hidden="true">🔒<span>Player 1 Locked</span></span>
+                  <span class="lock-badge" aria-hidden="true">🔒<span>Player 1</span></span>
                 </span>
               </button>
               <button class="fruit-option theme-strawberry" data-fruit="strawberry" type="button">
                 <span class="fruit-shell">
                   <span class="fruit-inner">
-                    <span class="player-art" aria-hidden="true"><img src="/src/assets/player.png" alt="" /></span>
+                    <span class="player-art" aria-hidden="true"><img src="/src/assets/player.svg" alt="" /></span>
                     <span class="fruit-lower-third">
                       <span class="fruit-name">Mr Red</span>
                     </span>
                   </span>
-                  <span class="lock-badge" aria-hidden="true">🔒<span>Player 1 Locked</span></span>
+                  <span class="lock-badge" aria-hidden="true">🔒<span>Player 1</span></span>
                 </span>
               </button>
               <button class="fruit-option theme-kiwi" data-fruit="kiwi" type="button">
                 <span class="fruit-shell">
                   <span class="fruit-inner">
-                    <span class="player-art" aria-hidden="true"><img src="/src/assets/player.png" alt="" /></span>
+                    <span class="player-art" aria-hidden="true"><img src="/src/assets/player.svg" alt="" /></span>
                     <span class="fruit-lower-third">
                       <span class="fruit-name">Mr Green</span>
                     </span>
                   </span>
-                  <span class="lock-badge" aria-hidden="true">🔒<span>Player 1 Locked</span></span>
+                  <span class="lock-badge" aria-hidden="true">🔒<span>Player 1</span></span>
                 </span>
               </button>
               <button class="fruit-option theme-blueberry" data-fruit="blueberry" type="button">
                 <span class="fruit-shell">
                   <span class="fruit-inner">
-                    <span class="player-art" aria-hidden="true"><img src="/src/assets/player.png" alt="" /></span>
+                    <span class="player-art" aria-hidden="true"><img src="/src/assets/player.svg" alt="" /></span>
                     <span class="fruit-lower-third">
                       <span class="fruit-name">Mr Blue</span>
                     </span>
                   </span>
-                  <span class="lock-badge" aria-hidden="true">🔒<span>Player 1 Locked</span></span>
+                  <span class="lock-badge" aria-hidden="true">🔒<span>Player 1</span></span>
                 </span>
               </button>
             </div>
@@ -215,45 +229,45 @@
               <button class="fruit-option theme-banana" data-fruit="banana" type="button">
                 <span class="fruit-shell">
                   <span class="fruit-inner">
-                    <span class="player-art" aria-hidden="true"><img src="/src/assets/player.png" alt="" /></span>
+                    <span class="player-art" aria-hidden="true"><img src="/src/assets/player.svg" alt="" /></span>
                     <span class="fruit-lower-third">
                       <span class="fruit-name">Mr Yellow</span>
                     </span>
                   </span>
-                  <span class="lock-badge" aria-hidden="true">🔒<span>Player 1 Locked</span></span>
+                  <span class="lock-badge" aria-hidden="true">🔒<span>Player 1</span></span>
                 </span>
               </button>
               <button class="fruit-option theme-strawberry" data-fruit="strawberry" type="button">
                 <span class="fruit-shell">
                   <span class="fruit-inner">
-                    <span class="player-art" aria-hidden="true"><img src="/src/assets/player.png" alt="" /></span>
+                    <span class="player-art" aria-hidden="true"><img src="/src/assets/player.svg" alt="" /></span>
                     <span class="fruit-lower-third">
                       <span class="fruit-name">Mr Red</span>
                     </span>
                   </span>
-                  <span class="lock-badge" aria-hidden="true">🔒<span>Player 1 Locked</span></span>
+                  <span class="lock-badge" aria-hidden="true">🔒<span>Player 1</span></span>
                 </span>
               </button>
               <button class="fruit-option theme-kiwi" data-fruit="kiwi" type="button">
                 <span class="fruit-shell">
                   <span class="fruit-inner">
-                    <span class="player-art" aria-hidden="true"><img src="/src/assets/player.png" alt="" /></span>
+                    <span class="player-art" aria-hidden="true"><img src="/src/assets/player.svg" alt="" /></span>
                     <span class="fruit-lower-third">
                       <span class="fruit-name">Mr Green</span>
                     </span>
                   </span>
-                  <span class="lock-badge" aria-hidden="true">🔒<span>Player 1 Locked</span></span>
+                  <span class="lock-badge" aria-hidden="true">🔒<span>Player 1</span></span>
                 </span>
               </button>
               <button class="fruit-option theme-blueberry" data-fruit="blueberry" type="button">
                 <span class="fruit-shell">
                   <span class="fruit-inner">
-                    <span class="player-art" aria-hidden="true"><img src="/src/assets/player.png" alt="" /></span>
+                    <span class="player-art" aria-hidden="true"><img src="/src/assets/player.svg" alt="" /></span>
                     <span class="fruit-lower-third">
                       <span class="fruit-name">Mr Blue</span>
                     </span>
                   </span>
-                  <span class="lock-badge" aria-hidden="true">🔒<span>Player 1 Locked</span></span>
+                  <span class="lock-badge" aria-hidden="true">🔒<span>Player 1</span></span>
                 </span>
               </button>
             </div>
@@ -275,12 +289,12 @@
           <div class="panel shuffle-panel">
             <h2>Who starts?</h2>
             <div id="shuffle-display" class="shuffle-display wheel-stage">
-              <div class="wheel-wrap">
-                <div id="shuffle-wheel" class="shuffle-wheel" aria-label="Player picker wheel">
-                  <div id="shuffle-segments" class="shuffle-segments"></div>
+              <div class="shuffle-strip-wrap">
+                <div id="shuffle-strip-stage" class="shuffle-strip-stage" aria-label="Player starter picker">
+                  <div id="shuffle-strip-track" class="shuffle-strip-track"></div>
+                  <div id="shuffle-lens" class="shuffle-lens" aria-hidden="true"></div>
                 </div>
-                <button id="shuffle-spin" class="wheel-spin-button" type="button" aria-label="Spin the wheel">
-                  <span class="wheel-spin-pointer" aria-hidden="true"></span>
+                <button id="shuffle-spin" class="wheel-spin-button" type="button" aria-label="Start or stop the starter picker">
                   <span class="wheel-spin-label">Spin</span>
                 </button>
               </div>
@@ -319,7 +333,9 @@
 
           <div class="game-panel">
             <div id="turn-indicator" class="turn-indicator">
-              <span id="turn-emoji" class="turn-emoji">🎲</span>
+              <span id="turn-emoji" class="turn-emoji" aria-hidden="true">
+                <img src="/src/assets/player.svg" alt="" />
+              </span>
               <span id="turn-text" class="turn-text">Pick a game to start</span>
             </div>
             <div id="ttt-board" class="ttt-board"></div>

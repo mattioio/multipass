@@ -32,6 +32,7 @@ test("online browser back exits room flow from lobby to landing", async ({ brows
   const guestPage = await guestContext.newPage();
 
   await hostPage.goto("/");
+  await hostPage.getByRole("tab", { name: "Online" }).click();
   await hostPage.getByRole("button", { name: "Host a room" }).click();
   await expect(hostPage).toHaveURL(/#host$/);
   await hostPage.locator('#host-fruit-picker .fruit-option[data-fruit="banana"]').click();
@@ -41,6 +42,7 @@ test("online browser back exits room flow from lobby to landing", async ({ brows
 
   const roomCode = (await hostPage.locator("#room-code").textContent())?.trim() || "";
   await guestPage.goto("/");
+  await guestPage.getByRole("tab", { name: "Online" }).click();
   await guestPage.getByRole("button", { name: "Join a room" }).click();
   await guestPage.locator("#join-code").fill(roomCode);
   await guestPage.getByRole("button", { name: "Continue" }).click();

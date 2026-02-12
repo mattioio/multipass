@@ -30,6 +30,21 @@ const HASH_TO_SCREEN = Object.freeze(
   Object.fromEntries(Object.entries(SCREEN_TO_HASH).map(([screen, hash]) => [hash, screen]))
 );
 const ROOM_REQUIRED_SCREENS = new Set(["lobby", "pick", "wait", "game", "shuffle", "winner"]);
+const STRIP_TILE_REPEAT_COUNT = 30;
+
+function createInitialLocalStripState() {
+  return {
+    isLooping: false,
+    isSettling: false,
+    offsetPx: 0,
+    velocity: 680,
+    winnerId: null,
+    winnerTileIndex: null,
+    rafId: null,
+    lastTs: 0,
+    targetOffsetPx: 0
+  };
+}
 
 function createInitialState() {
   return {
@@ -44,7 +59,6 @@ function createInitialState() {
     lastScreen: localStorage.getItem("multipass_last_screen"),
     lastRoomCode: localStorage.getItem("multipass_last_room"),
     autoJoinCode: null,
-    lastShuffleAt: null,
     shuffleTimer: null,
     lastLeaderId: null,
     lastWinSignature: null,
@@ -60,13 +74,8 @@ function createInitialState() {
     prevLocalStep: "p1",
     settingsLastFocus: null,
     localHasSpun: false,
-    localSpinInProgress: false,
-    localWheel: {
-      angle: 0,
-      targetAngle: 0,
-      winnerId: null,
-      segmentCount: 6
-    }
+    landingMode: "local",
+    localStrip: createInitialLocalStripState()
   };
 }
 
@@ -87,6 +96,10 @@ const screens = {
   shuffle: document.getElementById("screen-shuffle"),
   winner: document.getElementById("screen-winner")
 };
+const landingTrack = document.getElementById("landing-track");
+const landingSegmented = document.querySelector(".landing-segmented");
+const landingTabLocal = document.getElementById("landing-tab-local");
+const landingTabOnline = document.getElementById("landing-tab-online");
 
 const toast = createToastController();
 const showToast = toast.showToast;
@@ -561,11 +574,16 @@ function localId(prefix) {
 }
 
 function getLocalRejoinLabel(snapshot) {
-  if (!snapshot?.room?.players) return "Resume where you left off.";
-  const host = snapshot.room.players.host;
-  const guest = snapshot.room.players.guest;
-  if (!host || !guest) return "Resume where you left off.";
-  return `${host.emoji || "🙂"} ${host.name} ${host.gamesWon || 0} - ${guest.gamesWon || 0} ${guest.emoji || "🙂"} ${guest.name}`;
+  const startedAt = Number(snapshot?.room?.createdAt) || Number(snapshot?.savedAt) || null;
+  if (!startedAt) return "Started a bit ago.";
+  const elapsedMs = Math.max(0, Date.now() - startedAt);
+  const elapsedMinutes = Math.floor(elapsedMs / 60000);
+  if (elapsedMinutes < 1) return "Started just now.";
+  if (elapsedMinutes < 60) return `Started about ${elapsedMinutes} min ago.`;
+  const elapsedHours = Math.floor(elapsedMinutes / 60);
+  if (elapsedHours < 24) return `Started about ${elapsedHours} hr ago.`;
+  const elapsedDays = Math.floor(elapsedHours / 24);
+  return `Started about ${elapsedDays} day ago${elapsedDays === 1 ? "" : "s"}.`;
 }
 
 function isValidLocalRejoinSnapshot(snapshot) {
@@ -586,7 +604,7 @@ function saveLocalRejoinSnapshot(room, meta = {}) {
     mode: "local",
     savedAt: Date.now(),
     localHasSpun: Boolean(meta.localHasSpun ?? state.localHasSpun),
-    localWheelAngle: Number.isFinite(meta.localWheelAngle) ? meta.localWheelAngle : state.localWheel.angle,
+    localStripOffset: Number.isFinite(meta.localStripOffset) ? meta.localStripOffset : state.localStrip.offsetPx,
     room
   };
   try {
@@ -636,12 +654,13 @@ function hydrateLocalFromSnapshot(snapshot) {
     snapshot.room.round?.hasPickedStarter ??
     snapshot.room.round?.firstPlayerId
   );
-  state.localSpinInProgress = false;
-  state.localWheel = {
-    angle: Number.isFinite(snapshot.localWheelAngle) ? snapshot.localWheelAngle : 0,
-    targetAngle: 0,
-    winnerId: snapshot.room.round?.firstPlayerId || snapshot.room.round?.pickerId || null,
-    segmentCount: 6
+  stopShuffleStripLoop();
+  state.localStrip = {
+    ...createInitialLocalStripState(),
+    offsetPx: Number.isFinite(snapshot.localStripOffset)
+      ? snapshot.localStripOffset
+      : (Number.isFinite(snapshot.localWheelAngle) ? snapshot.localWheelAngle : 0),
+    winnerId: snapshot.room.round?.firstPlayerId || snapshot.room.round?.pickerId || null
   };
   renderRoom();
   showScreen(resolveScreen(state.room), { history: "replace" });
@@ -725,7 +744,7 @@ function advanceLocalRoundByAlternation() {
     resolvedGameId: null,
     hasPickedStarter: Boolean(state.localHasSpun)
   };
-  state.localWheel.winnerId = next;
+  state.localStrip.winnerId = next;
   state.room.game = null;
   state.room.updatedAt = Date.now();
   handleLocalUpdate();
@@ -849,6 +868,7 @@ function displayEmoji(player) {
 
 function leaveRoom(options = {}) {
   const historyMode = options.history || "push";
+  stopShuffleStripLoop();
   if (isLocalMode()) {
     leaveLocalMatch({ saveForRejoin: false, history: historyMode });
     return;
@@ -885,8 +905,8 @@ function leaveLocalMatch({ saveForRejoin, history = "push" } = {}) {
   state.lastLeaderId = null;
   state.lastWinSignature = null;
   state.localHasSpun = false;
-  state.localSpinInProgress = false;
-  state.localWheel = { angle: 0, targetAngle: 0, winnerId: null, segmentCount: 6 };
+  stopShuffleStripLoop();
+  state.localStrip = createInitialLocalStripState();
   document.body.removeAttribute("data-theme");
   updateLocalRejoinCard();
   showScreen("landing", { history });
@@ -1180,14 +1200,12 @@ function renderGameList(room) {
 
 function renderTicTacToe(room) {
   const boardEl = document.getElementById("ttt-board");
-  const emojiEl = document.getElementById("turn-emoji");
   const textEl = document.getElementById("turn-text");
   const indicatorEl = document.getElementById("turn-indicator");
   const isLocal = isLocalMode();
 
   if (!room.game || room.game.id !== "tic_tac_toe") {
     boardEl.innerHTML = "";
-    if (emojiEl) emojiEl.textContent = "🎲";
     if (textEl) textEl.textContent = room.game ? "Switch to Tic Tac Toe to play." : "Pick a game to start";
     if (indicatorEl) {
       indicatorEl.classList.remove(
@@ -1214,7 +1232,6 @@ function renderTicTacToe(room) {
   });
 
   if (winner) {
-    if (emojiEl) emojiEl.textContent = displayEmoji(winner);
     if (textEl) textEl.textContent = `${winner.name} wins this round`;
     if (indicatorEl) {
       indicatorEl.classList.remove(
@@ -1228,7 +1245,6 @@ function renderTicTacToe(room) {
       indicatorEl.classList.add("turn-passive");
     }
   } else if (stateGame.draw) {
-    if (emojiEl) emojiEl.textContent = "🤝";
     if (textEl) textEl.textContent = "Draw game";
     if (indicatorEl) {
       indicatorEl.classList.remove(
@@ -1244,7 +1260,6 @@ function renderTicTacToe(room) {
   } else {
     const current = playerById(room, stateGame.nextPlayerId);
     const isYourTurn = !isLocal && current && state.you?.playerId === current.id;
-    if (emojiEl) emojiEl.textContent = current ? displayEmoji(current) : "⏳";
     if (textEl) {
       if (isYourTurn) {
         textEl.textContent = "Your turn";
@@ -1407,139 +1422,258 @@ function renderEndRequest(room) {
 }
 
 function renderShuffle(room) {
-  const wheel = document.getElementById("shuffle-wheel");
-  const segmentHost = document.getElementById("shuffle-segments");
+  const stage = document.getElementById("shuffle-strip-stage");
+  const track = document.getElementById("shuffle-strip-track");
   const spinButton = document.getElementById("shuffle-spin");
   const result = document.getElementById("shuffle-result");
-  if (!wheel || !segmentHost || !spinButton || !result) return;
+  if (!stage || !track || !spinButton || !result) return;
 
-  renderWheelSegments(room);
-  if (!state.localSpinInProgress) {
-    wheel.style.transition = "none";
-    wheel.style.transform = `rotate(${state.localWheel.angle}deg)`;
+  renderStripTiles(room);
+  if (!state.localStrip.isLooping && !state.localStrip.isSettling) {
+    track.style.transition = "none";
+    applyShuffleStripTransform(track, state.localStrip.offsetPx);
   }
 
   const picker = playerById(room, room.round?.pickerId || room.round?.firstPlayerId);
-  if (state.localSpinInProgress) {
+  if (state.localStrip.isLooping || state.localStrip.isSettling) {
     result.textContent = "Spinning...";
     result.classList.add("show");
-    wheel.classList.remove("is-winning");
-    wheel.classList.remove("is-settled");
   } else if (room.round?.status === "shuffling") {
     if (state.localHasSpun && picker) {
       result.textContent = `${picker.name} starts`;
       result.classList.add("show");
-      wheel.classList.add("is-winning");
-      wheel.classList.add("is-settled");
     } else {
       result.textContent = "";
       result.classList.remove("show");
-      wheel.classList.remove("is-winning");
-      wheel.classList.remove("is-settled");
     }
   } else if (picker && room.round?.status === "playing") {
     result.textContent = `${picker.name} starts`;
     result.classList.add("show");
-    wheel.classList.add("is-winning");
-    wheel.classList.add("is-settled");
   } else {
     result.textContent = "";
     result.classList.remove("show");
-    wheel.classList.remove("is-winning");
-    wheel.classList.remove("is-settled");
   }
 
-  if (isLocalMode()) {
-    const canSpin = room.round?.status === "shuffling" && !state.localSpinInProgress && !state.localHasSpun && Boolean(room.round?.resolvedGameId);
-    const shouldShow = canSpin || state.localSpinInProgress;
-    spinButton.classList.toggle("hidden", !shouldShow);
-    spinButton.disabled = !canSpin;
-    const spinLabel = spinButton.querySelector(".wheel-spin-label");
-    if (spinLabel) {
-      spinLabel.textContent = state.localSpinInProgress ? "..." : "Spin";
-    }
-  } else if (room.round?.status === "shuffling") {
-    spinButton.classList.add("hidden");
-    const shuffleAt = room.round?.shuffleAt;
-    if (shuffleAt && shuffleAt !== state.lastShuffleAt) {
-      state.lastShuffleAt = shuffleAt;
-      const spinAngle = state.localWheel.angle + 1400 + Math.floor(Math.random() * 420);
-      wheel.style.transition = "transform 2200ms cubic-bezier(0.08, 0.92, 0.14, 1)";
-      wheel.style.transform = `rotate(${spinAngle}deg)`;
-      state.localWheel.angle = spinAngle % 360;
-    }
-  } else {
-    spinButton.classList.add("hidden");
+  const localCanSpin = room.round?.status === "shuffling" && !state.localHasSpun && Boolean(room.round?.resolvedGameId);
+  const onlineCanSpin = room.round?.status === "shuffling" && Boolean(room.round?.resolvedGameId);
+  const canSpin = isLocalMode() ? localCanSpin : onlineCanSpin;
+  const shouldShow = canSpin || state.localStrip.isLooping || state.localStrip.isSettling;
+  spinButton.classList.toggle("hidden", !shouldShow);
+  spinButton.disabled = state.localStrip.isSettling || (!state.localStrip.isLooping && !canSpin);
+  const spinLabel = spinButton.querySelector(".wheel-spin-label");
+  if (spinLabel) {
+    spinLabel.textContent = state.localStrip.isLooping ? "Stop" : "Spin";
+  }
+
+  if (!isLocalMode() && room.round?.status === "playing" && state.localStrip.isLooping && !state.localStrip.isSettling) {
+    const winnerId = room.round?.pickerId || room.round?.firstPlayerId;
+    if (winnerId) settleShuffleStrip({ room, winnerId });
   }
 }
 
-function renderWheelSegments(room) {
-  const host = document.getElementById("shuffle-segments");
-  if (!host) return;
-  host.innerHTML = "";
-  const players = getLocalPlayers(room);
-  if (players.length < 2) return;
-  const segmentCount = state.localWheel.segmentCount;
-  for (let i = 0; i < segmentCount; i += 1) {
-    const player = players[i % 2];
-    const label = document.createElement("div");
-    label.className = "wheel-segment-label";
-    label.style.setProperty("--seg-index", String(i));
-    label.innerHTML = `<span class="seg-emoji">${displayEmoji(player)}</span><span>${player.name}</span>`;
-    host.appendChild(label);
+function applyShuffleStripTransform(track, offsetPx) {
+  track.style.transform = `translate3d(${-offsetPx}px, -50%, 0)`;
+}
+
+function getShuffleStripMetrics(stage, track) {
+  const first = track.querySelector(".shuffle-strip-tile");
+  if (!first) return null;
+  const second = first.nextElementSibling;
+  const firstWidth = first.getBoundingClientRect().width;
+  let gap = 0;
+  if (second) {
+    gap = second.offsetLeft - first.offsetLeft - first.offsetWidth;
   }
+  const tilePitch = firstWidth + Math.max(0, gap);
+  if (!tilePitch) return null;
+  return {
+    tilePitch,
+    stageCenter: stage.clientWidth / 2
+  };
+}
+
+function stopShuffleStripLoop() {
+  if (state.localStrip.rafId) {
+    cancelAnimationFrame(state.localStrip.rafId);
+    state.localStrip.rafId = null;
+  }
+  state.localStrip.isLooping = false;
+  state.localStrip.lastTs = 0;
+}
+
+function startShuffleStripLoop(stage, track) {
+  if (state.localStrip.isLooping || state.localStrip.isSettling) return;
+  const metrics = getShuffleStripMetrics(stage, track);
+  if (!metrics) return;
+  const cycleWidth = metrics.tilePitch * 2;
+  if (!cycleWidth) return;
+
+  state.localStrip.isLooping = true;
+  state.localStrip.lastTs = 0;
+
+  const tick = (timestamp) => {
+    if (!state.localStrip.isLooping) return;
+    if (!state.localStrip.lastTs) {
+      state.localStrip.lastTs = timestamp;
+    }
+    const delta = Math.max(0, (timestamp - state.localStrip.lastTs) / 1000);
+    state.localStrip.lastTs = timestamp;
+    state.localStrip.offsetPx += state.localStrip.velocity * delta;
+    if (state.localStrip.offsetPx >= cycleWidth) {
+      state.localStrip.offsetPx -= cycleWidth;
+    }
+    applyShuffleStripTransform(track, state.localStrip.offsetPx);
+    state.localStrip.rafId = requestAnimationFrame(tick);
+  };
+
+  state.localStrip.rafId = requestAnimationFrame(tick);
+}
+
+function renderStripTiles(room) {
+  const track = document.getElementById("shuffle-strip-track");
+  if (!track) return;
+  const players = getLocalPlayers(room);
+  if (players.length < 2) {
+    track.innerHTML = "";
+    track.dataset.signature = "";
+    return;
+  }
+  const signature = players.map((player) => `${player.id}:${player.theme || "none"}`).join("|");
+  if (track.dataset.signature === signature) return;
+  track.dataset.signature = signature;
+  track.innerHTML = "";
+  const fragment = document.createDocumentFragment();
+  for (let i = 0; i < STRIP_TILE_REPEAT_COUNT; i += 1) {
+    const tile = document.createElement("div");
+    const player = players[i % players.length];
+    tile.className = `shuffle-strip-tile${(i % 2) === 1 ? " alt" : ""}`;
+    tile.setAttribute("aria-hidden", "true");
+    tile.dataset.playerId = player.id;
+    tile.dataset.tileIndex = String(i);
+    const avatar = document.createElement("img");
+    avatar.className = "shuffle-strip-avatar";
+    avatar.src = "/src/assets/player.svg";
+    avatar.alt = "";
+    avatar.setAttribute("aria-hidden", "true");
+    tile.appendChild(avatar);
+    fragment.appendChild(tile);
+  }
+  track.appendChild(fragment);
+}
+
+function resolveStopWinner(room) {
+  if (isLocalMode()) {
+    const players = getLocalPlayers(room);
+    if (players.length < 2) return null;
+    const winner = Math.random() < 0.5 ? players[0] : players[1];
+    return winner.id;
+  }
+  return room.round?.pickerId || room.round?.firstPlayerId || null;
+}
+
+function settleShuffleStrip({ room, winnerId }) {
+  const stage = document.getElementById("shuffle-strip-stage");
+  const track = document.getElementById("shuffle-strip-track");
+  if (!stage || !track || !winnerId || state.localStrip.isSettling) return;
+  const metrics = getShuffleStripMetrics(stage, track);
+  if (!metrics) return;
+  const winnerTiles = Array.from(track.querySelectorAll(`.shuffle-strip-tile[data-player-id="${winnerId}"]`));
+  if (!winnerTiles.length) return;
+
+  stopShuffleStripLoop();
+  state.localStrip.isSettling = true;
+  state.localStrip.winnerId = winnerId;
+
+  const minTravel = metrics.tilePitch * (4 + Math.floor(Math.random() * 3));
+  const currentOffset = state.localStrip.offsetPx;
+  let chosenTile = null;
+  let targetOffset = Number.POSITIVE_INFINITY;
+
+  winnerTiles.forEach((tile) => {
+    const center = tile.offsetLeft + tile.offsetWidth / 2;
+    const candidate = center - metrics.stageCenter;
+    if (candidate > currentOffset + minTravel && candidate < targetOffset) {
+      targetOffset = candidate;
+      chosenTile = tile;
+    }
+  });
+
+  if (!chosenTile) {
+    const fallback = winnerTiles[winnerTiles.length - 1];
+    chosenTile = fallback;
+    targetOffset = fallback.offsetLeft + fallback.offsetWidth / 2 - metrics.stageCenter;
+  }
+
+  const jitter = (Math.random() * 8) - 4;
+  const settleDuration = 920 + Math.floor(Math.random() * 340);
+  const finalOffset = Math.max(currentOffset, targetOffset + jitter);
+  state.localStrip.targetOffsetPx = finalOffset;
+  state.localStrip.winnerTileIndex = Number(chosenTile.dataset.tileIndex || 0);
+
+  track.style.transition = `transform ${settleDuration}ms cubic-bezier(0.12, 0.86, 0.16, 1)`;
+
+  let settled = false;
+  const finalize = () => {
+    if (settled) return;
+    settled = true;
+    track.style.transition = "none";
+    state.localStrip.offsetPx = finalOffset;
+    state.localStrip.isSettling = false;
+
+    if (isLocalMode()) {
+      state.localHasSpun = true;
+      state.room.round.pickerId = winnerId;
+      state.room.round.firstPlayerId = winnerId;
+      state.room.round.hasPickedStarter = true;
+      state.room.round.status = "shuffling";
+      state.room.round.shuffleAt = Date.now();
+      state.room.updatedAt = Date.now();
+      renderRoom();
+      const chosenGameId = state.room.round.resolvedGameId;
+      clearTimeout(state.shuffleTimer);
+      state.shuffleTimer = setTimeout(() => {
+        if (!chosenGameId || state.activeScreen !== "shuffle") return;
+        startLocalGame(chosenGameId);
+      }, 1200);
+      return;
+    }
+
+    renderRoom();
+  };
+
+  const onTransitionEnd = () => finalize();
+  track.addEventListener("transitionend", onTransitionEnd, { once: true });
+  setTimeout(finalize, settleDuration + 120);
+
+  requestAnimationFrame(() => {
+    applyShuffleStripTransform(track, finalOffset);
+  });
 }
 
 function startWheelSpin() {
-  if (!state.room || !isLocalMode() || state.localSpinInProgress) return;
-  const wheel = document.getElementById("shuffle-wheel");
-  const spinButton = document.getElementById("shuffle-spin");
-  if (!wheel || !spinButton) return;
+  if (!state.room) return;
+  const stage = document.getElementById("shuffle-strip-stage");
+  const track = document.getElementById("shuffle-strip-track");
+  if (!stage || !track) return;
   const players = getLocalPlayers(state.room);
-  if (players.length < 2 || state.room.round?.status !== "shuffling" || !state.room.round?.resolvedGameId) return;
+  if (players.length < 2) return;
+  const canSpin = state.room.round?.status === "shuffling" && Boolean(state.room.round?.resolvedGameId);
+  if (!canSpin || state.localStrip.isSettling) return;
+  if (isLocalMode() && state.localHasSpun && !state.localStrip.isLooping) return;
 
-  state.localSpinInProgress = true;
-  state.room.updatedAt = Date.now();
+  if (state.localStrip.isLooping) {
+    const winnerId = resolveStopWinner(state.room);
+    if (!winnerId) {
+      showToast("Still deciding who starts.");
+      return;
+    }
+    settleShuffleStrip({ room: state.room, winnerId });
+    return;
+  }
+
+  renderStripTiles(state.room);
+  startShuffleStripLoop(stage, track);
   renderRoom();
-
-  const winner = Math.random() < 0.5 ? players[0] : players[1];
-  const winnerIndexes = winner.id === players[0].id ? [0, 2, 4] : [1, 3, 5];
-  const winnerIndex = winnerIndexes[Math.floor(Math.random() * winnerIndexes.length)];
-  const segmentAngle = 360 / state.localWheel.segmentCount;
-  const segmentCenter = winnerIndex * segmentAngle + segmentAngle / 2;
-  const jitter = (Math.random() * 16) - 8;
-  const turns = 6 + Math.floor(Math.random() * 3);
-  const targetAngle = turns * 360 + (360 - segmentCenter) + jitter;
-
-  state.localWheel.winnerId = winner.id;
-  state.localWheel.targetAngle = targetAngle;
-  wheel.style.transition = `transform ${3300 + Math.floor(Math.random() * 700)}ms cubic-bezier(0.08, 0.92, 0.12, 1)`;
-  wheel.classList.remove("is-winning");
-  wheel.classList.remove("is-settled");
-  requestAnimationFrame(() => {
-    wheel.style.transform = `rotate(${targetAngle}deg)`;
-  });
-
-  const settle = () => {
-    wheel.removeEventListener("transitionend", settle);
-    state.localSpinInProgress = false;
-    state.localHasSpun = true;
-    state.localWheel.angle = targetAngle % 360;
-    state.room.round.pickerId = winner.id;
-    state.room.round.firstPlayerId = winner.id;
-    state.room.round.hasPickedStarter = true;
-    state.room.round.status = "shuffling";
-    state.room.round.shuffleAt = Date.now();
-    state.room.updatedAt = Date.now();
-    renderRoom();
-    const chosenGameId = state.room.round.resolvedGameId;
-    clearTimeout(state.shuffleTimer);
-    state.shuffleTimer = setTimeout(() => {
-      if (!chosenGameId || state.activeScreen !== "shuffle") return;
-      startLocalGame(chosenGameId);
-    }, 1200);
-  };
-  wheel.addEventListener("transitionend", settle, { once: true });
 }
 
 function resolveScreen(room) {
@@ -1619,8 +1753,8 @@ function setup() {
     state.lastWinSignature = null;
     state.lastLeaderId = null;
     state.localHasSpun = false;
-    state.localSpinInProgress = false;
-    state.localWheel = { angle: 0, targetAngle: 0, winnerId: null, segmentCount: 6 };
+    stopShuffleStripLoop();
+    state.localStrip = createInitialLocalStripState();
     state.localStep = "p1";
     saveLocalRejoinSnapshot(state.room);
     updateLocalRejoinCard();
@@ -1631,14 +1765,22 @@ function setup() {
   updateJoinPicker();
   updateLocalPickers();
   renderJoinSetup();
+  setLandingMode("local");
+
+  if (landingTabLocal) {
+    landingTabLocal.addEventListener("click", () => setLandingMode("local"));
+  }
+  if (landingTabOnline) {
+    landingTabOnline.addEventListener("click", () => setLandingMode("online"));
+  }
 
   document.getElementById("go-local").addEventListener("click", () => {
     state.mode = "local";
     state.localStep = "p1";
     state.localFruits = { one: null, two: null };
     state.localHasSpun = false;
-    state.localSpinInProgress = false;
-    state.localWheel = { angle: 0, targetAngle: 0, winnerId: null, segmentCount: 6 };
+    stopShuffleStripLoop();
+    state.localStrip = createInitialLocalStripState();
     updateLocalPickers();
     showScreen("local", { history: "push" });
   });
@@ -1904,11 +2046,41 @@ function updateLocalRejoinCard() {
   if (snapshot && isValidLocalRejoinSnapshot(snapshot)) {
     state.localRejoinSnapshot = snapshot;
     summary.textContent = getLocalRejoinLabel(snapshot);
-    card.classList.remove("hidden");
+    card.classList.toggle("hidden", state.landingMode !== "local");
+    card.classList.add("has-alert");
+    if (landingSegmented) landingSegmented.classList.add("has-local-alert");
+    if (landingTabLocal) landingTabLocal.classList.add("has-alert");
     return;
   }
   state.localRejoinSnapshot = null;
   card.classList.add("hidden");
+  card.classList.remove("has-alert");
+  if (landingSegmented) landingSegmented.classList.remove("has-local-alert");
+  if (landingTabLocal) landingTabLocal.classList.remove("has-alert");
+}
+
+function setLandingMode(mode) {
+  const nextMode = mode === "online" ? "online" : "local";
+  state.landingMode = nextMode;
+  if (landingTrack) {
+    landingTrack.dataset.mode = nextMode;
+  }
+  if (landingSegmented) {
+    landingSegmented.dataset.mode = nextMode;
+  }
+  if (landingTabLocal) {
+    const isLocal = nextMode === "local";
+    landingTabLocal.classList.toggle("active", isLocal);
+    landingTabLocal.setAttribute("aria-selected", String(isLocal));
+    landingTabLocal.tabIndex = isLocal ? 0 : -1;
+  }
+  if (landingTabOnline) {
+    const isOnline = nextMode === "online";
+    landingTabOnline.classList.toggle("active", isOnline);
+    landingTabOnline.setAttribute("aria-selected", String(isOnline));
+    landingTabOnline.tabIndex = isOnline ? 0 : -1;
+  }
+  updateLocalRejoinCard();
 }
 
 function resetJoinFlow() {
