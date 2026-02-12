@@ -83,6 +83,7 @@ function buildPlayer({ name, emoji, role, clientId, theme }) {
     gamesWon: 0,
     ready: false,
     token: clientId,
+    seatToken: generateId("seat"),
     connected: true
   };
 }
@@ -117,12 +118,32 @@ function publicRoom(room) {
           pickerId: room.round.pickerId,
           firstPlayerId: room.round.firstPlayerId,
           shuffleAt: room.round.shuffleAt,
-          status: room.round.status
+          status: room.round.status,
+          hostGameId: room.round.hostGameId ?? null,
+          guestGameId: room.round.guestGameId ?? null,
+          resolvedGameId: room.round.resolvedGameId ?? null,
+          hasPickedStarter: Boolean(room.round.hasPickedStarter)
         }
       : null,
     endRequest: room.endRequest,
     game: room.game,
     games: listGames()
+  };
+}
+
+function publicRoomPreview(room) {
+  return {
+    code: room.code,
+    host: publicPlayer(room.players.host),
+    guest: publicPlayer(room.players.guest),
+    takenThemes: [room.players.host?.theme, room.players.guest?.theme].filter(Boolean)
+  };
+}
+
+function roomPreview(room, options = {}) {
+  return {
+    ...publicRoomPreview(room),
+    canRejoin: Boolean(options.canRejoin)
   };
 }
 
@@ -161,8 +182,18 @@ function getRoomPlayers(room) {
 
 function findPlayerByToken(room, token) {
   if (!token) return null;
-  const all = [...getRoomPlayers(room), ...room.spectators];
-  return all.find((entry) => entry.token === token) || null;
+  const players = getRoomPlayers(room);
+  return players.find((entry) => entry.token === token) || null;
+}
+
+function findSeatPlayerBySeatToken(room, seatToken) {
+  if (!seatToken) return null;
+  const players = getRoomPlayers(room);
+  return players.find((entry) => entry.seatToken === seatToken) || null;
+}
+
+function findRejoinPlayer(room, { seatToken, clientId }) {
+  return findSeatPlayerBySeatToken(room, seatToken) || findPlayerByToken(room, clientId);
 }
 
 function attachClient(ws, room, player, role, clientId) {
@@ -198,7 +229,11 @@ function createRoom({ fruitId, clientId }) {
       pickerId: null,
       firstPlayerId: null,
       shuffleAt: null,
-      status: "waiting"
+      status: "waiting_game",
+      hostGameId: null,
+      guestGameId: null,
+      resolvedGameId: null,
+      hasPickedStarter: false
     },
     endRequest: null,
     game: null
@@ -210,6 +245,7 @@ function createRoom({ fruitId, clientId }) {
 function canStartGame(room, gameId, firstPlayerId) {
   const game = games[gameId];
   if (!game) return { ok: false, error: "Unknown game." };
+  if (game.comingSoon) return { ok: false, error: "That game is coming soon." };
   const players = getRoomPlayers(room);
   if (players.length < game.minPlayers) {
     return { ok: false, error: "Not enough players to start." };
@@ -228,35 +264,85 @@ function orderPlayers(players, firstPlayerId) {
   return [first, ...players.filter((player) => player.id !== firstPlayerId)];
 }
 
-function resetRound(room) {
+function resetRound(room, options = {}) {
+  const { resetStarter = false } = options;
+  const previous = room.round || {};
   room.round = {
-    pickerId: null,
-    firstPlayerId: null,
+    pickerId: resetStarter ? null : (previous.pickerId ?? null),
+    firstPlayerId: resetStarter ? null : (previous.firstPlayerId ?? null),
     shuffleAt: null,
-    status: "waiting"
+    status: "waiting_game",
+    hostGameId: null,
+    guestGameId: null,
+    resolvedGameId: null,
+    hasPickedStarter: resetStarter ? false : Boolean(previous.hasPickedStarter)
   };
 }
 
-function assignRound(room) {
+function setPlayerGameChoice(room, role, gameId) {
+  if (role === "host") {
+    room.round.hostGameId = gameId;
+  } else if (role === "guest") {
+    room.round.guestGameId = gameId;
+  }
+}
+
+function resolveGameChoice(room) {
+  const hostChoice = room.round.hostGameId;
+  const guestChoice = room.round.guestGameId;
+  if (!hostChoice || !guestChoice) {
+    room.round.resolvedGameId = null;
+    return null;
+  }
+  room.round.resolvedGameId = hostChoice;
+  return room.round.resolvedGameId;
+}
+
+function getOtherPlayerId(room, playerId) {
   const players = getRoomPlayers(room);
-  if (players.length < 2) return;
-  const [a, b] = players;
-  const picker = Math.random() < 0.5 ? a : b;
-  room.round = {
-    pickerId: picker.id,
-    firstPlayerId: picker.id,
-    shuffleAt: now(),
-    status: "shuffling"
-  };
+  const next = players.find((player) => player.id !== playerId);
+  return next ? next.id : null;
 }
 
-function markReady(room) {
-  room.round = {
-    pickerId: null,
-    firstPlayerId: null,
-    shuffleAt: null,
-    status: "ready"
+function resolveFirstPlayerId(room) {
+  const players = getRoomPlayers(room);
+  if (players.length < 2) return null;
+  if (!room.round.hasPickedStarter) {
+    return players[Math.floor(Math.random() * players.length)].id;
+  }
+  if (!room.round.firstPlayerId) {
+    return players[0].id;
+  }
+  return getOtherPlayerId(room, room.round.firstPlayerId) || players[0].id;
+}
+
+function startRoundFromResolvedGame(room) {
+  const resolvedGameId = room.round?.resolvedGameId;
+  if (!resolvedGameId) return { ok: false, error: "Waiting for both players to choose a game." };
+
+  const firstPlayerId = resolveFirstPlayerId(room);
+  if (!firstPlayerId) return { ok: false, error: "Not enough players to start." };
+
+  const { ok, game, players, error } = canStartGame(room, resolvedGameId, firstPlayerId);
+  if (!ok) return { ok: false, error };
+
+  room.game = {
+    id: game.id,
+    state: game.init(players)
   };
+  room.endRequest = null;
+  room.round.firstPlayerId = firstPlayerId;
+  room.round.pickerId = firstPlayerId;
+
+  if (!room.round.hasPickedStarter) {
+    room.round.hasPickedStarter = true;
+    room.round.status = "shuffling";
+    room.round.shuffleAt = now();
+  } else {
+    room.round.status = "playing";
+    room.round.shuffleAt = null;
+  }
+  return { ok: true };
 }
 
 const server = http.createServer((req, res) => {
@@ -299,7 +385,11 @@ wss.on("connection", (ws) => {
       return;
     }
 
-    const { type } = message;
+    const rawType = String(message.type || "").trim();
+    const type = rawType
+      .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+      .replace(/[-\s]+/g, "_")
+      .toLowerCase();
 
     if (type === "create_room") {
       const fruitId = getFruitId(message.fruit);
@@ -318,7 +408,7 @@ wss.on("connection", (ws) => {
       }
       attachClient(ws, room, room.players.host, "host", clientId);
 
-      send(ws, { type: "session", clientId });
+      send(ws, { type: "session", clientId, seatToken: room.players.host.seatToken || null });
       broadcastRoom(room);
       return;
     }
@@ -329,6 +419,7 @@ wss.on("connection", (ws) => {
         .toUpperCase();
       const fruitId = getFruitId(message.fruit);
       const clientId = message.clientId || generateId("client");
+      const seatToken = String(message.seatToken || "").trim() || null;
 
       const room = rooms.get(code);
       if (!room) {
@@ -336,11 +427,12 @@ wss.on("connection", (ws) => {
         return;
       }
 
-      const existing = findPlayerByToken(room, clientId);
+      const existing = findRejoinPlayer(room, { seatToken, clientId });
       if (existing) {
         existing.connected = true;
+        existing.token = clientId;
         attachClient(ws, room, existing, existing.role, clientId);
-        send(ws, { type: "session", clientId });
+        send(ws, { type: "session", clientId, seatToken: existing.seatToken || null });
         touchRoom(room);
         broadcastRoom(room);
         return;
@@ -364,17 +456,42 @@ wss.on("connection", (ws) => {
           clientId,
           theme: fruit.theme
         });
-        room.players.host.ready = false;
-        room.players.guest.ready = false;
-        resetRound(room);
+        resetRound(room, { resetStarter: true });
+        room.game = null;
+        room.endRequest = null;
         attachClient(ws, room, room.players.guest, "guest", clientId);
-        send(ws, { type: "session", clientId });
+        send(ws, { type: "session", clientId, seatToken: room.players.guest.seatToken || null });
         touchRoom(room);
         broadcastRoom(room);
         return;
       }
 
       send(ws, { type: "error", message: "Room is full." });
+      return;
+    }
+
+    if (type === "validate_room") {
+      const code = String(message.code || "")
+        .trim()
+        .toUpperCase();
+      const clientId = message.clientId || null;
+      const seatToken = String(message.seatToken || "").trim() || null;
+      const room = rooms.get(code);
+      if (!room) {
+        send(ws, { type: "error", message: "Room not found." });
+        return;
+      }
+      if (room.players.guest) {
+        const existing = findRejoinPlayer(room, { seatToken, clientId });
+        if (existing) {
+          send(ws, { type: "room_preview", room: roomPreview(room, { canRejoin: true }) });
+          return;
+        }
+        send(ws, { type: "error", message: "Room is full." });
+        return;
+      }
+      const existing = findRejoinPlayer(room, { seatToken, clientId });
+      send(ws, { type: "room_preview", room: roomPreview(room, { canRejoin: Boolean(existing) }) });
       return;
     }
 
@@ -395,12 +512,8 @@ wss.on("connection", (ws) => {
       const player = all.find((entry) => entry.id === client.playerId);
       if (player) {
         player.connected = false;
-        player.ready = false;
       }
       room.endRequest = null;
-      if (!room.players.host?.ready || !room.players.guest?.ready) {
-        resetRound(room);
-      }
       touchRoom(room);
       broadcastRoom(room);
       clients.delete(ws);
@@ -408,116 +521,85 @@ wss.on("connection", (ws) => {
     }
 
     if (type === "ready_up") {
+      send(ws, { type: "error", message: "Ready up is no longer required. Pick a game." });
+      return;
+    }
+
+    if (type === "start_round") {
+      send(ws, { type: "error", message: "Start round is no longer required. Pick a game." });
+      return;
+    }
+
+    if (type === "select_game") {
       if (client.role !== "host" && client.role !== "guest") {
-        send(ws, { type: "error", message: "Spectators cannot ready up." });
+        send(ws, { type: "error", message: "Spectators cannot choose a game." });
+        return;
+      }
+      if (!room.players.host || !room.players.guest) {
+        send(ws, { type: "error", message: "Waiting for a second player." });
+        return;
+      }
+      const gameId = String(message.gameId || "").trim();
+      if (!gameId || !games[gameId]) {
+        send(ws, { type: "error", message: "Unknown game." });
+        return;
+      }
+      if (games[gameId].comingSoon) {
+        send(ws, { type: "error", message: "That game is coming soon." });
         return;
       }
       if (room.game && !room.game.state?.winnerId && !room.game.state?.draw) {
         send(ws, { type: "error", message: "Finish the current game first." });
         return;
       }
-      const player = getRoomPlayers(room).find((entry) => entry.id === client.playerId);
-      if (!player) {
-        send(ws, { type: "error", message: "Player not found." });
-        return;
-      }
-      if (typeof message.ready === "boolean") {
-        player.ready = message.ready;
-      } else {
-        player.ready = !player.ready;
+      if (!room.round) {
+        resetRound(room, { resetStarter: true });
       }
 
-      if (room.players.host?.ready && room.players.guest?.ready) {
-        markReady(room);
-      } else {
-        resetRound(room);
-      }
-
-      touchRoom(room);
-      broadcastRoom(room);
-      return;
-    }
-
-    if (type === "start_round") {
-      if (client.role !== "host" && client.role !== "guest") {
-        send(ws, { type: "error", message: "Spectators cannot start a round." });
-        return;
-      }
-      if (!room.players.host?.ready || !room.players.guest?.ready) {
-        send(ws, { type: "error", message: "Both players must ready up first." });
-        return;
-      }
-      if (room.round?.pickerId) {
+      setPlayerGameChoice(room, client.role, gameId);
+      room.round.status = "waiting_game";
+      const resolvedGameId = resolveGameChoice(room);
+      if (!resolvedGameId) {
         touchRoom(room);
         broadcastRoom(room);
         return;
       }
-      assignRound(room);
-      room.endRequest = null;
+
+      const started = startRoundFromResolvedGame(room);
+      if (!started.ok) {
+        send(ws, { type: "error", message: started.error });
+        return;
+      }
+
+      const roomCode = room.code;
+      const shuffleAt = room.round.shuffleAt;
       touchRoom(room);
       broadcastRoom(room);
-      return;
-    }
-
-    if (type === "select_game") {
-      if (!room.round?.pickerId || !room.round?.firstPlayerId) {
-        send(ws, { type: "error", message: "Players must ready up first." });
-        return;
+      if (room.round.status === "shuffling" && shuffleAt) {
+        setTimeout(() => {
+          const nextRoom = rooms.get(roomCode);
+          if (!nextRoom || nextRoom.round?.status !== "shuffling") return;
+          if (nextRoom.round.shuffleAt !== shuffleAt) return;
+          nextRoom.round.status = "playing";
+          touchRoom(nextRoom);
+          broadcastRoom(nextRoom);
+        }, 2200);
       }
-      if (client.playerId !== room.round.pickerId) {
-        send(ws, { type: "error", message: "Only the picker can start a game." });
-        return;
-      }
-
-      const { ok, game, players, error } = canStartGame(room, message.gameId, room.round.firstPlayerId);
-      if (!ok) {
-        send(ws, { type: "error", message: error });
-        return;
-      }
-
-      room.game = {
-        id: game.id,
-        state: game.init(players)
-      };
-      room.endRequest = null;
-      room.round.status = "playing";
-      if (room.players.host) room.players.host.ready = false;
-      if (room.players.guest) room.players.guest.ready = false;
-
-      touchRoom(room);
-      broadcastRoom(room);
       return;
     }
 
     if (type === "new_round") {
-      if (!room.game) {
-        send(ws, { type: "error", message: "No game selected." });
+      if (client.role !== "host" && client.role !== "guest") {
+        send(ws, { type: "error", message: "Spectators cannot start a new round." });
         return;
       }
-      if (!room.round?.pickerId || client.playerId !== room.round.pickerId) {
-        send(ws, { type: "error", message: "Only the picker can start a new round." });
+      if (room.game && !room.game.state?.winnerId && !room.game.state?.draw) {
+        send(ws, { type: "error", message: "Finish the current game first." });
         return;
       }
-      if (!room.players.host?.ready || !room.players.guest?.ready) {
-        send(ws, { type: "error", message: "Both players must ready up first." });
-        return;
-      }
-
-      const { ok, game, players, error } = canStartGame(room, room.game.id, room.round.firstPlayerId);
-      if (!ok) {
-        send(ws, { type: "error", message: error });
-        return;
-      }
-
-      room.game = {
-        id: game.id,
-        state: game.init(players)
-      };
+      room.game = null;
       room.endRequest = null;
-      room.round.status = "playing";
-      if (room.players.host) room.players.host.ready = false;
-      if (room.players.guest) room.players.guest.ready = false;
-
+      resetRound(room, { resetStarter: false });
       touchRoom(room);
       broadcastRoom(room);
       return;
@@ -553,9 +635,7 @@ wss.on("connection", (ws) => {
       }
       room.game = null;
       room.endRequest = null;
-      if (room.players.host) room.players.host.ready = false;
-      if (room.players.guest) room.players.guest.ready = false;
-      resetRound(room);
+      resetRound(room, { resetStarter: false });
       touchRoom(room);
       broadcastRoom(room);
       return;
@@ -618,12 +698,6 @@ wss.on("connection", (ws) => {
     const player = all.find((entry) => entry.id === client.playerId);
     if (player) {
       player.connected = false;
-      if (player.role === "host" || player.role === "guest") {
-        player.ready = false;
-        if (!room.players.host?.ready || !room.players.guest?.ready) {
-          resetRound(room);
-        }
-      }
     }
 
     clients.delete(ws);

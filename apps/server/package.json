@@ -3,7 +3,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node src/index.js"
+    "dev": "node src/index.js",
+    "smoke": "playwright test",
+    "smoke:local": "playwright test tests/smoke/local-flow.spec.js",
+    "smoke:online": "playwright test tests/smoke/online-flow.spec.js"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.51.1"
   },
   "dependencies": {
     "ws": "^8.16.0"

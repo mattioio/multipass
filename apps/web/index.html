@@ -4,42 +4,53 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>multipass</title>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" />
-    <link rel="stylesheet" href="https://api.fontshare.com/v2/css?f[]=tanker@400,700&display=swap" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" />
     <link rel="stylesheet" media="screen" href="https://fontlibrary.org//face/office-code-pro" type="text/css" />
     <link rel="stylesheet" href="styles.css" />
   </head>
-  <body>
+  <body data-ui-variant="soft">
     <div id="app">
       <header class="hero">
-        <div class="mode-toggle corner-toggle" aria-label="Toggle light and dark mode">
-          <span class="mode-icon" aria-hidden="true">☀️</span>
-          <label class="switch">
-            <input id="mode-toggle" type="checkbox" />
-            <span class="slider"></span>
-          </label>
-          <span class="mode-icon" aria-hidden="true">🌙</span>
-        </div>
-        <div class="logo">
-          <span class="logo-bubble">multipass</span>
+        <div class="hero-top">
+          <button id="hero-left-action" class="ghost hero-action hidden" type="button">Back</button>
+          <div class="logo">
+            <img class="logo-image" src="/src/assets/multipass-logo.svg" alt="Multipass" />
+          </div>
+          <button id="open-settings" class="ghost hero-action" type="button" aria-label="Open settings">
+            <svg class="settings-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M19.14 12.94a7.6 7.6 0 0 0 .05-.94a7.6 7.6 0 0 0-.05-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.3 7.3 0 0 0-1.63-.94l-.36-2.54a.5.5 0 0 0-.49-.42h-3.84a.5.5 0 0 0-.49.42l-.36 2.54a7.3 7.3 0 0 0-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.7 8.84a.5.5 0 0 0 .12.64l2.03 1.58a7.6 7.6 0 0 0-.05.94c0 .32.02.63.05.94L2.82 14.52a.5.5 0 0 0-.12.64l1.92 3.32c.13.23.4.32.64.22l2.39-.96c.5.4 1.05.72 1.63.94l.36 2.54c.04.24.25.42.49.42h3.84c.24 0 .45-.18.49-.42l.36-2.54c.58-.22 1.13-.54 1.63-.94l2.39.96c.24.1.51.01.64-.22l1.92-3.32a.5.5 0 0 0-.12-.64zM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7z" fill="currentColor" />
+            </svg>
+          </button>
         </div>
         <div id="hero-room" class="hero-room hidden">
-          <div id="room-code-pill" class="code-pill" role="button" tabindex="0">
+          <div id="room-code-pill" class="code-pill">
             <span id="room-code" class="code-hero">----</span>
-            <span class="copy-chip">Copy</span>
           </div>
         </div>
       </header>
-
       <main>
         <section id="screen-landing" class="screen active">
           <div class="landing-grid">
-            <div class="card landing-card">
+            <div class="card landing-card local-card">
+              <div class="landing-card-header landing-card-header-local" aria-hidden="true">
+                <img src="/src/assets/local.svg" alt="" />
+              </div>
               <h2 class="landing-title">Local play</h2>
               <p class="subtext">Pass the device and play together on one screen.</p>
               <button id="go-local" class="glow-button">Start</button>
+              <div id="local-rejoin-card" class="rejoin-card hidden">
+                <h3>Resume local match</h3>
+                <p id="local-rejoin-summary" class="subtext">Resume where you left off.</p>
+                <div class="button-row">
+                  <button id="local-rejoin-room" class="glow-button">Resume</button>
+                  <button id="local-clear-rejoin" class="ghost">Discard</button>
+                </div>
+              </div>
             </div>
-            <div class="card landing-card">
+            <div class="card landing-card online-card">
+              <div class="landing-card-header landing-card-header-online" aria-hidden="true">
+                <img src="/src/assets/online.svg" alt="" />
+              </div>
               <h2 class="landing-title">Online play</h2>
               <p class="subtext">Host a room or join a friend with a 4-letter code.</p>
               <div class="button-row">
@@ -63,117 +74,179 @@
         </section>
 
         <section id="screen-local" class="screen">
-          <div class="card">
-            <h2>Local play</h2>
-            <div class="local-picker-grid">
-              <div class="local-picker-card">
-                <h3>Player 1 choice</h3>
-                <div id="local-fruit-one" class="fruit-picker">
-                  <button class="fruit-option theme-banana" data-fruit="banana" type="button">
-                    <span class="fruit-emoji">🍌</span>
-                    <span class="fruit-name">Banana</span>
-                  </button>
-                  <button class="fruit-option theme-strawberry" data-fruit="strawberry" type="button">
-                    <span class="fruit-emoji">🍓</span>
-                    <span class="fruit-name">Strawberry</span>
-                  </button>
-                  <button class="fruit-option theme-kiwi" data-fruit="kiwi" type="button">
-                    <span class="fruit-emoji">🥝</span>
-                    <span class="fruit-name">Kiwi</span>
-                  </button>
-                  <button class="fruit-option theme-blueberry" data-fruit="blueberry" type="button">
-                    <span class="fruit-emoji">🫐</span>
-                    <span class="fruit-name">Blueberry</span>
-                  </button>
-                </div>
-              </div>
-              <div class="local-picker-card">
-                <h3>Player 2 choice</h3>
-                <div id="local-fruit-two" class="fruit-picker">
-                  <button class="fruit-option theme-banana" data-fruit="banana" type="button">
-                    <span class="fruit-emoji">🍌</span>
-                    <span class="fruit-name">Banana</span>
-                  </button>
-                  <button class="fruit-option theme-strawberry" data-fruit="strawberry" type="button">
-                    <span class="fruit-emoji">🍓</span>
-                    <span class="fruit-name">Strawberry</span>
-                  </button>
-                  <button class="fruit-option theme-kiwi" data-fruit="kiwi" type="button">
-                    <span class="fruit-emoji">🥝</span>
-                    <span class="fruit-name">Kiwi</span>
-                  </button>
-                  <button class="fruit-option theme-blueberry" data-fruit="blueberry" type="button">
-                    <span class="fruit-emoji">🫐</span>
-                    <span class="fruit-name">Blueberry</span>
-                  </button>
-                </div>
-              </div>
+          <div class="card setup-card">
+            <div class="setup-card-header setup-card-header-local" aria-hidden="true">
+              <span class="setup-card-tag">Local</span>
             </div>
-            <div class="button-row">
-              <button id="start-local" class="glow-button">Start</button>
-              <button data-screen="landing" class="ghost">Back</button>
+            <div id="local-stage" class="local-wizard">
+              <div id="local-header-row" class="local-header-row">
+                <h3 id="local-step-title">Player 1 choice</h3>
+                <div id="local-stepper-inline" class="local-stepper-inline" aria-live="polite">
+                  <div id="local-progress" class="local-progress" aria-hidden="true">
+                    <span class="local-progress-segment active"></span>
+                    <span class="local-progress-segment"></span>
+                  </div>
+                  <span id="local-step-count" class="local-step-count">1/2</span>
+                </div>
+              </div>
+              <div class="local-choices">
+                <div id="local-fruit-grid" class="fruit-picker local-fruit-grid">
+                  <button class="fruit-option square-option theme-banana" data-fruit="banana" type="button">
+                    <span class="fruit-shell">
+                      <span class="fruit-inner">
+                        <span class="player-art" aria-hidden="true"><img src="/src/assets/player.png" alt="" /></span>
+                        <span class="fruit-lower-third">
+                          <span class="fruit-name">Mr Yellow</span>
+                        </span>
+                      </span>
+                    </span>
+                  </button>
+                  <button class="fruit-option square-option theme-strawberry" data-fruit="strawberry" type="button">
+                    <span class="fruit-shell">
+                      <span class="fruit-inner">
+                        <span class="player-art" aria-hidden="true"><img src="/src/assets/player.png" alt="" /></span>
+                        <span class="fruit-lower-third">
+                          <span class="fruit-name">Mr Red</span>
+                        </span>
+                      </span>
+                    </span>
+                  </button>
+                  <button class="fruit-option square-option theme-kiwi" data-fruit="kiwi" type="button">
+                    <span class="fruit-shell">
+                      <span class="fruit-inner">
+                        <span class="player-art" aria-hidden="true"><img src="/src/assets/player.png" alt="" /></span>
+                        <span class="fruit-lower-third">
+                          <span class="fruit-name">Mr Green</span>
+                        </span>
+                      </span>
+                    </span>
+                  </button>
+                  <button class="fruit-option square-option theme-blueberry" data-fruit="blueberry" type="button">
+                    <span class="fruit-shell">
+                      <span class="fruit-inner">
+                        <span class="player-art" aria-hidden="true"><img src="/src/assets/player.png" alt="" /></span>
+                        <span class="fruit-lower-third">
+                          <span class="fruit-name">Mr Blue</span>
+                        </span>
+                      </span>
+                    </span>
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </section>
 
         <section id="screen-host" class="screen">
-          <div class="card">
+          <div class="card setup-card">
+            <div class="setup-card-header setup-card-header-online" aria-hidden="true">
+              <span class="setup-card-tag">Online</span>
+            </div>
             <h2>Host a room</h2>
             <p class="subtext">Pick your fruit</p>
             <div id="host-fruit-picker" class="fruit-picker">
               <button class="fruit-option theme-banana" data-fruit="banana" type="button">
-                <span class="fruit-emoji">🍌</span>
-                <span class="fruit-name">Banana</span>
+                <span class="fruit-shell">
+                  <span class="fruit-inner">
+                    <span class="player-art" aria-hidden="true"><img src="/src/assets/player.png" alt="" /></span>
+                    <span class="fruit-lower-third">
+                      <span class="fruit-name">Mr Yellow</span>
+                    </span>
+                  </span>
+                </span>
               </button>
               <button class="fruit-option theme-strawberry" data-fruit="strawberry" type="button">
-                <span class="fruit-emoji">🍓</span>
-                <span class="fruit-name">Strawberry</span>
+                <span class="fruit-shell">
+                  <span class="fruit-inner">
+                    <span class="player-art" aria-hidden="true"><img src="/src/assets/player.png" alt="" /></span>
+                    <span class="fruit-lower-third">
+                      <span class="fruit-name">Mr Red</span>
+                    </span>
+                  </span>
+                </span>
               </button>
               <button class="fruit-option theme-kiwi" data-fruit="kiwi" type="button">
-                <span class="fruit-emoji">🥝</span>
-                <span class="fruit-name">Kiwi</span>
+                <span class="fruit-shell">
+                  <span class="fruit-inner">
+                    <span class="player-art" aria-hidden="true"><img src="/src/assets/player.png" alt="" /></span>
+                    <span class="fruit-lower-third">
+                      <span class="fruit-name">Mr Green</span>
+                    </span>
+                  </span>
+                </span>
               </button>
               <button class="fruit-option theme-blueberry" data-fruit="blueberry" type="button">
-                <span class="fruit-emoji">🫐</span>
-                <span class="fruit-name">Blueberry</span>
+                <span class="fruit-shell">
+                  <span class="fruit-inner">
+                    <span class="player-art" aria-hidden="true"><img src="/src/assets/player.png" alt="" /></span>
+                    <span class="fruit-lower-third">
+                      <span class="fruit-name">Mr Blue</span>
+                    </span>
+                  </span>
+                </span>
               </button>
             </div>
             <div class="button-row">
               <button id="create-room" class="glow-button">Create room</button>
-              <button data-screen="landing" class="ghost">Back</button>
             </div>
           </div>
         </section>
 
         <section id="screen-join" class="screen">
-          <div class="card">
+          <div class="card setup-card">
+            <div class="setup-card-header setup-card-header-online" aria-hidden="true">
+              <span class="setup-card-tag">Online</span>
+            </div>
             <h2>Join a room</h2>
             <label>
               Room code
               <input id="join-code" type="text" maxlength="4" placeholder="ABCD" />
             </label>
-            <p class="subtext">Pick your fruit</p>
-            <div id="join-fruit-picker" class="fruit-picker">
+            <p id="join-step-hint" class="subtext">Enter your room code to continue.</p>
+            <div id="join-fruit-picker" class="fruit-picker hidden">
               <button class="fruit-option theme-banana" data-fruit="banana" type="button">
-                <span class="fruit-emoji">🍌</span>
-                <span class="fruit-name">Banana</span>
+                <span class="fruit-shell">
+                  <span class="fruit-inner">
+                    <span class="player-art" aria-hidden="true"><img src="/src/assets/player.png" alt="" /></span>
+                    <span class="fruit-lower-third">
+                      <span class="fruit-name">Mr Yellow</span>
+                    </span>
+                  </span>
+                </span>
               </button>
               <button class="fruit-option theme-strawberry" data-fruit="strawberry" type="button">
-                <span class="fruit-emoji">🍓</span>
-                <span class="fruit-name">Strawberry</span>
+                <span class="fruit-shell">
+                  <span class="fruit-inner">
+                    <span class="player-art" aria-hidden="true"><img src="/src/assets/player.png" alt="" /></span>
+                    <span class="fruit-lower-third">
+                      <span class="fruit-name">Mr Red</span>
+                    </span>
+                  </span>
+                </span>
               </button>
               <button class="fruit-option theme-kiwi" data-fruit="kiwi" type="button">
-                <span class="fruit-emoji">🥝</span>
-                <span class="fruit-name">Kiwi</span>
+                <span class="fruit-shell">
+                  <span class="fruit-inner">
+                    <span class="player-art" aria-hidden="true"><img src="/src/assets/player.png" alt="" /></span>
+                    <span class="fruit-lower-third">
+                      <span class="fruit-name">Mr Green</span>
+                    </span>
+                  </span>
+                </span>
               </button>
               <button class="fruit-option theme-blueberry" data-fruit="blueberry" type="button">
-                <span class="fruit-emoji">🫐</span>
-                <span class="fruit-name">Blueberry</span>
+                <span class="fruit-shell">
+                  <span class="fruit-inner">
+                    <span class="player-art" aria-hidden="true"><img src="/src/assets/player.png" alt="" /></span>
+                    <span class="fruit-lower-third">
+                      <span class="fruit-name">Mr Blue</span>
+                    </span>
+                  </span>
+                </span>
               </button>
             </div>
             <div class="button-row">
-              <button id="join-room" class="glow-button">Join room</button>
-              <button data-screen="landing" class="ghost">Back</button>
+              <button id="join-room" class="glow-button">Continue</button>
             </div>
           </div>
         </section>
@@ -181,31 +254,34 @@
         <section id="screen-lobby" class="screen">
           <div class="panel lobby-panel">
             <div id="score-columns" class="score-columns"></div>
-            <button id="ready-cta" class="glow-button cta-main">Ready up</button>
+            <button id="ready-cta" class="glow-button cta-main">Pick a game</button>
             <button id="end-game" class="ghost end-game hidden">End game</button>
           </div>
         </section>
 
         <section id="screen-shuffle" class="screen">
           <div class="panel shuffle-panel">
-            <h2>Choosing the next player</h2>
-            <div id="shuffle-display" class="shuffle-display">
-              <div class="shuffle-slot">
-                <span class="room-label">Next up</span>
-                <div class="shuffle-emoji" id="shuffle-player-emoji">🎲</div>
-                <div class="shuffle-name" id="shuffle-player-name">Shuffling...</div>
+            <h2>Who starts?</h2>
+            <div id="shuffle-display" class="shuffle-display wheel-stage">
+              <div class="wheel-wrap">
+                <div id="shuffle-wheel" class="shuffle-wheel" aria-label="Player picker wheel">
+                  <div id="shuffle-segments" class="shuffle-segments"></div>
+                </div>
+                <button id="shuffle-spin" class="wheel-spin-button" type="button" aria-label="Spin the wheel">
+                  <span class="wheel-spin-pointer" aria-hidden="true"></span>
+                  <span class="wheel-spin-label">Spin</span>
+                </button>
               </div>
+              <p id="shuffle-result" class="shuffle-name"></p>
             </div>
-            <p class="subtext">This player picks the game and goes first.</p>
           </div>
         </section>
 
         <section id="screen-pick" class="screen">
-          <div class="screen-head">
-            <button id="back-to-lobby" class="ghost">Back</button>
+          <div class="screen-head pick-head">
             <div>
               <h2>Pick a game</h2>
-              <p id="pick-hint" class="subtext">Picker chooses the mini game.</p>
+              <p id="pick-status" class="pick-status hidden" aria-live="polite"></p>
             </div>
           </div>
           <div id="game-list" class="game-grid"></div>
@@ -226,7 +302,6 @@
 
         <section id="screen-game" class="screen">
           <div class="screen-head">
-            <button id="back-to-pick" class="ghost">Change game</button>
             <button id="end-game-game" class="ghost hidden">End game</button>
           </div>
 
@@ -246,13 +321,12 @@
             <h2 id="winner-title" class="winner-title">Winner</h2>
             <div id="winner-score-columns" class="score-columns winner-columns"></div>
             <div class="button-row winner-actions">
-              <button id="winner-play-again" class="glow-button">Play another game</button>
+              <button id="winner-play-again" class="glow-button">Next game</button>
               <button id="winner-home" class="ghost">Home</button>
             </div>
           </div>
         </section>
       </main>
-
     </div>
 
     <div id="toast" class="toast hidden"></div>
@@ -260,7 +334,26 @@
       <span id="action-toast-text"></span>
       <button id="action-toast-cta" class="glow-button small">Agree</button>
     </div>
-
-    <script src="app.js"></script>
+    <div id="settings-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+      <div class="modal-backdrop" data-close-settings="true"></div>
+      <div class="modal-content">
+        <div class="modal-head">
+          <h2 id="settings-title">Settings</h2>
+          <button id="close-settings" class="ghost" type="button" aria-label="Close settings">✕</button>
+        </div>
+        <div class="setting-row">
+          <span>Day / Night mode</span>
+          <div class="mode-toggle" aria-label="Toggle light and dark mode">
+            <span class="mode-icon" aria-hidden="true">☀️</span>
+            <label class="switch">
+              <input id="mode-toggle" type="checkbox" />
+              <span class="slider"></span>
+            </label>
+            <span class="mode-icon" aria-hidden="true">🌙</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="app.js"></script>
   </body>
 </html>
