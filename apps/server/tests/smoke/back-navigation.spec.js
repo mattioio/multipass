@@ -74,7 +74,16 @@ test("hash guards: invalid deep link normalizes and join route survives refresh"
   await expect(page.locator("#screen-join.active")).toBeVisible();
   await expect(page).toHaveURL(/#join$/);
 
+  await page.goto("/#join=ABCD");
+  await expect(page.locator("#screen-join.active")).toBeVisible();
+  await expect(page.locator("#join-code")).toHaveValue("ABCD");
+  await expect(page).toHaveURL(/#join/);
+
+  await page.goto("/#join=12");
+  await expect(page.locator("#screen-join.active")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Continue" })).toBeVisible();
+
   await page.reload();
   await expect(page.locator("#screen-join.active")).toBeVisible();
-  await expect(page).toHaveURL(/#join$/);
+  await expect(page).toHaveURL(/#join/);
 });

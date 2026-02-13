@@ -1,15 +1,17 @@
-import { assertRoomShape } from "./contracts/roomState.js";
-import { FRUITS, getFruit, getFruitByTheme } from "./domain/fruits.js";
-import { localGames, listLocalGames } from "./domain/localGames.js";
-import { createWsClient } from "./net/wsClient.js";
-import { actions } from "./state/actions.js";
-import { reducer } from "./state/reducer.js";
-import { getLeaderId } from "./state/selectors.js";
-import { createStore } from "./state/store.js";
-import { renderLocalSetupScreen } from "./ui/screens/localSetup.js";
-import { renderPickHint } from "./ui/screens/pickHint.js";
-import { setupFruitPicker, updateFruitPicker } from "./ui/shared/fruitPicker.js";
-import { createToastController } from "./ui/shared/toast.js";
+import { assertRoomShape } from "../contracts/roomState.js";
+import { FRUITS, getFruit, getFruitByTheme } from "../domain/fruits.js";
+import { localGames, listLocalGames } from "../domain/localGames.js";
+import { createWsClient } from "../net/wsClient.js";
+import { actions } from "../state/actions.js";
+import { reducer } from "../state/reducer.js";
+import { getLeaderId } from "../state/selectors.js";
+import { createStore } from "../state/store.js";
+import { renderLocalSetupScreen } from "../ui/screens/localSetup.js";
+import { renderPickHint } from "../ui/screens/pickHint.js";
+import { setupFruitPicker, updateFruitPicker } from "../ui/shared/fruitPicker.js";
+import { createToastController } from "../ui/shared/toast.js";
+import { normalizeRoomCode, parseScreenRoute } from "./hashRoute.js";
+import { copyRoomInviteLink } from "./shareLink.js";
 
 const LOCAL_REJOIN_KEY = "multipass_last_local_match";
 const ONLINE_REJOIN_AT_KEY = "multipass_last_room_started_at";
@@ -25,16 +27,21 @@ const SCREEN_TO_HASH = Object.freeze({
   wait: "#wait",
   game: "#game",
   shuffle: "#shuffle",
-  winner: "#winner"
+  winner: "#winner",
+  devkit: "#devkit"
 });
 const HASH_TO_SCREEN = Object.freeze(
   Object.fromEntries(Object.entries(SCREEN_TO_HASH).map(([screen, hash]) => [hash, screen]))
 );
 const ROOM_REQUIRED_SCREENS = new Set(["lobby", "pick", "wait", "game", "shuffle", "winner"]);
+const ONLINE_HERO_ROOM_SCREENS = new Set(["lobby", "pick", "wait", "game", "shuffle", "winner"]);
 const SHUFFLE_CLOCKWISE_ORDER = [0, 1, 3, 2];
 const SHUFFLE_AUTO_STOP_MS = 2200;
 const SHUFFLE_STEP_MS = 115;
 const SHUFFLE_SETTLE_MIN_STEPS = 7;
+const LEGACY_BOOTSTRAP_FLAG = "__multipassLegacyInitialized";
+const PROD_WS_FALLBACK_URL = "wss://api.loreandorder.com";
+const IS_DEV_BUILD = Boolean(typeof import.meta !== "undefined" && import.meta.env?.DEV);
 
 function createInitialLocalStripState() {
   return {
@@ -72,6 +79,8 @@ function createInitialState() {
     joinValidatedCode: null,
     joinPreview: null,
     joinValidating: false,
+    pendingDeepLinkJoinCode: null,
+    joinValidationSource: null,
     localRejoinSnapshot: null,
     localFruits: { one: null, two: null },
     localStep: "p1",
@@ -81,6 +90,7 @@ function createInitialState() {
     isAppInstalled: false,
     localHasSpun: false,
     landingMode: "local",
+    devkitReturnScreen: "landing",
     localStrip: createInitialLocalStripState()
   };
 }
@@ -89,6 +99,7 @@ const store = createStore(createInitialState(), reducer);
 const state = store.getState();
 const dispatch = store.dispatch;
 const wsClient = createWsClient({ getUrl: getWebSocketUrl });
+window.__multipassStore = store;
 
 const screens = {
   landing: document.getElementById("screen-landing"),
@@ -100,7 +111,8 @@ const screens = {
   wait: document.getElementById("screen-wait"),
   game: document.getElementById("screen-game"),
   shuffle: document.getElementById("screen-shuffle"),
-  winner: document.getElementById("screen-winner")
+  winner: document.getElementById("screen-winner"),
+  devkit: document.getElementById("screen-devkit")
 };
 const landingTrack = document.getElementById("landing-track");
 const landingSegmented = document.querySelector(".landing-segmented");
@@ -137,8 +149,11 @@ function staggerLandingPanel(panel) {
 }
 
 function parseScreenHash(hash = window.location.hash) {
-  const normalized = String(hash || "").trim().toLowerCase();
-  return HASH_TO_SCREEN[normalized] || null;
+  return parseScreenRoute(hash, HASH_TO_SCREEN).screen;
+}
+
+function parseHashRoute(hash = window.location.hash) {
+  return parseScreenRoute(hash, HASH_TO_SCREEN);
 }
 
 function toScreenHash(screen) {
@@ -205,7 +220,7 @@ function initModeToggle() {
 }
 
 function normalizeTargetScreen(screen) {
-  if (!screen || !(screen in screens)) return "landing";
+  if (!screen || !(screen in screens) || !screens[screen]) return "landing";
   if (ROOM_REQUIRED_SCREENS.has(screen) && !state.room) return "landing";
   if (screen === "game" && (!state.room?.game || state.room.round?.status === "shuffling")) {
     return state.room ? resolveScreen(state.room) : "landing";
@@ -221,7 +236,8 @@ function normalizeTargetScreen(screen) {
   return screen;
 }
 
-function handleBrowserNavigation(targetScreen) {
+function handleBrowserNavigation(targetScreen, options = {}) {
+  const joinCode = options.joinCode || null;
   const normalizedTarget = normalizeTargetScreen(targetScreen);
 
   const navigatingAwayFromRoom = !ROOM_REQUIRED_SCREENS.has(normalizedTarget);
@@ -234,27 +250,44 @@ function handleBrowserNavigation(targetScreen) {
     return;
   }
 
+  if (normalizedTarget === "join") {
+    state.mode = "online";
+  }
+
   showScreen(normalizedTarget, { history: "none" });
   writeScreenHash(normalizedTarget, { mode: "replace" });
+
+  if (normalizedTarget === "join") {
+    const joinCodeInput = document.getElementById("join-code");
+    if (joinCodeInput && joinCode) {
+      resetJoinFlow();
+      joinCodeInput.value = joinCode;
+      beginJoinValidation(joinCode, { source: "deep_link" });
+    } else {
+      state.pendingDeepLinkJoinCode = null;
+      state.joinValidationSource = null;
+    }
+  }
 }
 
 function initHashRouting() {
   window.addEventListener("hashchange", () => {
-    const target = parseScreenHash(window.location.hash) || "landing";
-    handleBrowserNavigation(target);
+    const route = parseHashRoute(window.location.hash);
+    const target = route.screen || "landing";
+    handleBrowserNavigation(target, { joinCode: route.joinCode });
   });
 
   window.addEventListener("popstate", (event) => {
-    const routeScreen = parseScreenHash(window.location.hash);
+    const route = parseHashRoute(window.location.hash);
     const stateScreen = event.state?.screen;
-    const target = normalizeTargetScreen(routeScreen || stateScreen || "landing");
+    const target = normalizeTargetScreen(route.screen || stateScreen || "landing");
 
-    handleBrowserNavigation(target);
+    handleBrowserNavigation(target, { joinCode: route.joinCode });
   });
 
-  const initialTarget = normalizeTargetScreen(parseScreenHash(window.location.hash) || "landing");
-  showScreen(initialTarget, { history: "none" });
-  writeScreenHash(initialTarget, { mode: "replace" });
+  const initialRoute = parseHashRoute(window.location.hash);
+  const initialTarget = normalizeTargetScreen(initialRoute.screen || "landing");
+  handleBrowserNavigation(initialTarget, { joinCode: initialRoute.joinCode });
 }
 
 function showScreen(key, options = {}) {
@@ -265,6 +298,7 @@ function showScreen(key, options = {}) {
   document.body.dataset.screen = key;
   localStorage.setItem("multipass_last_screen", key);
   Object.entries(screens).forEach(([name, element]) => {
+    if (!element) return;
     element.classList.toggle("active", name === key);
   });
   writeScreenHash(key, {
@@ -293,6 +327,17 @@ function getHeroActionConfig() {
   }
   if (state.activeScreen === "host" || state.activeScreen === "join") {
     return { label: "Back", action: () => showScreen("landing", { history: "push" }) };
+  }
+  if (state.activeScreen === "devkit") {
+    return {
+      label: "Back",
+      action: () => {
+        const fallback = "landing";
+        const target = screens[state.devkitReturnScreen] ? state.devkitReturnScreen : fallback;
+        state.devkitReturnScreen = fallback;
+        showScreen(target, { history: "push" });
+      }
+    };
   }
   if (isLocalMode() && state.room && (
     state.activeScreen === "lobby" ||
@@ -380,6 +425,21 @@ async function promptInstallApp() {
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
+  const isDev = typeof import.meta !== "undefined" && import.meta.env?.DEV;
+  if (isDev) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.getRegistrations().then((registrations) => {
+        registrations.forEach((registration) => {
+          registration.unregister().catch(() => {
+            // ignore cleanup failures in dev
+          });
+        });
+      }).catch(() => {
+        // ignore cleanup failures in dev
+      });
+    });
+    return;
+  }
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("/sw.js").catch(() => {
       // ignore registration failures in unsupported contexts
@@ -401,22 +461,63 @@ function initInstallPromptHandling() {
   });
 }
 
+function logWs(message, details) {
+  if (typeof details === "undefined") {
+    console.info(`[multipass/ws] ${message}`);
+    return;
+  }
+  console.info(`[multipass/ws] ${message}`, details);
+}
+
 function getWebSocketUrl() {
+  // 1) Build-time production override from CI/deploy.
+  const envOverride = typeof import.meta !== "undefined" && import.meta.env
+    ? import.meta.env.VITE_WS_URL
+    : null;
+  if (envOverride) return envOverride;
+  // 2) Local override for live debugging in browser.
   const override = window.localStorage?.getItem("multipass_ws_url");
   if (override) return override;
+  // 3) Dev fallback when running Vite + local API server.
+  if (typeof import.meta !== "undefined" && import.meta.env?.DEV) {
+    const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+    return `${protocol}://${window.location.hostname}:3001`;
+  }
+  // 4) Legacy localhost fallback if app is served by local static host.
   const host = window.location.hostname;
   if (host === "localhost" || host === "127.0.0.1") {
     const protocol = window.location.protocol === "https:" ? "wss" : "ws";
     return `${protocol}://${window.location.host}`;
   }
-  return "wss://api.loreandorder.com";
+  return PROD_WS_FALLBACK_URL;
+}
+
+function runPendingJoinValidation() {
+  const code = state.pendingDeepLinkJoinCode;
+  if (!code) return false;
+  state.pendingDeepLinkJoinCode = null;
+  send({
+    type: "validate_room",
+    code,
+    clientId: state.clientId,
+    seatToken: state.seatToken
+  });
+  return true;
 }
 
 function connect() {
+  const wsUrl = getWebSocketUrl();
+  let hasConnected = false;
+  logWs(`connecting to ${wsUrl}`);
   const socket = wsClient.connect();
   dispatch(actions.wsSet(socket));
 
   wsClient.subscribe("open", () => {
+    hasConnected = true;
+    logWs("open");
+    if (runPendingJoinValidation()) {
+      return;
+    }
     if (state.lastRoomCode && state.mode === "online") {
       dispatch(actions.autoJoinCodeSet(state.lastRoomCode));
       send({
@@ -491,6 +592,7 @@ function connect() {
 
     if (message.type === "room_preview") {
       state.joinValidating = false;
+      state.joinValidationSource = null;
       state.joinPreview = message.room || null;
       state.joinValidatedCode = message.room?.code || null;
       const canRejoin = Boolean(message.room?.canRejoin);
@@ -513,9 +615,23 @@ function connect() {
     }
 
     if (message.type === "error") {
+      const joinValidationSource = state.joinValidationSource;
       if (state.joinValidating) {
         state.joinValidating = false;
+        state.joinValidationSource = null;
         renderJoinSetup();
+      }
+      if (joinValidationSource === "deep_link") {
+        if (message.message === "Room not found.") {
+          showToast("This invite is expired. Ask for a new link.");
+          showScreen("join", { history: "replace" });
+          return;
+        }
+        if (message.message === "Room is full.") {
+          showToast("Room already has two players. Ask host for a fresh room.");
+          showScreen("join", { history: "replace" });
+          return;
+        }
       }
       if (state.autoJoinCode) {
         if (message.message === "Room not found.") {
@@ -543,7 +659,18 @@ function connect() {
     }
   });
 
-  wsClient.subscribe("close", () => {
+  wsClient.subscribe("error", (event) => {
+    logWs("error", event);
+  });
+
+  wsClient.subscribe("close", (event) => {
+    logWs(
+      `close code=${event?.code ?? "unknown"} reason=${event?.reason || "n/a"} clean=${Boolean(event?.wasClean)}`
+    );
+    if (!hasConnected) {
+      showToast("Could not connect to rooms. Check network/backend and retry.");
+      return;
+    }
     showToast("Disconnected. Refresh to reconnect.");
   });
 }
@@ -588,7 +715,17 @@ function isLocalMode() {
 }
 
 function shouldShowHeroRoomCode() {
-  return !isLocalMode() && state.activeScreen === "lobby" && Boolean(state.room?.code);
+  return !isLocalMode() &&
+    ONLINE_HERO_ROOM_SCREENS.has(state.activeScreen) &&
+    Boolean(state.room?.code);
+}
+
+async function shareRoomInviteLink() {
+  await copyRoomInviteLink({
+    roomCode: state.room?.code,
+    currentHref: window.location.href,
+    showToast
+  });
 }
 
 function updateHeroRoomCodeVisibility() {
@@ -999,6 +1136,8 @@ function leaveRoom(options = {}) {
   state.room = null;
   state.you = null;
   state.autoJoinCode = null;
+  state.pendingDeepLinkJoinCode = null;
+  state.joinValidationSource = null;
   document.body.removeAttribute("data-theme");
   showScreen("landing", { history: historyMode });
 }
@@ -1903,6 +2042,7 @@ function setup() {
   const localPickerGrid = document.getElementById("local-fruit-grid");
   const localResumeButton = document.getElementById("local-rejoin-room");
   const localClearButton = document.getElementById("local-clear-rejoin");
+  const shareRoomLinkButton = document.getElementById("share-room-link");
 
   initModeToggle();
   initSettingsModal();
@@ -1963,7 +2103,7 @@ function setup() {
   updateJoinPicker();
   updateLocalPickers();
   renderJoinSetup();
-  setLandingMode("local");
+  setLandingMode("local", { animate: false });
 
   if (landingTabLocal) {
     landingTabLocal.addEventListener("click", () => setLandingMode("local"));
@@ -2009,21 +2149,9 @@ function setup() {
   document.getElementById("join-room").addEventListener("click", () => {
     state.mode = "online";
     const codeInput = document.getElementById("join-code");
-    const code = codeInput ? codeInput.value.trim().toUpperCase() : "";
+    const code = codeInput ? codeInput.value : "";
     if (state.joinStep === "code") {
-      if (!code || code.length !== 4) {
-        showToast("Enter a 4-letter room code.");
-        return;
-      }
-      state.joinValidating = true;
-      state.joinValidatedCode = code;
-      renderJoinSetup();
-      send({
-        type: "validate_room",
-        code,
-        clientId: state.clientId,
-        seatToken: state.seatToken
-      });
+      beginJoinValidation(code, { source: "manual" });
       return;
     }
 
@@ -2040,6 +2168,12 @@ function setup() {
       seatToken: state.seatToken
     });
   });
+
+  if (shareRoomLinkButton) {
+    shareRoomLinkButton.addEventListener("click", () => {
+      void shareRoomInviteLink();
+    });
+  }
 
   if (joinCodeInput) {
     joinCodeInput.addEventListener("input", (event) => {
@@ -2173,7 +2307,13 @@ function setup() {
   connect();
 }
 
-setup();
+export function initLegacyApp() {
+  if (window[LEGACY_BOOTSTRAP_FLAG]) {
+    return;
+  }
+  window[LEGACY_BOOTSTRAP_FLAG] = true;
+  setup();
+}
 
 function renderLocalSetup() {
   renderLocalSetupScreen({
@@ -2190,9 +2330,9 @@ function initSettingsModal() {
   const modal = document.getElementById("settings-modal");
   if (!openButton || !closeButton || !modal) return;
 
-  const closeModal = () => {
+  const closeModal = ({ restoreFocus = true } = {}) => {
     modal.classList.add("hidden");
-    if (state.settingsLastFocus instanceof HTMLElement) {
+    if (restoreFocus && state.settingsLastFocus instanceof HTMLElement) {
       state.settingsLastFocus.focus();
     }
     state.settingsLastFocus = null;
@@ -2207,6 +2347,20 @@ function initSettingsModal() {
   });
 
   closeButton.addEventListener("click", closeModal);
+
+  if (IS_DEV_BUILD) {
+    const openDevkitButton = document.getElementById("open-devkit");
+    if (openDevkitButton) {
+      openDevkitButton.addEventListener("click", () => {
+        const fallback = "landing";
+        state.devkitReturnScreen = state.activeScreen !== "devkit" && screens[state.activeScreen]
+          ? state.activeScreen
+          : fallback;
+        closeModal({ restoreFocus: false });
+        showScreen("devkit", { history: "push" });
+      });
+    }
+  }
 
   modal.addEventListener("click", (event) => {
     const target = event.target;
@@ -2272,8 +2426,10 @@ function updateLocalRejoinCard() {
   updateLandingRejoinIndicators();
 }
 
-function setLandingMode(mode) {
+function setLandingMode(mode, options = {}) {
   const nextMode = mode === "online" ? "online" : "local";
+  const modeChanged = state.landingMode !== nextMode;
+  const shouldAnimate = options.animate ?? modeChanged;
   state.landingMode = nextMode;
   if (landingTrack) {
     landingTrack.dataset.mode = nextMode;
@@ -2295,10 +2451,12 @@ function setLandingMode(mode) {
   }
   updateLocalRejoinCard();
   updateRejoinCard();
-  if (nextMode === "online") {
-    staggerLandingPanel(landingPanelOnline);
-  } else {
-    staggerLandingPanel(landingPanelLocal);
+  if (shouldAnimate) {
+    if (nextMode === "online") {
+      staggerLandingPanel(landingPanelOnline);
+    } else {
+      staggerLandingPanel(landingPanelLocal);
+    }
   }
 }
 
@@ -2307,7 +2465,48 @@ function resetJoinFlow() {
   state.joinValidatedCode = null;
   state.joinPreview = null;
   state.joinValidating = false;
+  state.joinValidationSource = null;
+  state.pendingDeepLinkJoinCode = null;
   state.joinFruit = null;
+}
+
+function beginJoinValidation(rawCode, options = {}) {
+  const source = options.source || "manual";
+  const code = normalizeRoomCode(rawCode);
+  if (code.length !== 4) {
+    if (source === "manual") {
+      showToast("Enter a 4-letter room code.");
+    }
+    return false;
+  }
+
+  const joinCodeInput = document.getElementById("join-code");
+  if (joinCodeInput) {
+    joinCodeInput.value = code;
+  }
+
+  state.joinValidating = true;
+  state.joinValidatedCode = code;
+  state.joinValidationSource = source;
+  renderJoinSetup();
+
+  const socket = wsClient.getSocket();
+  if (!socket || socket.readyState !== WebSocket.OPEN) {
+    state.pendingDeepLinkJoinCode = code;
+    if (source === "manual") {
+      showToast("Connecting...");
+    }
+    return false;
+  }
+
+  state.pendingDeepLinkJoinCode = null;
+  send({
+    type: "validate_room",
+    code,
+    clientId: state.clientId,
+    seatToken: state.seatToken
+  });
+  return true;
 }
 
 function renderJoinSetup() {

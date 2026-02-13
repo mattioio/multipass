@@ -45,3 +45,33 @@ test("online happy path: host + guest choose game -> shuffle/game", async ({ bro
   await hostContext.close();
   await guestContext.close();
 });
+
+test("online deep-link join: guest opens #join=CODE invite", async ({ browser }) => {
+  const hostContext = await browser.newContext();
+  const guestContext = await browser.newContext();
+  const hostPage = await hostContext.newPage();
+  const guestPage = await guestContext.newPage();
+
+  await hostPage.goto("http://127.0.0.1:3000/");
+  await hostPage.getByRole("tab", { name: "Online" }).click();
+  await hostPage.getByRole("button", { name: "Host a room" }).click();
+  await hostPage.locator('#host-fruit-picker .fruit-option[data-fruit="banana"]').click();
+  await hostPage.getByRole("button", { name: "Create room" }).click();
+  await expect(hostPage.locator("#screen-lobby.active")).toBeVisible();
+
+  const roomCode = (await hostPage.locator("#room-code").textContent())?.trim() || "";
+  await guestPage.goto(`http://127.0.0.1:3000/#join=${roomCode}`);
+
+  await expect(guestPage.locator("#screen-join.active")).toBeVisible();
+  await expect(guestPage.locator("#join-code")).toHaveValue(roomCode);
+  await expect(guestPage.getByRole("button", { name: "Join room" })).toBeVisible();
+
+  await guestPage.locator('#join-fruit-picker .fruit-option[data-fruit="kiwi"]').click();
+  await guestPage.getByRole("button", { name: "Join room" }).click();
+
+  await expect(guestPage.locator("#screen-lobby.active")).toBeVisible();
+  await expect(hostPage.locator("#screen-lobby.active")).toBeVisible();
+
+  await hostContext.close();
+  await guestContext.close();
+});

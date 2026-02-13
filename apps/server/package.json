@@ -3,13 +3,15 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node src/index.js",
+    "dev": "concurrently -k -n api,web -c green,cyan \"npm run dev:api\" \"npm --prefix ../web run dev -- --host 127.0.0.1 --port 3000\"",
+    "dev:api": "PORT=3001 node src/index.js",
     "smoke": "playwright test",
     "smoke:local": "playwright test tests/smoke/local-flow.spec.js",
     "smoke:online": "playwright test tests/smoke/online-flow.spec.js"
   },
   "devDependencies": {
-    "@playwright/test": "^1.51.1"
+    "@playwright/test": "^1.51.1",
+    "concurrently": "^9.2.1"
   },
   "dependencies": {
     "ws": "^8.16.0"

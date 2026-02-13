@@ -1,0 +1,204 @@
+:root {
+  --strawberry-1: #f14666;
+  --strawberry-2: #ee8980;
+  --strawberry-3: #ffcdaa;
+  --strawberry-4: #9cb898;
+  --banana-1: #f5c542;
+  --banana-2: #f7d76a;
+  --banana-3: #fbe6a4;
+  --kiwi-1: #028174;
+  --kiwi-2: #0ab68b;
+  --kiwi-3: #92de8b;
+  --kiwi-4: #ffe3b3;
+  --blueberry-1: #3b5bdb;
+  --blueberry-2: #5c7cfa;
+  --blueberry-3: #b3c7ff;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --radius-sm: 12px;
+  --radius-md: 16px;
+  --radius-lg: 22px;
+  --landing-single-max-width: 960px;
+  --landing-stagger-step: 90ms;
+  --landing-stagger-duration: 300ms;
+  --landing-stagger-x-distance: 12px;
+  --motion-fast: 190ms;
+  --motion-base: 240ms;
+  --motion-slow: 320ms;
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --page-bg: #edf1f8;
+  --bg-top: #f7f8fc;
+  --bg-mid: #edf1f8;
+  --bg-bottom: #d7dde9;
+  --bg-glow-a: color-mix(in srgb, var(--cta) 16%, transparent);
+  --bg-glow-b: color-mix(in srgb, var(--blueberry-2) 14%, transparent);
+  --bg-texture-image: url("/src/assets/bg-loop01-white.png");
+  --bg-texture-size: 640px auto;
+  --bg-texture-opacity: 0.16;
+  --bg-texture-blend: soft-light;
+  --bg-texture-speed: 198s;
+  --header-stripe-speed: calc((var(--bg-texture-speed) * 2) / 3);
+  --scratch-texture-image: url("/src/assets/scratch-texture.png");
+  --scratch-blend-mode: screen;
+  --scratch-opacity-body: 0.1;
+  --scratch-opacity-header: 0.07;
+  --scratch-opacity-tile: 0.06;
+  --scratch-opacity-game-banner: 0.09;
+  --scratch-size-body: 980px auto;
+  --scratch-size-surface: 420px auto;
+  --scratch-scroll-speed: 220s;
+  --surface: #ffffff;
+  --surface-2: #f2f5fb;
+  --surface-3: #e8edf6;
+  --text: #181d28;
+  --muted: #616a7b;
+  --border: #d7deea;
+  --shadow-sm: 0 8px 18px rgba(16, 24, 42, 0.12);
+  --shadow-md: 0 18px 35px rgba(14, 22, 40, 0.16);
+  --shadow-lg: 0 30px 56px rgba(12, 20, 38, 0.2);
+  --focus-ring: 0 0 0 3px color-mix(in srgb, var(--cta) 45%, transparent);
+  --cta: #f14666;
+  --cta-text: #fffaf2;
+  --title-font: "Outfit", "Space Grotesk", "Trebuchet MS", sans-serif;
+  --icon-badge-local: #9dd9c2;
+  --icon-badge-online: #a7c7fa;
+  --icon-local-fg: #18895f;
+  --icon-online-fg: #325ac6;
+  --shell-bg:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface) 92%, #ffffff) 0%, color-mix(in srgb, var(--surface-2) 88%, var(--surface)) 100%);
+  --shell-border: color-mix(in srgb, var(--border) 92%, #ffffff);
+  --shell-top-border: color-mix(in srgb, #ffffff 74%, var(--shell-border));
+  --shell-bottom-border: color-mix(in srgb, var(--shell-border) 82%, transparent);
+  --shell-shadow: 0 22px 36px rgba(18, 28, 52, 0.15);
+  --tile-bg:
+    linear-gradient(165deg, color-mix(in srgb, var(--surface) 56%, var(--surface-3)) 0%, color-mix(in srgb, var(--surface-2) 76%, var(--surface-3)) 100%);
+  --tile-border: color-mix(in srgb, var(--theme-mid, var(--border)) 30%, var(--border));
+  --tile-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  --tile-hover-border: color-mix(in srgb, var(--theme-strong, var(--cta)) 42%, var(--border));
+  --tile-hover-shadow: 0 14px 24px color-mix(in srgb, var(--theme-strong, var(--cta)) 16%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  --tile-selected-bg:
+    linear-gradient(170deg, color-mix(in srgb, var(--theme-soft, var(--surface-2)) 35%, var(--surface)) 0%, color-mix(in srgb, var(--theme-mid, var(--surface-3)) 28%, var(--surface-2)) 100%);
+  --tile-locked-bg:
+    linear-gradient(160deg, color-mix(in srgb, var(--theme-soft, var(--surface-3)) 16%, var(--surface-2)) 0%, color-mix(in srgb, var(--surface-3) 82%, var(--surface-2)) 100%);
+  --tile-locked-border: color-mix(in srgb, var(--theme-strong, var(--cta)) 30%, var(--border));
+  --tile-locked-shadow: inset 0 0 0 1px color-mix(in srgb, var(--theme-strong, var(--cta)) 18%, transparent);
+  --tile-locked-overlay:
+    repeating-linear-gradient(
+      -35deg,
+      color-mix(in srgb, var(--theme-strong, var(--cta)) 10%, transparent) 0 8px,
+      transparent 8px 16px
+    );
+  --player-pattern-image: url("/src/assets/colour-diagonal.svg");
+}
+
+body[data-ui-variant="soft"] {
+  --shell-bg:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface) 95%, #ffffff) 0%, color-mix(in srgb, var(--surface-2) 92%, #f6f8fc) 100%);
+  --shell-border: color-mix(in srgb, var(--border) 82%, #ffffff);
+  --shell-top-border: color-mix(in srgb, #ffffff 84%, var(--shell-border));
+  --shell-bottom-border: color-mix(in srgb, var(--shell-border) 72%, transparent);
+  --shell-shadow: 0 14px 24px rgba(17, 28, 48, 0.1);
+  --tile-bg:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface) 52%, var(--surface-2)) 0%, color-mix(in srgb, var(--surface-2) 84%, var(--surface-3)) 100%);
+  --tile-border: color-mix(in srgb, var(--border) 86%, #ffffff);
+  --tile-hover-border: color-mix(in srgb, var(--theme-mid, var(--cta)) 42%, var(--border));
+  --tile-hover-shadow: 0 11px 18px rgba(21, 31, 50, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.86);
+}
+body[data-mode="dark"][data-ui-variant="neon_night"] {
+  --page-bg: #090515;
+  --bg-top: #140a27;
+  --bg-mid: #0e061e;
+  --bg-bottom: #070311;
+  --bg-glow-a: color-mix(in srgb, #9b6dff 12%, transparent);
+  --bg-glow-b: color-mix(in srgb, #4f7dff 10%, transparent);
+  --surface: #1b1034;
+  --surface-2: #221242;
+  --surface-3: #2a1852;
+  --text: #f3ebff;
+  --muted: #bdaedd;
+  --border: #41336b;
+  --shell-bg: linear-gradient(165deg, #25134a 0%, #190d36 100%);
+  --shell-border: color-mix(in srgb, #8e72d6 56%, #3d2f64);
+  --shell-top-border: color-mix(in srgb, #e4dcff 46%, #8e7ac6);
+  --shell-bottom-border: color-mix(in srgb, #5c4a8f 56%, #2c214d);
+  --shell-shadow: 0 20px 34px rgba(5, 2, 18, 0.52), 0 0 14px rgba(98, 84, 176, 0.18);
+  --tile-bg: linear-gradient(170deg, #2c1a58 0%, #1f113f 100%);
+  --tile-border: color-mix(in srgb, #8c7dd2 30%, #4a3a78);
+  --tile-hover-border: color-mix(in srgb, #b495ff 44%, #5a4a8a);
+  --tile-hover-shadow: 0 14px 24px rgba(11, 5, 30, 0.52), 0 0 0 1px color-mix(in srgb, #b092ff 18%, transparent) inset;
+  --bg-texture-image: url("/src/assets/bg-loop01-black.png");
+  --bg-texture-opacity: 0.24;
+  --bg-texture-blend: soft-light;
+  --bg-texture-size: 640px auto;
+  --scratch-opacity-body: 0.12;
+  --scratch-opacity-header: 0.08;
+  --scratch-opacity-tile: 0.07;
+  --scratch-opacity-game-banner: 0.1;
+}
+
+body[data-mode="dark"] {
+  --page-bg: #111319;
+  --bg-top: #151a26;
+  --bg-mid: #101522;
+  --bg-bottom: #0b1018;
+  --bg-glow-a: color-mix(in srgb, var(--cta) 10%, transparent);
+  --bg-glow-b: color-mix(in srgb, var(--blueberry-2) 8%, transparent);
+  --surface: #1a1f29;
+  --surface-2: #212736;
+  --surface-3: #2a3144;
+  --text: #f7f8fc;
+  --muted: #aeb5c3;
+  --border: #384157;
+  --shadow-sm: 0 8px 18px rgba(0, 0, 0, 0.28);
+  --shadow-md: 0 18px 35px rgba(0, 0, 0, 0.38);
+  --shadow-lg: 0 30px 56px rgba(0, 0, 0, 0.48);
+  --cta: #f14666;
+  --cta-text: #ffffff;
+}
+
+body[data-theme="strawberry"] {
+  --cta: var(--strawberry-1);
+  --cta-text: #fffaf2;
+}
+
+body[data-theme="banana"] {
+  --cta: var(--banana-1);
+  --cta-text: #3a2c00;
+}
+
+body[data-theme="kiwi"] {
+  --cta: var(--kiwi-1);
+  --cta-text: #f7fff5;
+}
+
+body[data-theme="blueberry"] {
+  --cta: var(--blueberry-1);
+  --cta-text: #f4f7ff;
+}
+
+@media (prefers-color-scheme: dark) {
+  body:not([data-mode]) {
+    --page-bg: #111319;
+    --bg-top: #151a26;
+    --bg-mid: #101522;
+    --bg-bottom: #0b1018;
+    --bg-glow-a: color-mix(in srgb, var(--cta) 10%, transparent);
+    --bg-glow-b: color-mix(in srgb, var(--blueberry-2) 8%, transparent);
+    --surface: #1a1f29;
+    --surface-2: #212736;
+    --surface-3: #2a3144;
+    --text: #f7f8fc;
+    --muted: #aeb5c3;
+    --border: #384157;
+    --shadow-sm: 0 8px 18px rgba(0, 0, 0, 0.28);
+    --shadow-md: 0 18px 35px rgba(0, 0, 0, 0.38);
+    --shadow-lg: 0 30px 56px rgba(0, 0, 0, 0.48);
+    --cta: #f14666;
+    --cta-text: #ffffff;
+  }
+}

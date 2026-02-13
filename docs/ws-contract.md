@@ -1,6 +1,6 @@
 # Multipass WebSocket Contract
 
-This document defines the current wire contract between `/Users/matthew/Projects/multipass/apps/server/src/index.js` and `/Users/matthew/Projects/multipass/apps/web/src/main.js`.
+This document defines the current wire contract between `/Users/matthew/Projects/multipass/apps/server/src/index.js` and `/Users/matthew/Projects/multipass/apps/web/src/legacy/runtime.js`.
 
 ## Server -> Client
 
