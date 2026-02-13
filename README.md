@@ -33,7 +33,7 @@ Playwright will boot both required servers automatically.
 - The app connects to that endpoint for online room features (host/join/rejoin).
 
 ## Smart invite links
-- Host can use the in-room `Share` action to copy/share a deep-link invite.
+- Host can use the in-room `Share` action to copy a deep-link invite.
 - Canonical invite format is `/#join=CODE` (example: `https://your-site.example/#join=FVBJ`).
 - Opening that URL sends players to Join, pre-fills the room code, and auto-validates it.
 - If the room is unavailable, players stay in Join and get a clear message.

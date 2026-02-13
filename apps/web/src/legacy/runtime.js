@@ -11,6 +11,7 @@ import { renderPickHint } from "../ui/screens/pickHint.js";
 import { setupFruitPicker, updateFruitPicker } from "../ui/shared/fruitPicker.js";
 import { createToastController } from "../ui/shared/toast.js";
 import { normalizeRoomCode, parseScreenRoute } from "./hashRoute.js";
+import { copyRoomInviteLink } from "./shareLink.js";
 
 const LOCAL_REJOIN_KEY = "multipass_last_local_match";
 const ONLINE_REJOIN_AT_KEY = "multipass_last_room_started_at";
@@ -719,88 +720,11 @@ function shouldShowHeroRoomCode() {
     Boolean(state.room?.code);
 }
 
-function buildJoinDeepLink(rawCode) {
-  const code = normalizeRoomCode(rawCode);
-  if (code.length !== 4) return null;
-  const url = new URL(window.location.href);
-  url.hash = `join=${code}`;
-  return url.toString();
-}
-
-async function copyTextWithFallback(text) {
-  if (!text) return false;
-  if (navigator.clipboard?.writeText) {
-    try {
-      await navigator.clipboard.writeText(text);
-      return true;
-    } catch (err) {
-      // fallback below
-    }
-  }
-
-  const textarea = document.createElement("textarea");
-  textarea.value = text;
-  textarea.setAttribute("readonly", "true");
-  textarea.style.position = "fixed";
-  textarea.style.opacity = "0";
-  textarea.style.pointerEvents = "none";
-  document.body.appendChild(textarea);
-  textarea.focus();
-  textarea.select();
-
-  let copied = false;
-  try {
-    copied = Boolean(document.execCommand("copy"));
-  } catch (err) {
-    copied = false;
-  }
-
-  textarea.remove();
-  return copied;
-}
-
 async function shareRoomInviteLink() {
-  const code = normalizeRoomCode(state.room?.code);
-  if (code.length !== 4) {
-    showToast("Room code unavailable.");
-    return;
-  }
-
-  const link = buildJoinDeepLink(code);
-  if (!link) {
-    showToast("Room code unavailable.");
-    return;
-  }
-
-  const sharePayload = {
-    title: "Multipass room invite",
-    text: `Join my room: ${code}`,
-    url: link
-  };
-
-  if (typeof navigator.share === "function") {
-    try {
-      await navigator.share(sharePayload);
-      hideActionToast();
-      showToast("Invite shared");
-      return;
-    } catch (err) {
-      if (err?.name === "AbortError") {
-        return;
-      }
-    }
-  }
-
-  const copied = await copyTextWithFallback(link);
-  if (copied) {
-    hideActionToast();
-    showToast("Link copied");
-    return;
-  }
-
-  showActionToast("Couldn't copy invite link.", "Open link", () => {
-    hideActionToast();
-    window.open(link, "_blank", "noopener,noreferrer");
+  await copyRoomInviteLink({
+    roomCode: state.room?.code,
+    currentHref: window.location.href,
+    showToast
   });
 }
 
