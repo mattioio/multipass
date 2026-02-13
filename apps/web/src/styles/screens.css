@@ -751,6 +751,54 @@
   gap: 12px;
 }
 
+.devkit-layout {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.devkit-title {
+  font-size: clamp(1.55rem, 2.8vw, 2.15rem);
+  letter-spacing: 0.03em;
+}
+
+.devkit-subtitle {
+  margin-top: 8px;
+  color: var(--muted);
+}
+
+.devkit-section {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.devkit-section > h3 {
+  font-size: 1.05rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.devkit-grid {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.devkit-grid-buttons {
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+.devkit-grid-cards {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.devkit-grid-avatars {
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+}
+
+.devkit-grid-games {
+  grid-template-columns: minmax(260px, 420px);
+}
+
 @media (max-width: 720px) {
   .score-emoji {
     width: 80px;
@@ -780,6 +828,13 @@
   .settings-icon {
     width: 18px;
     height: 18px;
+  }
+
+  #dev-build-tag {
+    top: 8px;
+    right: 8px;
+    font-size: 0.62rem;
+    padding: 4px 8px;
   }
 
   .logo-image {
@@ -971,8 +1026,22 @@
     flex-direction: column;
   }
 
+  .hero-room-main {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .hero-share-action {
+    min-height: 38px;
+    padding-inline: 14px;
+  }
+
   .modal-content {
     margin: 10vh 12px 0;
+  }
+
+  .devkit-grid-games {
+    grid-template-columns: 1fr;
   }
 
 }

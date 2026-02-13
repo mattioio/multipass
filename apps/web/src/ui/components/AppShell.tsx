@@ -3,8 +3,11 @@ import type { PropsWithChildren } from "react";
 export interface AppShellProps extends PropsWithChildren {}
 
 export function AppShell({ children }: AppShellProps) {
+  const isDevBuild = import.meta.env.DEV;
+
   return (
     <div id="app">
+      {isDevBuild ? <div id="dev-build-tag">dev build</div> : null}
       <header className="hero">
         <div className="hero-top">
           <button id="hero-left-action" className="ghost hero-action hidden" type="button">
@@ -20,8 +23,13 @@ export function AppShell({ children }: AppShellProps) {
           </button>
         </div>
         <div id="hero-room" className="hero-room hidden">
-          <div id="room-code-pill" className="code-pill">
-            <span id="room-code" className="code-hero">----</span>
+          <div className="hero-room-main">
+            <div id="room-code-pill" className="code-pill">
+              <span id="room-code" className="code-hero">----</span>
+            </div>
+            <button id="share-room-link" className="ghost hero-share-action" type="button">
+              Share
+            </button>
           </div>
         </div>
       </header>
