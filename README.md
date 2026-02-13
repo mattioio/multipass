@@ -4,18 +4,35 @@ Multiplayer, turn-based mini-games for two players (with future spectator suppor
 
 ## Local dev (first time)
 1. Install server dependencies:
-   - cd apps/server
-   - npm install
-2. Start the dev server:
-   - npm run dev
-3. Open the app:
-   - http://localhost:3000
+   - `cd /Users/matthew/Projects/multipass/apps/server`
+   - `npm install`
+2. Install web dependencies:
+   - `cd /Users/matthew/Projects/multipass/apps/web`
+   - `npm install`
+3. Start both servers with one command:
+   - `cd /Users/matthew/Projects/multipass/apps/server`
+   - `npm run dev`
+4. Open the app:
+   - `http://localhost:3000`
+
+`npm run dev` in `apps/server` now starts:
+- API + WebSocket server on `http://localhost:3001`
+- React/Vite frontend on `http://localhost:3000`
+
+If you want to run only the API server, use:
+- `npm run dev:api`
+
+## Running smoke tests
+- `cd /Users/matthew/Projects/multipass/apps/server`
+- `npm run smoke`
+
+Playwright will boot both required servers automatically.
 
 ## Project structure
-- apps/web: static frontend
-- apps/server: Node HTTP + WebSocket server, in-memory rooms
+- `apps/web`: React + TypeScript + Vite frontend
+- `apps/server`: Node HTTP + WebSocket server, in-memory rooms
 
 ## Notes
 - Rooms expire after 90 minutes of inactivity.
 - No accounts. Rejoin uses a device token stored locally.
-- Tic Tac Toe is the first game; more games can be added under apps/server/src/games.
+- Tic Tac Toe is the first game; more games can be added under `apps/server/src/games`.

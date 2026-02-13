@@ -26,7 +26,7 @@
   --landing-single-max-width: 960px;
   --landing-stagger-step: 90ms;
   --landing-stagger-duration: 300ms;
-  --landing-stagger-distance: 12px;
+  --landing-stagger-x-distance: 12px;
   --motion-fast: 190ms;
   --motion-base: 240ms;
   --motion-slow: 320ms;
@@ -728,12 +728,12 @@ button:disabled {
 
 .landing-panel.is-staggering > * {
   opacity: 0;
-  transform: translateY(var(--landing-stagger-distance));
+  transform: translateX(calc(-1 * var(--landing-stagger-x-distance)));
 }
 
 .landing-panel.is-staggering > .is-entered {
   opacity: 1;
-  transform: translateY(0);
+  transform: translateX(0);
   transition:
     opacity var(--landing-stagger-duration) var(--ease-out),
     transform var(--landing-stagger-duration) var(--ease-out);
@@ -864,7 +864,7 @@ button:disabled {
   background-position: 0 0, 0 0;
   background-repeat: repeat, repeat;
   background-blend-mode: screen, normal;
-  opacity: calc((0.32 + var(--scratch-opacity-header)) * 0.3);
+  opacity: 0.05;
   pointer-events: none;
   animation: header-stripe-scroll var(--header-stripe-speed) linear infinite;
 }
@@ -1147,7 +1147,6 @@ button:disabled {
   line-height: 0.98;
   letter-spacing: 0.01em;
   color: #ffffff;
-  text-shadow: 0 2px 8px rgba(7, 4, 18, 0.35);
   text-overflow: ellipsis;
   overflow: hidden;
   white-space: nowrap;
@@ -1159,9 +1158,15 @@ button:disabled {
 
 .fruit-option.selected .fruit-shell {
   box-shadow:
-    0 0 0 2px color-mix(in srgb, var(--theme-strong, var(--cta)) 36%, transparent),
-    0 0 24px color-mix(in srgb, var(--theme-strong, var(--cta)) 28%, transparent),
+    0 0 0 3px color-mix(in srgb, var(--theme-strong, var(--cta)) 60%, #ffffff 10%),
+    0 0 28px color-mix(in srgb, var(--theme-strong, var(--cta)) 38%, transparent),
     0 16px 22px color-mix(in srgb, #000000 18%, transparent);
+}
+
+.fruit-option.selected .fruit-inner {
+  box-shadow:
+    inset 0 0 0 2px color-mix(in srgb, #ffffff 34%, transparent),
+    inset 0 -14px 20px color-mix(in srgb, #000000 18%, transparent);
 }
 
 .fruit-option.disabled,
@@ -1185,15 +1190,7 @@ button:disabled {
 }
 
 .fruit-option.p1-locked .fruit-shell::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background:
-    linear-gradient(180deg, rgba(16, 13, 31, 0.42) 0%, rgba(10, 8, 21, 0.72) 100%),
-    var(--tile-locked-overlay);
-  pointer-events: none;
-  z-index: 3;
+  opacity: 0.18;
 }
 
 .fruit-option.p1-locked .player-art {
@@ -1201,9 +1198,31 @@ button:disabled {
   filter: grayscale(0.86) saturate(0.72);
 }
 
+.fruit-option.p1-locked .fruit-inner::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(16, 13, 31, 0.2) 0%, rgba(10, 8, 21, 0.44) 100%);
+  pointer-events: none;
+  z-index: 2;
+}
+
 .fruit-option.p1-locked .fruit-lower-third {
   background: color-mix(in srgb, #18152f 86%, var(--theme-strong, var(--cta)) 14%);
   border-color: color-mix(in srgb, #ffffff 18%, transparent);
+}
+
+.local-fruit-grid .fruit-lower-third {
+  left: 0;
+  right: auto;
+  bottom: 0;
+  max-width: calc(100% - 20px);
+  min-height: 40px;
+  padding: 7px 12px;
+  justify-content: flex-start;
+  text-align: left;
+  border-radius: 0 8px 0 0;
 }
 
 .lock-badge {
@@ -1553,14 +1572,14 @@ button:disabled {
 }
 
 .score-top {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+  display: grid;
+  justify-items: center;
+  gap: 14px;
 }
 
 .score-emoji {
-  width: 96px;
-  height: 96px;
+  width: clamp(168px, 18vw, 192px);
+  height: clamp(168px, 18vw, 192px);
   position: relative;
   border-radius: 16px;
   padding: 6px;
@@ -1662,9 +1681,16 @@ button:disabled {
   display: block;
 }
 
+.score-top > :not(.score-emoji) {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  text-align: center;
+}
+
 .score-name {
   font-weight: 700;
-  font-size: 1.22rem;
+  font-size: 1.5rem;
   font-family: var(--title-font);
 }
 
@@ -1694,9 +1720,9 @@ button:disabled {
 
 .score-role {
   color: var(--muted);
-  font-size: 0.8rem;
+  font-size: 0.95rem;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
 }
 
 .score-stats {
@@ -2691,32 +2717,29 @@ button:disabled {
   }
 
   .local-fruit-grid {
-    grid-template-columns: 1fr;
-    row-gap: 22px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
   }
 
   .local-fruit-grid .fruit-option {
     padding-bottom: 0;
   }
 
-  .local-fruit-grid .fruit-shell {
-    overflow: visible;
-  }
-
+  .local-fruit-grid .fruit-shell,
   .local-fruit-grid .fruit-inner {
-    overflow: visible;
+    overflow: hidden;
   }
 
   .local-fruit-grid .fruit-lower-third {
     left: 0;
-    right: 0;
-    bottom: -58px;
-    max-width: none;
-    min-height: 48px;
-    width: 100%;
-    justify-content: center;
-    border-radius: 14px;
-    text-align: center;
+    right: auto;
+    bottom: 0;
+    max-width: calc(100% - 20px);
+    min-height: 40px;
+    width: auto;
+    justify-content: flex-start;
+    border-radius: 0 8px 0 0;
+    text-align: left;
     z-index: 2;
   }
 

@@ -1,15 +1,15 @@
-import { assertRoomShape } from "./contracts/roomState.js";
-import { FRUITS, getFruit, getFruitByTheme } from "./domain/fruits.js";
-import { localGames, listLocalGames } from "./domain/localGames.js";
-import { createWsClient } from "./net/wsClient.js";
-import { actions } from "./state/actions.js";
-import { reducer } from "./state/reducer.js";
-import { getLeaderId } from "./state/selectors.js";
-import { createStore } from "./state/store.js";
-import { renderLocalSetupScreen } from "./ui/screens/localSetup.js";
-import { renderPickHint } from "./ui/screens/pickHint.js";
-import { setupFruitPicker, updateFruitPicker } from "./ui/shared/fruitPicker.js";
-import { createToastController } from "./ui/shared/toast.js";
+import { assertRoomShape } from "../contracts/roomState.js";
+import { FRUITS, getFruit, getFruitByTheme } from "../domain/fruits.js";
+import { localGames, listLocalGames } from "../domain/localGames.js";
+import { createWsClient } from "../net/wsClient.js";
+import { actions } from "../state/actions.js";
+import { reducer } from "../state/reducer.js";
+import { getLeaderId } from "../state/selectors.js";
+import { createStore } from "../state/store.js";
+import { renderLocalSetupScreen } from "../ui/screens/localSetup.js";
+import { renderPickHint } from "../ui/screens/pickHint.js";
+import { setupFruitPicker, updateFruitPicker } from "../ui/shared/fruitPicker.js";
+import { createToastController } from "../ui/shared/toast.js";
 
 const LOCAL_REJOIN_KEY = "multipass_last_local_match";
 const ONLINE_REJOIN_AT_KEY = "multipass_last_room_started_at";
@@ -35,6 +35,7 @@ const SHUFFLE_CLOCKWISE_ORDER = [0, 1, 3, 2];
 const SHUFFLE_AUTO_STOP_MS = 2200;
 const SHUFFLE_STEP_MS = 115;
 const SHUFFLE_SETTLE_MIN_STEPS = 7;
+const LEGACY_BOOTSTRAP_FLAG = "__multipassLegacyInitialized";
 
 function createInitialLocalStripState() {
   return {
@@ -89,6 +90,7 @@ const store = createStore(createInitialState(), reducer);
 const state = store.getState();
 const dispatch = store.dispatch;
 const wsClient = createWsClient({ getUrl: getWebSocketUrl });
+window.__multipassStore = store;
 
 const screens = {
   landing: document.getElementById("screen-landing"),
@@ -380,6 +382,21 @@ async function promptInstallApp() {
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
+  const isDev = typeof import.meta !== "undefined" && import.meta.env?.DEV;
+  if (isDev) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.getRegistrations().then((registrations) => {
+        registrations.forEach((registration) => {
+          registration.unregister().catch(() => {
+            // ignore cleanup failures in dev
+          });
+        });
+      }).catch(() => {
+        // ignore cleanup failures in dev
+      });
+    });
+    return;
+  }
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("/sw.js").catch(() => {
       // ignore registration failures in unsupported contexts
@@ -402,8 +419,16 @@ function initInstallPromptHandling() {
 }
 
 function getWebSocketUrl() {
+  const envOverride = typeof import.meta !== "undefined" && import.meta.env
+    ? import.meta.env.VITE_WS_URL
+    : null;
+  if (envOverride) return envOverride;
   const override = window.localStorage?.getItem("multipass_ws_url");
   if (override) return override;
+  if (typeof import.meta !== "undefined" && import.meta.env?.DEV) {
+    const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+    return `${protocol}://${window.location.hostname}:3001`;
+  }
   const host = window.location.hostname;
   if (host === "localhost" || host === "127.0.0.1") {
     const protocol = window.location.protocol === "https:" ? "wss" : "ws";
@@ -1963,7 +1988,7 @@ function setup() {
   updateJoinPicker();
   updateLocalPickers();
   renderJoinSetup();
-  setLandingMode("local");
+  setLandingMode("local", { animate: false });
 
   if (landingTabLocal) {
     landingTabLocal.addEventListener("click", () => setLandingMode("local"));
@@ -2173,7 +2198,13 @@ function setup() {
   connect();
 }
 
-setup();
+export function initLegacyApp() {
+  if (window[LEGACY_BOOTSTRAP_FLAG]) {
+    return;
+  }
+  window[LEGACY_BOOTSTRAP_FLAG] = true;
+  setup();
+}
 
 function renderLocalSetup() {
   renderLocalSetupScreen({
@@ -2272,8 +2303,10 @@ function updateLocalRejoinCard() {
   updateLandingRejoinIndicators();
 }
 
-function setLandingMode(mode) {
+function setLandingMode(mode, options = {}) {
   const nextMode = mode === "online" ? "online" : "local";
+  const modeChanged = state.landingMode !== nextMode;
+  const shouldAnimate = options.animate ?? modeChanged;
   state.landingMode = nextMode;
   if (landingTrack) {
     landingTrack.dataset.mode = nextMode;
@@ -2295,10 +2328,12 @@ function setLandingMode(mode) {
   }
   updateLocalRejoinCard();
   updateRejoinCard();
-  if (nextMode === "online") {
-    staggerLandingPanel(landingPanelOnline);
-  } else {
-    staggerLandingPanel(landingPanelLocal);
+  if (shouldAnimate) {
+    if (nextMode === "online") {
+      staggerLandingPanel(landingPanelOnline);
+    } else {
+      staggerLandingPanel(landingPanelLocal);
+    }
   }
 }
 
