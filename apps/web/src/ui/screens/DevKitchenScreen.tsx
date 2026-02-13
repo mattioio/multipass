@@ -6,6 +6,7 @@ import {
   FruitPickerGrid,
   GameTile
 } from "../components";
+import localCardIcon from "../../assets/local.svg";
 
 export function DevKitchenScreen() {
   return (
@@ -39,7 +40,7 @@ export function DevKitchenScreen() {
           </Card>
           <Card className="landing-card local-card">
             <CardHeader className="landing-card-header landing-card-header-local">
-              <img src="/src/assets/local.svg" alt="" />
+              <img src={localCardIcon} alt="" />
             </CardHeader>
             <h4 className="landing-title">Landing Card</h4>
             <p className="subtext">Landing style with icon header and CTA spacing.</p>

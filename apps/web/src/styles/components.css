@@ -368,7 +368,7 @@ button:disabled {
   inset: 0;
   background-image:
     var(--scratch-texture-image),
-    url("/src/assets/colour-diagonal.svg");
+    url("../assets/colour-diagonal.svg");
   background-size: var(--scratch-size-surface), 110px auto;
   background-position: 0 0, 0 0;
   background-repeat: repeat, repeat;
@@ -1031,28 +1031,28 @@ button:disabled {
   --theme-strong: var(--strawberry-1);
   --theme-mid: var(--strawberry-2);
   --theme-soft: var(--strawberry-3);
-  --player-pattern-image: url("/src/assets/colour-dots.svg");
+  --player-pattern-image: url("../assets/colour-dots.svg");
 }
 
 .theme-banana {
   --theme-strong: var(--banana-1);
   --theme-mid: var(--banana-2);
   --theme-soft: var(--banana-3);
-  --player-pattern-image: url("/src/assets/colour-diagonal.svg");
+  --player-pattern-image: url("../assets/colour-diagonal.svg");
 }
 
 .theme-kiwi {
   --theme-strong: var(--kiwi-1);
   --theme-mid: var(--kiwi-2);
   --theme-soft: var(--kiwi-3);
-  --player-pattern-image: url("/src/assets/colour-zig.svg");
+  --player-pattern-image: url("../assets/colour-zig.svg");
 }
 
 .theme-blueberry {
   --theme-strong: var(--blueberry-1);
   --theme-mid: var(--blueberry-2);
   --theme-soft: var(--blueberry-3);
-  --player-pattern-image: url("/src/assets/colour-veritcal.svg");
+  --player-pattern-image: url("../assets/colour-veritcal.svg");
 }
 
 .score-column.leader {
@@ -1355,4 +1355,3 @@ button:disabled {
   font-size: clamp(2.05rem, 4.4vw, 3rem);
   letter-spacing: 0.03em;
 }
-

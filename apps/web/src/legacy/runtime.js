@@ -10,6 +10,7 @@ import { renderLocalSetupScreen } from "../ui/screens/localSetup.js";
 import { renderPickHint } from "../ui/screens/pickHint.js";
 import { setupFruitPicker, updateFruitPicker } from "../ui/shared/fruitPicker.js";
 import { createToastController } from "../ui/shared/toast.js";
+import playerAvatar from "../assets/player.svg";
 import { normalizeRoomCode, parseScreenRoute } from "./hashRoute.js";
 import { copyRoomInviteLink } from "./shareLink.js";
 
@@ -441,7 +442,7 @@ function registerServiceWorker() {
     return;
   }
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/sw.js").catch(() => {
+    navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(() => {
       // ignore registration failures in unsupported contexts
     });
   });
@@ -1303,7 +1304,7 @@ function buildScoreColumn(player, label, leaderId, options = {}) {
     avatarArt.classList.add("score-emoji-art-placeholder");
   } else {
     const avatarImage = document.createElement("img");
-    avatarImage.src = "/src/assets/player.svg";
+    avatarImage.src = playerAvatar;
     avatarImage.alt = "";
     avatarArt.appendChild(avatarImage);
   }
@@ -1549,7 +1550,7 @@ function renderTicTacToe(room) {
       const avatar = document.createElement("span");
       avatar.className = "turn-player-avatar";
       const avatarImg = document.createElement("img");
-      avatarImg.src = "/src/assets/player.svg";
+      avatarImg.src = playerAvatar;
       avatarImg.alt = "";
       avatar.setAttribute("aria-hidden", "true");
       avatar.appendChild(avatarImg);
@@ -1825,7 +1826,7 @@ function renderShuffleGrid(room) {
 
     const avatar = document.createElement("img");
     avatar.className = "shuffle-card-avatar";
-    avatar.src = "/src/assets/player.svg";
+    avatar.src = playerAvatar;
     avatar.alt = "";
     avatar.setAttribute("aria-hidden", "true");
     card.appendChild(avatar);

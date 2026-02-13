@@ -1,4 +1,5 @@
 import type { PropsWithChildren } from "react";
+import multipassLogo from "../../assets/multipass-logo.svg";
 
 export interface AppShellProps extends PropsWithChildren {}
 
@@ -14,7 +15,7 @@ export function AppShell({ children }: AppShellProps) {
             Back
           </button>
           <div className="logo">
-            <img className="logo-image" src="/src/assets/multipass-logo.svg" alt="Multipass" />
+            <img className="logo-image" src={multipassLogo} alt="Multipass" />
           </div>
           <button id="open-settings" className="ghost hero-action" type="button" aria-label="Open settings">
             <svg className="settings-icon" viewBox="0 0 24 24" aria-hidden="true">

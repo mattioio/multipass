@@ -37,13 +37,13 @@
   --bg-bottom: #d7dde9;
   --bg-glow-a: color-mix(in srgb, var(--cta) 16%, transparent);
   --bg-glow-b: color-mix(in srgb, var(--blueberry-2) 14%, transparent);
-  --bg-texture-image: url("/src/assets/bg-loop01-white.png");
+  --bg-texture-image: url("../assets/bg-loop01-white.png");
   --bg-texture-size: 640px auto;
   --bg-texture-opacity: 0.16;
   --bg-texture-blend: soft-light;
   --bg-texture-speed: 198s;
   --header-stripe-speed: calc((var(--bg-texture-speed) * 2) / 3);
-  --scratch-texture-image: url("/src/assets/scratch-texture.png");
+  --scratch-texture-image: url("../assets/scratch-texture.png");
   --scratch-blend-mode: screen;
   --scratch-opacity-body: 0.1;
   --scratch-opacity-header: 0.07;
@@ -93,7 +93,7 @@
       color-mix(in srgb, var(--theme-strong, var(--cta)) 10%, transparent) 0 8px,
       transparent 8px 16px
     );
-  --player-pattern-image: url("/src/assets/colour-diagonal.svg");
+  --player-pattern-image: url("../assets/colour-diagonal.svg");
 }
 
 body[data-ui-variant="soft"] {
@@ -131,7 +131,7 @@ body[data-mode="dark"][data-ui-variant="neon_night"] {
   --tile-border: color-mix(in srgb, #8c7dd2 30%, #4a3a78);
   --tile-hover-border: color-mix(in srgb, #b495ff 44%, #5a4a8a);
   --tile-hover-shadow: 0 14px 24px rgba(11, 5, 30, 0.52), 0 0 0 1px color-mix(in srgb, #b092ff 18%, transparent) inset;
-  --bg-texture-image: url("/src/assets/bg-loop01-black.png");
+  --bg-texture-image: url("../assets/bg-loop01-black.png");
   --bg-texture-opacity: 0.24;
   --bg-texture-blend: soft-light;
   --bg-texture-size: 640px auto;

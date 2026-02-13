@@ -11,6 +11,8 @@ import {
   Toast
 } from "./components";
 import { DevKitchenScreen } from "./screens/DevKitchenScreen";
+import localCardIcon from "../assets/local.svg";
+import onlineCardIcon from "../assets/online.svg";
 
 export function App() {
   const isDevBuild = import.meta.env.DEV;
@@ -58,7 +60,7 @@ export function App() {
                 </div>
                 <Card id="landing-card-local" className="landing-card local-card">
                   <CardHeader className="landing-card-header landing-card-header-local">
-                    <img src="/src/assets/local.svg" alt="" />
+                    <img src={localCardIcon} alt="" />
                   </CardHeader>
                   <h2 className="landing-title">Local Co-Op</h2>
                   <p className="subtext">Pass the device and play together on one screen.</p>
@@ -80,7 +82,7 @@ export function App() {
                 </div>
                 <Card id="landing-card-online" className="landing-card online-card">
                   <CardHeader className="landing-card-header landing-card-header-online">
-                    <img src="/src/assets/online.svg" alt="" />
+                    <img src={onlineCardIcon} alt="" />
                   </CardHeader>
                   <h2 className="landing-title">Online play</h2>
                   <p className="subtext">Host a room or join a friend with a 4-letter code.</p>
