@@ -48,6 +48,7 @@ const SHUFFLE_SETTLE_MIN_STEPS = 7;
 const LEGACY_BOOTSTRAP_FLAG = "__multipassLegacyInitialized";
 const PROD_WS_FALLBACK_URL = "wss://api.loreandorder.com";
 const IS_DEV_BUILD = Boolean(typeof import.meta !== "undefined" && import.meta.env?.DEV);
+const RECENT_LEAVE_GUARD_MS = 5000;
 
 function createInitialLocalStripState() {
   return {
@@ -76,6 +77,8 @@ function createInitialState() {
     lastRoomCode: localStorage.getItem("multipass_last_room"),
     lastRoomStartedAt: Number(localStorage.getItem(ONLINE_REJOIN_AT_KEY)) || null,
     autoJoinCode: null,
+    recentLeftRoomCode: null,
+    recentLeftRoomUntil: 0,
     shuffleTimer: null,
     lastLeaderId: null,
     lastWinSignature: null,
@@ -311,6 +314,30 @@ function initHonorificToggle() {
       applyHonorific(node.checked ? "mrs" : "mr", true);
     });
   });
+}
+
+function clearRecentLeaveGuard() {
+  state.recentLeftRoomCode = null;
+  state.recentLeftRoomUntil = 0;
+}
+
+function armRecentLeaveGuard(roomCode) {
+  const normalizedCode = normalizeRoomCode(roomCode || "");
+  if (!normalizedCode) {
+    clearRecentLeaveGuard();
+    return;
+  }
+  state.recentLeftRoomCode = normalizedCode;
+  state.recentLeftRoomUntil = Date.now() + RECENT_LEAVE_GUARD_MS;
+}
+
+function shouldIgnoreRoomState(roomCode) {
+  if (!state.recentLeftRoomCode) return false;
+  if (Date.now() > state.recentLeftRoomUntil) {
+    clearRecentLeaveGuard();
+    return false;
+  }
+  return normalizeRoomCode(roomCode || "") === state.recentLeftRoomCode;
 }
 
 function normalizeTargetScreen(screen) {
@@ -638,8 +665,17 @@ function connect() {
       if (state.mode === "local") {
         return;
       }
+      if (shouldIgnoreRoomState(message.room?.code)) {
+        return;
+      }
       if (!assertRoomShape(message.room)) {
         return;
+      }
+      if (
+        state.recentLeftRoomCode &&
+        normalizeRoomCode(message.room?.code || "") !== state.recentLeftRoomCode
+      ) {
+        clearRecentLeaveGuard();
       }
       dispatch(actions.wsRoomStateReceived(message.room, message.you));
       dispatch(actions.autoJoinCodeSet(null));
@@ -694,6 +730,7 @@ function connect() {
         state.joinStep = "code";
         state.joinValidating = true;
         renderJoinSetup();
+        clearRecentLeaveGuard();
         send({
           type: "join_room",
           code: state.joinValidatedCode,
@@ -1221,6 +1258,7 @@ function leaveRoom(options = {}) {
   }
 
   if (state.room?.code) {
+    armRecentLeaveGuard(state.room.code);
     setOnlineRejoinData(state.room.code, state.room.createdAt || Date.now());
   }
   updateRejoinCard();
@@ -2249,6 +2287,7 @@ function setup() {
       showToast("Pick an avatar first.");
       return;
     }
+    clearRecentLeaveGuard();
     send({
       type: "create_room",
       avatar: avatar.id,
@@ -2270,6 +2309,7 @@ function setup() {
       showToast("Pick an avatar first.");
       return;
     }
+    clearRecentLeaveGuard();
     send({
       type: "join_room",
       code: state.joinValidatedCode || code,
@@ -2370,6 +2410,7 @@ function setup() {
     if (!state.lastRoomCode) return;
     state.mode = "online";
     state.autoJoinCode = state.lastRoomCode;
+    clearRecentLeaveGuard();
     send({
       type: "join_room",
       code: state.lastRoomCode,

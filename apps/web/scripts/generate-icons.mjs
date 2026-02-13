@@ -1,6 +1,6 @@
-import { mkdir, copyFile } from "node:fs/promises";
+import { mkdir, copyFile, readFile } from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
@@ -38,7 +38,8 @@ function iconHtml(sourceUrl, size) {
         background: transparent;
         overflow: hidden;
       }
-      img {
+      #icon-wrap,
+      svg {
         display: block;
         width: ${size}px;
         height: ${size}px;
@@ -46,19 +47,53 @@ function iconHtml(sourceUrl, size) {
     </style>
   </head>
   <body>
-    <img id="icon" src="${sourceUrl}" alt="" />
+    <div id="icon-wrap">${sourceUrl}</div>
   </body>
 </html>`;
 }
 
+function mimeTypeFor(assetPath) {
+  if (assetPath.endsWith(".svg")) return "image/svg+xml";
+  if (assetPath.endsWith(".png")) return "image/png";
+  return "application/octet-stream";
+}
+
+async function inlineSvgAssetHrefs(svgText) {
+  const hrefRegex = /href="([^"]+)"/g;
+  const uniqueRefs = new Set();
+  let match = hrefRegex.exec(svgText);
+  while (match) {
+    const href = match[1];
+    if (!href.startsWith("data:")) uniqueRefs.add(href);
+    match = hrefRegex.exec(svgText);
+  }
+
+  let inlinedSvg = svgText;
+  for (const href of uniqueRefs) {
+    const absoluteAssetPath = path.resolve(path.dirname(sourceSvgPath), href);
+    const assetBuffer = await readFile(absoluteAssetPath);
+    const mimeType = mimeTypeFor(absoluteAssetPath);
+    const dataUri = `data:${mimeType};base64,${assetBuffer.toString("base64")}`;
+    const quotedHref = href.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    inlinedSvg = inlinedSvg.replace(new RegExp(`href="${quotedHref}"`, "g"), `href="${dataUri}"`);
+  }
+
+  return inlinedSvg;
+}
+
 async function renderIcon(page, size, outputPath) {
   await page.setViewportSize({ width: size, height: size });
-  const sourceUrl = `${pathToFileURL(sourceSvgPath).href}?size=${size}&ts=${Date.now()}`;
-  await page.setContent(iconHtml(sourceUrl, size), { waitUntil: "load" });
+  const svgText = await readFile(sourceSvgPath, "utf-8");
+  const inlinedSvg = await inlineSvgAssetHrefs(svgText);
+  await page.setContent(iconHtml(inlinedSvg, size), { waitUntil: "load" });
 
   await page.waitForFunction(() => {
-    const image = document.getElementById("icon");
-    return Boolean(image && image.complete && image.naturalWidth > 0 && image.naturalHeight > 0);
+    const imageNodes = document.querySelectorAll("image");
+    for (const node of imageNodes) {
+      const href = node.getAttribute("href") || "";
+      if (!href.startsWith("data:")) return false;
+    }
+    return true;
   });
 
   await page.screenshot({

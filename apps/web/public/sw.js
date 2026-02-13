@@ -1,4 +1,4 @@
-const CACHE_VERSION = "multipass-shell-v2";
+const CACHE_VERSION = "multipass-shell-v3";
 const SHELL_CACHE = CACHE_VERSION;
 const SHELL_ASSETS = ["/", "/index.html", "/manifest.webmanifest", "/assets/icon-192.png", "/assets/icon-512.png", "/icons/apple-touch-icon.png"];
 

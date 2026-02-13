@@ -553,6 +553,11 @@ button:disabled {
   gap: 12px;
 }
 
+.player-picker-title {
+  font-size: 2rem;
+  line-height: 1;
+}
+
 .host-setup-cta-row {
   grid-template-columns: minmax(0, 1fr);
 }

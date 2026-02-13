@@ -1,4 +1,4 @@
-const CACHE_VERSION = "multipass-shell-v1";
+const CACHE_VERSION = "multipass-shell-v2";
 const SHELL_CACHE = CACHE_VERSION;
 const SHELL_ASSETS = [
   "/",

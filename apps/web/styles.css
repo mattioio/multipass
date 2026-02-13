@@ -1063,6 +1063,11 @@ button:disabled {
   gap: 12px;
 }
 
+.player-picker-title {
+  font-size: 2rem;
+  line-height: 1;
+}
+
 .host-setup-cta-row {
   grid-template-columns: minmax(0, 1fr);
 }
@@ -2971,6 +2976,11 @@ button:disabled {
     flex-wrap: wrap;
     align-items: center;
     gap: var(--space-2);
+  }
+
+  .avatar-picker-toolbar {
+    justify-content: flex-start;
+    width: 100%;
   }
 
   .button-row {

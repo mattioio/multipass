@@ -530,8 +530,8 @@ wss.on("connection", (ws) => {
       }
       room.endRequest = null;
       touchRoom(room);
-      broadcastRoom(room);
       clients.delete(ws);
+      broadcastRoom(room);
       return;
     }
 

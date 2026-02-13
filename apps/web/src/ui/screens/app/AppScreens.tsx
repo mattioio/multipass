@@ -109,7 +109,7 @@ export function AppScreens({ isDevBuild }: AppScreensProps) {
           </CardHeader>
           <div id="local-stage" className="local-wizard">
             <div id="local-header-row" className="local-header-row avatar-picker-header-row">
-              <h3 id="local-step-title">Player 1 choice</h3>
+              <h2 id="local-step-title" className="player-picker-title">Player 1 choice</h2>
               <HonorificToggle id="local-honorific-toolbar" inputId="local-honorific-toggle" />
             </div>
             <div className="local-choices">
@@ -131,7 +131,7 @@ export function AppScreens({ isDevBuild }: AppScreensProps) {
           </CardHeader>
           <div className="avatar-picker-stack">
             <div className="avatar-picker-header-row">
-              <h2>Host a room</h2>
+              <h2 className="player-picker-title">Host a room</h2>
               <HonorificToggle id="host-honorific-toolbar" inputId="host-honorific-toggle" />
             </div>
             <AvatarPickerGrid id="host-avatar-picker" />
