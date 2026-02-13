@@ -159,6 +159,18 @@
   color: color-mix(in srgb, var(--text) 90%, var(--cta));
 }
 
+.waiting-chip {
+  background: color-mix(in srgb, #f4d77b 35%, var(--surface));
+  border-color: color-mix(in srgb, #d8a517 60%, transparent);
+  color: color-mix(in srgb, #3a2a00 75%, var(--text));
+}
+
+.blocked-chip {
+  background: color-mix(in srgb, #f57b90 34%, var(--surface));
+  border-color: color-mix(in srgb, #d43958 65%, transparent);
+  color: color-mix(in srgb, #4d0c1b 72%, var(--text));
+}
+
 .game-card.active {
   border-color: var(--cta);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--cta) 34%, transparent), 0 16px 28px color-mix(in srgb, var(--cta) 26%, transparent);
@@ -172,6 +184,82 @@
   display: grid;
   gap: 16px;
   overflow: hidden;
+}
+
+.game-surface-shell {
+  display: grid;
+  gap: 14px;
+}
+
+.game-surface-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.game-surface-title {
+  margin: 0;
+  font-size: clamp(1.1rem, 2vw, 1.35rem);
+}
+
+.game-surface-status.state-waiting {
+  background: color-mix(in srgb, #f4d77b 35%, var(--surface));
+  border-color: color-mix(in srgb, #d8a517 60%, transparent);
+}
+
+.game-surface-status.state-error {
+  background: color-mix(in srgb, #f57b90 34%, var(--surface));
+  border-color: color-mix(in srgb, #d43958 65%, transparent);
+}
+
+.game-surface-body {
+  display: grid;
+  gap: 12px;
+}
+
+.game-surface-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.game-action-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.game-module {
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-2) 92%, var(--surface));
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+}
+
+.game-module-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.game-module-head h4 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.game-module-actions {
+  display: flex;
+}
+
+.game-module-actions .game-cta {
+  min-width: 150px;
+}
+
+.game-module-unavailable {
+  opacity: 0.88;
 }
 
 .wait-panel {
@@ -189,6 +277,43 @@
   border-radius: 18px;
   background: var(--surface-3);
   border: 1px solid var(--border);
+}
+
+.player-status-strip {
+  width: min(560px, 100%);
+  margin: 0 auto;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface-2) 88%, var(--surface));
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.player-status-strip.compact {
+  max-width: 420px;
+}
+
+.player-status-col {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.player-status-col + .player-status-col {
+  border-left: 1px solid var(--border);
+}
+
+.player-status-col strong {
+  font-family: var(--title-font);
+  font-size: 0.86rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.player-status-col span {
+  color: var(--muted);
+  font-size: 0.84rem;
 }
 
 .wait-emoji {

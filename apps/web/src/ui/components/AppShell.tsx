@@ -1,5 +1,6 @@
 import type { PropsWithChildren } from "react";
 import multipassLogo from "../../assets/multipass-logo.svg";
+import { RoomCodeShareRow } from "../patterns/RoomCodeShareRow";
 
 export interface AppShellProps extends PropsWithChildren {}
 
@@ -24,14 +25,7 @@ export function AppShell({ children }: AppShellProps) {
           </button>
         </div>
         <div id="hero-room" className="hero-room hidden">
-          <div className="hero-room-main">
-            <div id="room-code-pill" className="code-pill">
-              <span id="room-code" className="code-hero">----</span>
-            </div>
-            <button id="share-room-link" className="ghost hero-share-action" type="button">
-              Share
-            </button>
-          </div>
+          <RoomCodeShareRow />
         </div>
       </header>
       <main>{children}</main>

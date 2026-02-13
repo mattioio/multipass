@@ -51,6 +51,18 @@ Temporary browser override (for debugging):
 - `apps/web`: React + TypeScript + Vite frontend
 - `apps/server`: Node HTTP + WebSocket server, in-memory rooms
 
+## Adding a new game (fast path)
+1. Copy the template files in `/Users/matthew/Projects/multipass/apps/web/src/domain/games/template`.
+2. Add your game definition in `/Users/matthew/Projects/multipass/apps/web/src/domain/games/catalog.js`.
+3. Confirm your module appears in DevKit under `Game Modules`.
+4. Add tests:
+   - local engine unit tests
+   - one integration/smoke assertion for pick -> game render
+5. Run validation before merging:
+   - `npm --prefix /Users/matthew/Projects/multipass/apps/web test`
+   - `npm --prefix /Users/matthew/Projects/multipass/apps/web run build`
+   - `npm --prefix /Users/matthew/Projects/multipass/apps/server run smoke`
+
 ## Notes
 - Rooms expire after 90 minutes of inactivity.
 - No accounts. Rejoin uses a device token stored locally.

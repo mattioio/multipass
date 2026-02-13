@@ -1,6 +1,7 @@
 import { assertRoomShape } from "../contracts/roomState.js";
 import { FRUITS, getFruit, getFruitByTheme } from "../domain/fruits.js";
-import { localGames, listLocalGames } from "../domain/localGames.js";
+import { isTicTacToeSurfaceGame, localGames, listLocalGames } from "../domain/localGames.js";
+import { resolvePickerGames } from "../domain/games/picker.js";
 import { createWsClient } from "../net/wsClient.js";
 import { actions } from "../state/actions.js";
 import { reducer } from "../state/reducer.js";
@@ -701,6 +702,7 @@ function getGameBannerClass(game) {
   const key = game?.bannerKey || game?.id || "";
   if (key === "battleships") return "game-banner-battleships";
   if (key === "zombie_dice") return "game-banner-zombie-dice";
+  if (key === "tic_tac_toe_blitz") return "game-banner-tic-tac-toe";
   return "game-banner-tic-tac-toe";
 }
 
@@ -708,6 +710,7 @@ function getGameBannerLabel(game) {
   const key = game?.bannerKey || game?.id || "";
   if (key === "battleships") return "Fleet Clash";
   if (key === "zombie_dice") return "Brains Or Bust";
+  if (key === "tic_tac_toe_blitz") return "Speed Grid Clash";
   return "Classic Grid Duel";
 }
 
@@ -1427,7 +1430,7 @@ function renderGameList(room) {
       statusEl.classList.add("hidden");
     }
   }
-  const sortedGames = [...(room.games || [])].sort((a, b) => {
+  const sortedGames = resolvePickerGames(room.games || []).sort((a, b) => {
     const aSoon = Boolean(a.comingSoon);
     const bSoon = Boolean(b.comingSoon);
     if (aSoon === bSoon) return 0;
@@ -1580,7 +1583,13 @@ function renderTicTacToe(room) {
     });
   };
 
-  if (!room.game || room.game.id !== "tic_tac_toe") {
+  const activeGameId = room.game?.id || null;
+  const isTicTacToeSurface = Boolean(activeGameId) && (
+    activeGameId === "tic_tac_toe" ||
+    isTicTacToeSurfaceGame(activeGameId)
+  );
+
+  if (!room.game || !isTicTacToeSurface) {
     boardEl.innerHTML = "";
     renderTurnSplit(null, "idle");
     return;
@@ -1634,7 +1643,7 @@ function renderTicTacToe(room) {
         applyLocalMove(index);
         return;
       }
-      send({ type: "move", gameId: "tic_tac_toe", move: { index } });
+      send({ type: "move", gameId: room.game?.id, move: { index } });
     });
 
     boardEl.appendChild(button);
