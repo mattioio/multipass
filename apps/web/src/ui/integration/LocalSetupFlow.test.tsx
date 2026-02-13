@@ -7,9 +7,12 @@ describe("App local setup integration", () => {
 
     expect(screen.getByRole("button", { name: "Start" })).toBeInTheDocument();
     expect(screen.getByText("Player 1 choice")).toBeInTheDocument();
+    const localCta = document.getElementById("local-continue");
+    expect(localCta).toBeInTheDocument();
+    expect(localCta).toBeDisabled();
 
-    const localGrid = document.getElementById("local-fruit-grid");
+    const localGrid = document.getElementById("local-avatar-grid");
     expect(localGrid).toBeInTheDocument();
-    expect(localGrid?.querySelectorAll(".fruit-option").length).toBe(4);
+    expect(localGrid?.querySelectorAll(".avatar-option").length).toBe(4);
   });
 });

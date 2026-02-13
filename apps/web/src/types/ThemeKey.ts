@@ -1,1 +1,1 @@
-export type ThemeKey = "banana" | "strawberry" | "kiwi" | "blueberry";
+export type ThemeKey = "yellow" | "red" | "green" | "blue";

@@ -1,18 +1,18 @@
 :root {
-  --strawberry-1: #f14666;
-  --strawberry-2: #ee8980;
-  --strawberry-3: #ffcdaa;
-  --strawberry-4: #9cb898;
-  --banana-1: #f5c542;
-  --banana-2: #f7d76a;
-  --banana-3: #fbe6a4;
-  --kiwi-1: #028174;
-  --kiwi-2: #0ab68b;
-  --kiwi-3: #92de8b;
-  --kiwi-4: #ffe3b3;
-  --blueberry-1: #3b5bdb;
-  --blueberry-2: #5c7cfa;
-  --blueberry-3: #b3c7ff;
+  --red-1: #f14666;
+  --red-2: #ee8980;
+  --red-3: #ffcdaa;
+  --red-4: #9cb898;
+  --yellow-1: #f5c542;
+  --yellow-2: #f7d76a;
+  --yellow-3: #fbe6a4;
+  --green-1: #028174;
+  --green-2: #0ab68b;
+  --green-3: #92de8b;
+  --green-4: #ffe3b3;
+  --blue-1: #3b5bdb;
+  --blue-2: #5c7cfa;
+  --blue-3: #b3c7ff;
 
   --space-1: 4px;
   --space-2: 8px;
@@ -36,7 +36,7 @@
   --bg-mid: #edf1f8;
   --bg-bottom: #d7dde9;
   --bg-glow-a: color-mix(in srgb, var(--cta) 16%, transparent);
-  --bg-glow-b: color-mix(in srgb, var(--blueberry-2) 14%, transparent);
+  --bg-glow-b: color-mix(in srgb, var(--blue-2) 14%, transparent);
   --bg-texture-image: url("../assets/bg-loop01-white.png");
   --bg-texture-size: 640px auto;
   --bg-texture-opacity: 0.16;
@@ -93,7 +93,29 @@
       color-mix(in srgb, var(--theme-strong, var(--cta)) 10%, transparent) 0 8px,
       transparent 8px 16px
     );
-  --player-pattern-image: url("../assets/colour-diagonal.svg");
+  --pattern-image-dots: url("../assets/colour-dots.svg");
+  --pattern-image-diagonal: url("../assets/colour-diagonal.svg");
+  --pattern-image-zig: url("../assets/colour-zig.svg");
+  --pattern-image-vertical: url("../assets/colour-veritcal.svg");
+  --pattern-default-image: var(--pattern-image-diagonal);
+  --theme-pattern-image: var(--pattern-default-image);
+  --pattern-size-default: 88px 88px;
+  --pattern-opacity-default: 0.22;
+  --pattern-speed-default: calc(var(--bg-texture-speed) / 2);
+  --pattern-size-default-avatar: var(--pattern-size-default);
+  --pattern-opacity-default-avatar: var(--pattern-opacity-default);
+  --pattern-speed-default-avatar: var(--pattern-speed-default);
+  --pattern-size-default-score: var(--pattern-size-default);
+  --pattern-opacity-default-score: var(--pattern-opacity-default);
+  --pattern-speed-default-score: var(--pattern-speed-default);
+  --pattern-size-default-turn: var(--pattern-size-default);
+  --pattern-opacity-default-turn: var(--pattern-opacity-default);
+  --pattern-speed-default-turn: var(--pattern-speed-default);
+  --pattern-size-default-header: 110px auto;
+  --pattern-opacity-default-header: 0.05;
+  --pattern-speed-default-header: calc(var(--header-stripe-speed) / 2);
+  --pattern-animated: running;
+  --player-pattern-image: var(--theme-pattern-image);
 }
 
 body[data-ui-variant="soft"] {
@@ -147,7 +169,7 @@ body[data-mode="dark"] {
   --bg-mid: #101522;
   --bg-bottom: #0b1018;
   --bg-glow-a: color-mix(in srgb, var(--cta) 10%, transparent);
-  --bg-glow-b: color-mix(in srgb, var(--blueberry-2) 8%, transparent);
+  --bg-glow-b: color-mix(in srgb, var(--blue-2) 8%, transparent);
   --surface: #1a1f29;
   --surface-2: #212736;
   --surface-3: #2a3144;
@@ -161,23 +183,23 @@ body[data-mode="dark"] {
   --cta-text: #ffffff;
 }
 
-body[data-theme="strawberry"] {
-  --cta: var(--strawberry-1);
+body[data-theme="red"] {
+  --cta: var(--red-1);
   --cta-text: #fffaf2;
 }
 
-body[data-theme="banana"] {
-  --cta: var(--banana-1);
+body[data-theme="yellow"] {
+  --cta: var(--yellow-1);
   --cta-text: #3a2c00;
 }
 
-body[data-theme="kiwi"] {
-  --cta: var(--kiwi-1);
+body[data-theme="green"] {
+  --cta: var(--green-1);
   --cta-text: #f7fff5;
 }
 
-body[data-theme="blueberry"] {
-  --cta: var(--blueberry-1);
+body[data-theme="blue"] {
+  --cta: var(--blue-1);
   --cta-text: #f4f7ff;
 }
 
@@ -188,7 +210,7 @@ body[data-theme="blueberry"] {
     --bg-mid: #101522;
     --bg-bottom: #0b1018;
     --bg-glow-a: color-mix(in srgb, var(--cta) 10%, transparent);
-    --bg-glow-b: color-mix(in srgb, var(--blueberry-2) 8%, transparent);
+    --bg-glow-b: color-mix(in srgb, var(--blue-2) 8%, transparent);
     --surface: #1a1f29;
     --surface-2: #212736;
     --surface-3: #2a3144;

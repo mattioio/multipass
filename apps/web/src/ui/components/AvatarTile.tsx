@@ -1,16 +1,16 @@
 import { PlayerAvatar } from "./PlayerAvatar";
 
 export interface AvatarTileProps {
-  fruitId: string;
+  avatarId: string;
   label: string;
   themeClass: string;
   selected?: boolean;
   disabled?: boolean;
-  onSelect?: (fruitId: string) => void;
+  onSelect?: (avatarId: string) => void;
 }
 
 export function AvatarTile({
-  fruitId,
+  avatarId,
   label,
   themeClass,
   selected = false,
@@ -19,21 +19,27 @@ export function AvatarTile({
 }: AvatarTileProps) {
   return (
     <button
-      className={`fruit-option square-option ${themeClass}${selected ? " selected" : ""}`}
-      data-fruit={fruitId}
+      className={`avatar-option square-option ${themeClass}${selected ? " selected" : ""}`}
+      data-avatar={avatarId}
       data-selected={String(selected)}
       aria-pressed={selected}
       type="button"
       disabled={disabled}
-      onClick={() => onSelect?.(fruitId)}
+      onClick={() => onSelect?.(avatarId)}
     >
-      <span className="fruit-shell">
-        <span className="fruit-inner">
+      <span className="avatar-shell">
+        <span className="avatar-inner">
           <PlayerAvatar />
-          <span className="fruit-lower-third">
-            <span className="fruit-name">{label}</span>
+          <span className="avatar-lower-third">
+            <span className="avatar-name">{label}</span>
           </span>
         </span>
+        {selected ? (
+          <span className="avatar-selected-badge" aria-hidden="true">
+            <span className="avatar-selected-check">✓</span>
+            <span className="avatar-selected-label">Selected</span>
+          </span>
+        ) : null}
         <span className="lock-badge" aria-hidden="true">
           🔒<span>Player 1</span>
         </span>

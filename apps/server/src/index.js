@@ -11,11 +11,17 @@ const webRoot = path.resolve(__dirname, "../../web");
 
 const PORT = Number(process.env.PORT) || 3000;
 const ROOM_TTL_MS = 90 * 60 * 1000;
-const FRUITS = {
-  banana: { id: "banana", name: "Banana", emoji: "🍌", theme: "banana" },
-  strawberry: { id: "strawberry", name: "Strawberry", emoji: "🍓", theme: "strawberry" },
-  kiwi: { id: "kiwi", name: "Kiwi", emoji: "🥝", theme: "kiwi" },
-  blueberry: { id: "blueberry", name: "Blueberry", emoji: "🫐", theme: "blueberry" }
+const AVATARS = {
+  yellow: { id: "yellow", name: "Mr Yellow", emoji: "🍌", theme: "yellow" },
+  red: { id: "red", name: "Mr Red", emoji: "🍓", theme: "red" },
+  green: { id: "green", name: "Mr Green", emoji: "🥝", theme: "green" },
+  blue: { id: "blue", name: "Mr Blue", emoji: "🫐", theme: "blue" }
+};
+const LEGACY_FRUIT_TO_AVATAR = {
+  banana: "yellow",
+  strawberry: "red",
+  kiwi: "green",
+  blueberry: "blue"
 };
 const CODE_LENGTH = 4;
 
@@ -57,20 +63,28 @@ function uniqueRoomCode() {
   return code;
 }
 
-function getFruitId(raw) {
+function getAvatarId(raw) {
   return String(raw || "")
     .trim()
     .toLowerCase();
 }
 
-function getFruit(fruitId) {
-  return FRUITS[fruitId] || null;
+function getRequestedAvatarId(message) {
+  const avatarId = getAvatarId(message.avatar);
+  if (avatarId) return avatarId;
+  const legacyFruitId = getAvatarId(message.fruit);
+  if (!legacyFruitId) return "";
+  return LEGACY_FRUIT_TO_AVATAR[legacyFruitId] || legacyFruitId;
 }
 
-function isFruitTaken(room, fruit) {
-  if (!fruit) return false;
+function getAvatar(avatarId) {
+  return AVATARS[avatarId] || null;
+}
+
+function isAvatarTaken(room, avatar) {
+  if (!avatar) return false;
   const taken = [room.players.host?.theme, room.players.guest?.theme].filter(Boolean);
-  return taken.includes(fruit.theme);
+  return taken.includes(avatar.theme);
 }
 
 function buildPlayer({ name, emoji, role, clientId, theme }) {
@@ -206,16 +220,16 @@ function attachClient(ws, room, player, role, clientId) {
   });
 }
 
-function createRoom({ fruitId, clientId }) {
+function createRoom({ avatarId, clientId }) {
   const code = uniqueRoomCode();
-  const fruit = getFruit(fruitId);
-  if (!fruit) return null;
+  const avatar = getAvatar(avatarId);
+  if (!avatar) return null;
   const host = buildPlayer({
-    name: fruit.name,
-    emoji: fruit.emoji,
+    name: avatar.name,
+    emoji: avatar.emoji,
     role: "host",
     clientId,
-    theme: fruit.theme
+    theme: avatar.theme
   });
   const room = {
     code,
@@ -393,16 +407,16 @@ wss.on("connection", (ws) => {
       .toLowerCase();
 
     if (type === "create_room") {
-      const fruitId = getFruitId(message.fruit);
+      const avatarId = getRequestedAvatarId(message);
       const clientId = message.clientId || generateId("client");
-      const fruit = getFruit(fruitId);
+      const avatar = getAvatar(avatarId);
 
-      if (!fruit) {
-        send(ws, { type: "error", message: "Pick a fruit." });
+      if (!avatar) {
+        send(ws, { type: "error", message: "Pick an avatar." });
         return;
       }
 
-      const room = createRoom({ fruitId, clientId });
+      const room = createRoom({ avatarId, clientId });
       if (!room) {
         send(ws, { type: "error", message: "Unable to create room." });
         return;
@@ -418,7 +432,7 @@ wss.on("connection", (ws) => {
       const code = String(message.code || "")
         .trim()
         .toUpperCase();
-      const fruitId = getFruitId(message.fruit);
+      const avatarId = getRequestedAvatarId(message);
       const clientId = message.clientId || generateId("client");
       const seatToken = String(message.seatToken || "").trim() || null;
 
@@ -439,23 +453,23 @@ wss.on("connection", (ws) => {
         return;
       }
 
-      const fruit = getFruit(fruitId);
-      if (!fruit) {
-        send(ws, { type: "error", message: "Pick a fruit." });
+      const avatar = getAvatar(avatarId);
+      if (!avatar) {
+        send(ws, { type: "error", message: "Pick an avatar." });
         return;
       }
-      if (isFruitTaken(room, fruit)) {
-        send(ws, { type: "error", message: "That fruit is already taken." });
+      if (isAvatarTaken(room, avatar)) {
+        send(ws, { type: "error", message: "That avatar is already taken." });
         return;
       }
 
       if (!room.players.guest) {
         room.players.guest = buildPlayer({
-          name: fruit.name,
-          emoji: fruit.emoji,
+          name: avatar.name,
+          emoji: avatar.emoji,
           role: "guest",
           clientId,
-          theme: fruit.theme
+          theme: avatar.theme
         });
         resetRound(room, { resetStarter: true });
         room.game = null;

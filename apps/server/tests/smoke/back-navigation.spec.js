@@ -8,8 +8,15 @@ test("local browser navigation: pick -> lobby -> local-or-landing", async ({ pag
   await expect(page.locator("#screen-local.active")).toBeVisible();
   await expect(page).toHaveURL(/#local$/);
 
-  await page.locator('#local-fruit-grid .fruit-option[data-fruit="banana"]').click();
-  await page.locator('#local-fruit-grid .fruit-option[data-fruit="kiwi"]').click();
+  await expect(page.getByRole("button", { name: "Pick a player" })).toBeDisabled();
+  await page.locator('#local-avatar-grid .avatar-option[data-avatar="yellow"]').click();
+  await expect(page.getByRole("button", { name: "Continue" })).toBeEnabled();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.locator("#local-step-title")).toHaveText("Player 2 choice");
+  await expect(page.getByRole("button", { name: "Pick a player" })).toBeDisabled();
+  await page.locator('#local-avatar-grid .avatar-option[data-avatar="green"]').click();
+  await expect(page.getByRole("button", { name: "Continue" })).toBeEnabled();
+  await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.locator("#screen-lobby.active")).toBeVisible();
   await expect(page).toHaveURL(/#lobby$/);
 
@@ -35,8 +42,10 @@ test("online browser back exits room flow from lobby to landing", async ({ brows
   await hostPage.getByRole("tab", { name: "Online" }).click();
   await hostPage.getByRole("button", { name: "Host a room" }).click();
   await expect(hostPage).toHaveURL(/#host$/);
-  await hostPage.locator('#host-fruit-picker .fruit-option[data-fruit="banana"]').click();
-  await hostPage.getByRole("button", { name: "Create room" }).click();
+  await expect(hostPage.getByRole("button", { name: "Pick a player" })).toBeDisabled();
+  await hostPage.locator('#host-avatar-picker .avatar-option[data-avatar="yellow"]').click();
+  await expect(hostPage.getByRole("button", { name: "Continue" })).toBeEnabled();
+  await hostPage.getByRole("button", { name: "Continue" }).click();
   await expect(hostPage.locator("#screen-lobby.active")).toBeVisible();
   await expect(hostPage).toHaveURL(/#lobby$/);
 
@@ -46,7 +55,7 @@ test("online browser back exits room flow from lobby to landing", async ({ brows
   await guestPage.getByRole("button", { name: "Join a room" }).click();
   await guestPage.locator("#join-code").fill(roomCode);
   await guestPage.getByRole("button", { name: "Continue" }).click();
-  await guestPage.locator('#join-fruit-picker .fruit-option[data-fruit="kiwi"]').click();
+  await guestPage.locator('#join-avatar-picker .avatar-option[data-avatar="green"]').click();
   await guestPage.getByRole("button", { name: "Join room" }).click();
   await expect(guestPage.locator("#screen-lobby.active")).toBeVisible();
 

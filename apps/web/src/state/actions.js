@@ -5,7 +5,7 @@ export const ActionTypes = {
   MODE_SET: "MODE_SET",
   SCREEN_CHANGED: "SCREEN_CHANGED",
   LOCAL_STEP_SET: "LOCAL_STEP_SET",
-  LOCAL_FRUIT_SET: "LOCAL_FRUIT_SET",
+  LOCAL_AVATAR_SET: "LOCAL_AVATAR_SET",
   LOCAL_WHEEL_RESET: "LOCAL_WHEEL_RESET",
   LOCAL_SPIN_STATE_SET: "LOCAL_SPIN_STATE_SET",
   LOCAL_HAS_SPUN_SET: "LOCAL_HAS_SPUN_SET",
@@ -32,8 +32,8 @@ export const actions = {
   localStepSet(step) {
     return { type: ActionTypes.LOCAL_STEP_SET, payload: { step } };
   },
-  localFruitSet(slot, fruitId) {
-    return { type: ActionTypes.LOCAL_FRUIT_SET, payload: { slot, fruitId } };
+  localAvatarSet(slot, avatarId) {
+    return { type: ActionTypes.LOCAL_AVATAR_SET, payload: { slot, avatarId } };
   },
   localWheelReset() {
     return { type: ActionTypes.LOCAL_WHEEL_RESET };

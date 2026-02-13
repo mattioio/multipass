@@ -34,9 +34,9 @@ export function reducer(state, action) {
       state.localStep = action.payload.step;
       return state;
     }
-    case ActionTypes.LOCAL_FRUIT_SET: {
-      const { slot, fruitId } = action.payload;
-      state.localFruits[slot] = fruitId;
+    case ActionTypes.LOCAL_AVATAR_SET: {
+      const { slot, avatarId } = action.payload;
+      state.localAvatars[slot] = avatarId;
       return state;
     }
     case ActionTypes.LOCAL_WHEEL_RESET: {

@@ -6,8 +6,17 @@ test("local happy path: setup -> lobby -> pick -> shuffle -> game", async ({ pag
   await page.getByRole("button", { name: "Start" }).click();
   await expect(page.locator("#screen-local.active")).toBeVisible();
 
-  await page.locator('#local-fruit-grid .fruit-option[data-fruit="banana"]').click();
-  await page.locator('#local-fruit-grid .fruit-option[data-fruit="kiwi"]').click();
+  const localContinue = page.getByRole("button", { name: "Pick a player" });
+  await expect(localContinue).toBeDisabled();
+  await page.locator('#local-avatar-grid .avatar-option[data-avatar="yellow"]').click();
+  await expect(page.getByRole("button", { name: "Continue" })).toBeEnabled();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.locator("#screen-local.active")).toBeVisible();
+  await expect(page.locator("#local-step-title")).toHaveText("Player 2 choice");
+  await expect(localContinue).toBeDisabled();
+  await page.locator('#local-avatar-grid .avatar-option[data-avatar="green"]').click();
+  await expect(page.getByRole("button", { name: "Continue" })).toBeEnabled();
+  await page.getByRole("button", { name: "Continue" }).click();
 
   await expect(page.locator("#screen-lobby.active")).toBeVisible();
   await page.getByRole("button", { name: "Pick a game" }).click();
@@ -28,8 +37,14 @@ test("local non-default registry game: pick -> shuffle -> game", async ({ page }
   await page.getByRole("button", { name: "Start" }).click();
   await expect(page.locator("#screen-local.active")).toBeVisible();
 
-  await page.locator('#local-fruit-grid .fruit-option[data-fruit="banana"]').click();
-  await page.locator('#local-fruit-grid .fruit-option[data-fruit="kiwi"]').click();
+  await expect(page.getByRole("button", { name: "Pick a player" })).toBeDisabled();
+  await page.locator('#local-avatar-grid .avatar-option[data-avatar="yellow"]').click();
+  await expect(page.getByRole("button", { name: "Continue" })).toBeEnabled();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByRole("button", { name: "Pick a player" })).toBeDisabled();
+  await page.locator('#local-avatar-grid .avatar-option[data-avatar="green"]').click();
+  await expect(page.getByRole("button", { name: "Continue" })).toBeEnabled();
+  await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.locator("#screen-lobby.active")).toBeVisible();
 
   await page.getByRole("button", { name: "Pick a game" }).click();

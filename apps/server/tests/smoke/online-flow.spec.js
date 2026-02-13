@@ -9,8 +9,10 @@ test("online happy path: host + guest choose game -> shuffle/game", async ({ bro
   await hostPage.goto("http://127.0.0.1:3000/");
   await hostPage.getByRole("tab", { name: "Online" }).click();
   await hostPage.getByRole("button", { name: "Host a room" }).click();
-  await hostPage.locator('#host-fruit-picker .fruit-option[data-fruit="banana"]').click();
-  await hostPage.getByRole("button", { name: "Create room" }).click();
+  await expect(hostPage.getByRole("button", { name: "Pick a player" })).toBeDisabled();
+  await hostPage.locator('#host-avatar-picker .avatar-option[data-avatar="yellow"]').click();
+  await expect(hostPage.getByRole("button", { name: "Continue" })).toBeEnabled();
+  await hostPage.getByRole("button", { name: "Continue" }).click();
 
   await expect(hostPage.locator("#screen-lobby.active")).toBeVisible();
   await expect(hostPage.locator("#room-code")).toContainText(/[A-Z]{4}/);
@@ -21,7 +23,7 @@ test("online happy path: host + guest choose game -> shuffle/game", async ({ bro
   await guestPage.getByRole("button", { name: "Join a room" }).click();
   await guestPage.locator("#join-code").fill(roomCode);
   await guestPage.getByRole("button", { name: "Continue" }).click();
-  await guestPage.locator('#join-fruit-picker .fruit-option[data-fruit="kiwi"]').click();
+  await guestPage.locator('#join-avatar-picker .avatar-option[data-avatar="green"]').click();
   await guestPage.getByRole("button", { name: "Join room" }).click();
 
   await expect(guestPage.locator("#screen-lobby.active")).toBeVisible();
@@ -55,8 +57,10 @@ test("online deep-link join: guest opens #join=CODE invite", async ({ browser })
   await hostPage.goto("http://127.0.0.1:3000/");
   await hostPage.getByRole("tab", { name: "Online" }).click();
   await hostPage.getByRole("button", { name: "Host a room" }).click();
-  await hostPage.locator('#host-fruit-picker .fruit-option[data-fruit="banana"]').click();
-  await hostPage.getByRole("button", { name: "Create room" }).click();
+  await expect(hostPage.getByRole("button", { name: "Pick a player" })).toBeDisabled();
+  await hostPage.locator('#host-avatar-picker .avatar-option[data-avatar="yellow"]').click();
+  await expect(hostPage.getByRole("button", { name: "Continue" })).toBeEnabled();
+  await hostPage.getByRole("button", { name: "Continue" }).click();
   await expect(hostPage.locator("#screen-lobby.active")).toBeVisible();
 
   const roomCode = (await hostPage.locator("#room-code").textContent())?.trim() || "";
@@ -66,7 +70,7 @@ test("online deep-link join: guest opens #join=CODE invite", async ({ browser })
   await expect(guestPage.locator("#join-code")).toHaveValue(roomCode);
   await expect(guestPage.getByRole("button", { name: "Join room" })).toBeVisible();
 
-  await guestPage.locator('#join-fruit-picker .fruit-option[data-fruit="kiwi"]').click();
+  await guestPage.locator('#join-avatar-picker .avatar-option[data-avatar="green"]').click();
   await guestPage.getByRole("button", { name: "Join room" }).click();
 
   await expect(guestPage.locator("#screen-lobby.active")).toBeVisible();

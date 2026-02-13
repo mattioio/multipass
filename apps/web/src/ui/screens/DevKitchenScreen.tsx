@@ -4,12 +4,11 @@ import {
   Button,
   Card,
   CardHeader,
-  FruitPickerGrid,
+  AvatarPickerGrid,
   GameTile
 } from "../components";
 import { GameModulesGallery } from "../patterns";
 import type { GameUiState } from "../../types";
-import localCardIcon from "../../assets/local.svg";
 
 type DevKitFlag = "loading" | "disabled" | "selected" | "error" | "locked" | "waiting" | "reconnecting";
 
@@ -107,7 +106,7 @@ export function DevKitchenScreen() {
           </Card>
           <Card className="landing-card local-card">
             <CardHeader className="landing-card-header landing-card-header-local">
-              <img src={localCardIcon} alt="" />
+              <span className="landing-card-icon landing-card-icon-local" aria-hidden="true" />
             </CardHeader>
             <h4 className="landing-title">Landing Card</h4>
             <p className="subtext">Landing style with icon header and CTA spacing.</p>
@@ -118,19 +117,19 @@ export function DevKitchenScreen() {
       <section className="devkit-section">
         <h3>Avatar Tiles</h3>
         <div className="devkit-grid devkit-grid-avatars">
-          <AvatarTile fruitId="banana" label="Mr Yellow" themeClass="theme-banana" selected={hasFlag("selected")} />
-          <AvatarTile fruitId="strawberry" label="Mr Red" themeClass="theme-strawberry" />
-          <AvatarTile fruitId="kiwi" label="Mr Green" themeClass="theme-kiwi" disabled={hasFlag("disabled") || hasFlag("locked")} />
-          <AvatarTile fruitId="blueberry" label="Mr Blue" themeClass="theme-blueberry" />
+          <AvatarTile avatarId="yellow" label="Mr Yellow" themeClass="theme-yellow" selected={hasFlag("selected")} />
+          <AvatarTile avatarId="red" label="Mr Red" themeClass="theme-red" />
+          <AvatarTile avatarId="green" label="Mr Green" themeClass="theme-green" disabled={hasFlag("disabled") || hasFlag("locked")} />
+          <AvatarTile avatarId="blue" label="Mr Blue" themeClass="theme-blue" />
         </div>
       </section>
 
       <section className="devkit-section">
-        <h3>Fruit Picker Grid</h3>
-        <FruitPickerGrid
-          id="devkit-fruit-grid"
-          selectedId={hasFlag("selected") ? "strawberry" : null}
-          disabledIds={hasFlag("disabled") || hasFlag("locked") ? ["kiwi"] : []}
+        <h3>Avatar Picker Grid</h3>
+        <AvatarPickerGrid
+          id="devkit-avatar-grid"
+          selectedId={hasFlag("selected") ? "red" : null}
+          disabledIds={hasFlag("disabled") || hasFlag("locked") ? ["green"] : []}
         />
       </section>
 

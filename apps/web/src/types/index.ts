@@ -1,4 +1,5 @@
 export type { ThemeKey } from "./ThemeKey";
+export type { PatternKey } from "./PatternKey";
 export type { ScreenKey } from "./ScreenKey";
 export type { Player } from "./Player";
 export type { RoundState } from "./RoundState";

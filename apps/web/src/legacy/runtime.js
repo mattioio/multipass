@@ -1,5 +1,5 @@
 import { assertRoomShape } from "../contracts/roomState.js";
-import { FRUITS, getFruit, getFruitByTheme } from "../domain/fruits.js";
+import { AVATARS, getAvatar, getAvatarByTheme } from "../domain/avatars.js";
 import { isTicTacToeSurfaceGame, localGames, listLocalGames } from "../domain/localGames.js";
 import { resolvePickerGames } from "../domain/games/picker.js";
 import { createWsClient } from "../net/wsClient.js";
@@ -9,9 +9,11 @@ import { getLeaderId } from "../state/selectors.js";
 import { createStore } from "../state/store.js";
 import { renderLocalSetupScreen } from "../ui/screens/localSetup.js";
 import { renderPickHint } from "../ui/screens/pickHint.js";
-import { setupFruitPicker, updateFruitPicker } from "../ui/shared/fruitPicker.js";
+import { setupAvatarPicker, updateAvatarPicker } from "../ui/shared/avatarPicker.js";
+import { getPatternConfig, resetPatternConfig, setPatternConfig } from "../ui/shared/patternSystem.ts";
 import { createToastController } from "../ui/shared/toast.js";
 import playerAvatar from "../assets/player.svg";
+import playerAvatarAlt from "../assets/player2.svg";
 import { normalizeRoomCode, parseScreenRoute } from "./hashRoute.js";
 import { copyRoomInviteLink } from "./shareLink.js";
 
@@ -19,6 +21,8 @@ const LOCAL_REJOIN_KEY = "multipass_last_local_match";
 const ONLINE_REJOIN_AT_KEY = "multipass_last_room_started_at";
 const ONLINE_UI_PREFS_KEY = "multipass_online_ui_prefs";
 const SEAT_TOKEN_KEY = "multipass_seat_token";
+const HONORIFIC_PREF_KEY = "multipass_honorific";
+const HONORIFIC_TOGGLE_SELECTOR = 'input[data-honorific-toggle="true"]';
 const SCREEN_TO_HASH = Object.freeze({
   landing: "",
   local: "#local",
@@ -75,8 +79,8 @@ function createInitialState() {
     shuffleTimer: null,
     lastLeaderId: null,
     lastWinSignature: null,
-    hostFruit: null,
-    joinFruit: null,
+    hostAvatar: null,
+    joinAvatar: null,
     joinStep: "code",
     joinValidatedCode: null,
     joinPreview: null,
@@ -84,13 +88,14 @@ function createInitialState() {
     pendingDeepLinkJoinCode: null,
     joinValidationSource: null,
     localRejoinSnapshot: null,
-    localFruits: { one: null, two: null },
+    localAvatars: { one: null, two: null },
     localStep: "p1",
     prevLocalStep: "p1",
     settingsLastFocus: null,
     deferredInstallPrompt: null,
     isAppInstalled: false,
     localHasSpun: false,
+    honorific: "mr",
     landingMode: "local",
     devkitReturnScreen: "landing",
     localStrip: createInitialLocalStripState()
@@ -219,6 +224,93 @@ function initModeToggle() {
       applyMode(toggle.checked ? "dark" : "light", true);
     });
   }
+}
+
+function normalizeHonorific(value) {
+  return String(value || "").trim().toLowerCase() === "mrs" ? "mrs" : "mr";
+}
+
+function formatHonorificName(name, honorific = state.honorific) {
+  const trimmed = String(name || "").trim();
+  if (!trimmed) return "";
+  const base = trimmed.replace(/^(mr|mrs)\.?\s+/i, "").trim() || trimmed;
+  return `${normalizeHonorific(honorific) === "mrs" ? "Mrs" : "Mr"} ${base}`;
+}
+
+function getDisplayPlayerName(player, fallback = "Player") {
+  if (!player) return fallback;
+  const avatar = getAvatarByTheme(player.theme);
+  if (avatar?.name) return formatHonorificName(avatar.name, state.honorific);
+  if (player.name) return formatHonorificName(player.name, state.honorific);
+  return fallback;
+}
+
+function getCurrentPlayerArtSrc() {
+  return state.honorific === "mrs" ? playerAvatarAlt : playerAvatar;
+}
+
+function syncHonorificToggleInputs() {
+  document.querySelectorAll(HONORIFIC_TOGGLE_SELECTOR).forEach((node) => {
+    if (!(node instanceof HTMLInputElement)) return;
+    node.checked = state.honorific === "mrs";
+  });
+}
+
+function refreshAvatarPickerLabels() {
+  document.querySelectorAll(".avatar-option").forEach((button) => {
+    if (!(button instanceof HTMLElement)) return;
+    const avatarId = button.dataset.avatar || "";
+    const avatar = getAvatar(avatarId);
+    const displayName = avatar ? formatHonorificName(avatar.name, state.honorific) : "";
+    if (!displayName) return;
+
+    const labelEl = button.querySelector(".avatar-name");
+    if (labelEl) {
+      labelEl.textContent = displayName;
+    }
+    const lockedByPlayerOne = button.classList.contains("p1-locked");
+    button.setAttribute("aria-label", lockedByPlayerOne ? `${displayName}, selected by Player 1` : displayName);
+  });
+}
+
+function refreshStaticPlayerArt() {
+  const src = getCurrentPlayerArtSrc();
+  document.querySelectorAll(".player-art img").forEach((node) => {
+    if (!(node instanceof HTMLImageElement)) return;
+    node.src = src;
+  });
+}
+
+function applyHonorific(honorific, persist = false) {
+  state.honorific = normalizeHonorific(honorific);
+  document.body.dataset.honorific = state.honorific;
+  syncHonorificToggleInputs();
+  refreshAvatarPickerLabels();
+  refreshStaticPlayerArt();
+  if (persist) {
+    localStorage.setItem(HONORIFIC_PREF_KEY, state.honorific);
+  }
+  if (state.room) {
+    renderRoom();
+    return;
+  }
+  if (state.activeScreen === "local") {
+    renderLocalSetup();
+  }
+  if (state.activeScreen === "join") {
+    renderJoinSetup();
+  }
+}
+
+function initHonorificToggle() {
+  const stored = normalizeHonorific(localStorage.getItem(HONORIFIC_PREF_KEY));
+  applyHonorific(stored);
+  document.querySelectorAll(HONORIFIC_TOGGLE_SELECTOR).forEach((node) => {
+    if (!(node instanceof HTMLInputElement)) return;
+    node.addEventListener("change", () => {
+      applyHonorific(node.checked ? "mrs" : "mr", true);
+    });
+  });
 }
 
 function normalizeTargetScreen(screen) {
@@ -610,8 +702,8 @@ function connect() {
         });
         return;
       }
-      state.joinStep = "fruit";
-      state.joinFruit = null;
+      state.joinStep = "avatar";
+      state.joinAvatar = null;
       renderJoinSetup();
       return;
     }
@@ -645,13 +737,13 @@ function connect() {
           showScreen("landing", { history: "replace" });
           return;
         }
-        if (message.message === "Pick a fruit.") {
+        if (message.message === "Pick an avatar." || message.message === "Pick a fruit.") {
           dispatch(actions.autoJoinCodeSet(null));
           const joinCodeInput = document.getElementById("join-code");
           if (joinCodeInput && state.lastRoomCode) {
             joinCodeInput.value = state.lastRoomCode;
           }
-          showToast("Pick a fruit to rejoin.");
+          showToast("Pick an avatar to rejoin.");
           showScreen("join", { history: "replace" });
           return;
         }
@@ -920,12 +1012,12 @@ function hydrateLocalFromSnapshot(snapshot) {
   showScreen(resolveScreen(state.room), { history: "replace" });
 }
 
-function createLocalRoom(fruitOne, fruitTwo) {
+function createLocalRoom(avatarOne, avatarTwo) {
   const host = {
     id: localId("player"),
-    name: fruitOne.name,
-    emoji: fruitOne.emoji,
-    theme: fruitOne.theme,
+    name: formatHonorificName(avatarOne.name, state.honorific),
+    emoji: avatarOne.emoji,
+    theme: avatarOne.theme,
     role: "host",
     score: 0,
     gamesWon: 0,
@@ -934,9 +1026,9 @@ function createLocalRoom(fruitOne, fruitTwo) {
   };
   const guest = {
     id: localId("player"),
-    name: fruitTwo.name,
-    emoji: fruitTwo.emoji,
-    theme: fruitTwo.theme,
+    name: formatHonorificName(avatarTwo.name, state.honorific),
+    emoji: avatarTwo.emoji,
+    theme: avatarTwo.theme,
     role: "guest",
     score: 0,
     gamesWon: 0,
@@ -1116,8 +1208,8 @@ function applyLocalMove(index) {
 function displayEmoji(player) {
   if (!player) return "🙂";
   if (player.emoji) return player.emoji;
-  const fruit = Object.values(FRUITS).find((entry) => entry.theme === player.theme);
-  return fruit ? fruit.emoji : "🙂";
+  const avatar = Object.values(AVATARS).find((entry) => entry.theme === player.theme);
+  return avatar ? avatar.emoji : "🙂";
 }
 
 function leaveRoom(options = {}) {
@@ -1280,7 +1372,7 @@ function buildScoreColumn(player, label, leaderId, options = {}) {
   if (isWaiting) {
     column.classList.add("score-column-waiting");
   }
-  const theme = player?.theme || (label === "Host" ? "strawberry" : "kiwi");
+  const theme = player?.theme || (label === "Host" ? "red" : "green");
   column.classList.add(`theme-${theme}`);
   const showLeaderCrown = Boolean(
     player && leaderId && player.id === leaderId && (player.gamesWon ?? 0) > 0
@@ -1307,7 +1399,7 @@ function buildScoreColumn(player, label, leaderId, options = {}) {
     avatarArt.classList.add("score-emoji-art-placeholder");
   } else {
     const avatarImage = document.createElement("img");
-    avatarImage.src = playerAvatar;
+    avatarImage.src = getCurrentPlayerArtSrc();
     avatarImage.alt = "";
     avatarArt.appendChild(avatarImage);
   }
@@ -1339,7 +1431,7 @@ function buildScoreColumn(player, label, leaderId, options = {}) {
     nameSkeleton.setAttribute("aria-hidden", "true");
     name.appendChild(nameSkeleton);
   } else {
-    name.textContent = player ? player.name : `${label} (waiting)`;
+    name.textContent = player ? getDisplayPlayerName(player, label) : `${label} (waiting)`;
   }
   const role = document.createElement("div");
   role.className = "score-role";
@@ -1543,7 +1635,7 @@ function renderTicTacToe(room) {
       const pane = document.createElement("div");
       pane.className = `turn-player turn-player-${side}`;
 
-      const theme = player?.theme || (side === "host" ? "strawberry" : "kiwi");
+      const theme = player?.theme || (side === "host" ? "red" : "green");
       pane.classList.add(`theme-${theme}`);
 
       const isActive = Boolean(activePlayerId && player && player.id === activePlayerId);
@@ -1553,7 +1645,7 @@ function renderTicTacToe(room) {
       const avatar = document.createElement("span");
       avatar.className = "turn-player-avatar";
       const avatarImg = document.createElement("img");
-      avatarImg.src = playerAvatar;
+      avatarImg.src = getCurrentPlayerArtSrc();
       avatarImg.alt = "";
       avatar.setAttribute("aria-hidden", "true");
       avatar.appendChild(avatarImg);
@@ -1562,7 +1654,7 @@ function renderTicTacToe(room) {
       meta.className = "turn-player-meta";
       const name = document.createElement("span");
       name.className = "turn-player-name";
-      name.textContent = player?.name || fallback;
+      name.textContent = getDisplayPlayerName(player, fallback);
       const stateLabel = document.createElement("span");
       stateLabel.className = "turn-player-state";
       if (mode === "winner") {
@@ -1673,7 +1765,7 @@ function renderWaitScreen(room) {
   }
 
   if (emojiEl) emojiEl.textContent = displayEmoji(picker);
-  if (nameEl) nameEl.textContent = picker.name;
+  if (nameEl) nameEl.textContent = getDisplayPlayerName(picker, "Picker");
   if (textEl) textEl.textContent = "starts this round.";
 }
 
@@ -1707,7 +1799,7 @@ function renderWinner(room, leaderId, previousLeader) {
   if (titleEl) {
     titleEl.textContent = isDraw && !winner
       ? "It's a draw"
-      : `${winner?.name ?? "Someone"} is the winner`;
+      : `${getDisplayPlayerName(winner, "Someone")} is the winner`;
   }
   if (columns) {
     columns.innerHTML = "";
@@ -1734,7 +1826,7 @@ function renderEndRequest(room) {
   }
 
   const requester = playerById(room, room.endRequest.byId);
-  const requesterName = requester ? requester.name : "Someone";
+  const requesterName = requester ? getDisplayPlayerName(requester, "Someone") : "Someone";
   const isRequester = requester?.id === state.you?.playerId;
 
   if (isRequester) {
@@ -1765,14 +1857,14 @@ function renderShuffle(room) {
     result.classList.add("show");
   } else if (room.round?.status === "shuffling") {
     if (state.localHasSpun && picker) {
-      result.textContent = `${picker.name} starts`;
+      result.textContent = `${getDisplayPlayerName(picker, "Player")} starts`;
       result.classList.add("show");
     } else {
       result.textContent = "";
       result.classList.remove("show");
     }
   } else if (picker && room.round?.status === "playing") {
-    result.textContent = `${picker.name} starts`;
+    result.textContent = `${getDisplayPlayerName(picker, "Player")} starts`;
     result.classList.add("show");
   } else {
     result.textContent = "";
@@ -1818,7 +1910,7 @@ function renderShuffleGrid(room) {
     return;
   }
 
-  const signature = players.map((player) => `${player.id}:${player.theme || "none"}`).join("|");
+  const signature = `${state.honorific}:${players.map((player) => `${player.id}:${player.theme || "none"}`).join("|")}`;
   if (grid.dataset.signature === signature) return;
   grid.dataset.signature = signature;
   grid.innerHTML = "";
@@ -1835,7 +1927,7 @@ function renderShuffleGrid(room) {
 
     const avatar = document.createElement("img");
     avatar.className = "shuffle-card-avatar";
-    avatar.src = playerAvatar;
+    avatar.src = getCurrentPlayerArtSrc();
     avatar.alt = "";
     avatar.setAttribute("aria-hidden", "true");
     card.appendChild(avatar);
@@ -2047,68 +2139,75 @@ function resolveScreen(room) {
 
 function setup() {
   const joinCodeInput = document.getElementById("join-code");
-  const hostPicker = document.getElementById("host-fruit-picker");
-  const joinPicker = document.getElementById("join-fruit-picker");
-  const localPickerGrid = document.getElementById("local-fruit-grid");
+  const hostPicker = document.getElementById("host-avatar-picker");
+  const joinPicker = document.getElementById("join-avatar-picker");
+  const localPickerGrid = document.getElementById("local-avatar-grid");
   const localResumeButton = document.getElementById("local-rejoin-room");
   const localClearButton = document.getElementById("local-clear-rejoin");
   const shareRoomLinkButton = document.getElementById("share-room-link");
 
   initModeToggle();
+  initHonorificToggle();
+  resetPatternConfig();
+  if (IS_DEV_BUILD) {
+    window.multipassPattern = {
+      setPatternConfig,
+      resetPatternConfig,
+      getPatternConfig
+    };
+  }
   initSettingsModal();
   registerServiceWorker();
   initInstallPromptHandling();
   state.localRejoinSnapshot = loadLocalRejoinSnapshot();
 
-  const updateHostPicker = () => updateFruitPicker(hostPicker, state.hostFruit);
-  const updateJoinPicker = () => updateFruitPicker(joinPicker, state.joinFruit);
+  const updateHostPicker = () => {
+    updateAvatarPicker(hostPicker, state.hostAvatar);
+    renderHostSetupCta();
+  };
+  const updateJoinPicker = () => updateAvatarPicker(joinPicker, state.joinAvatar);
   const updateLocalPickers = () => renderLocalSetup();
 
-  setupFruitPicker(hostPicker, (fruitId) => {
-    state.hostFruit = fruitId;
+  setupAvatarPicker(hostPicker, (avatarId) => {
+    state.hostAvatar = avatarId;
     updateHostPicker();
   });
-  setupFruitPicker(joinPicker, (fruitId) => {
-    state.joinFruit = fruitId;
-    if (state.joinStep === "fruit") {
+  setupAvatarPicker(joinPicker, (avatarId) => {
+    state.joinAvatar = avatarId;
+    if (state.joinStep === "avatar") {
       renderJoinSetup();
     } else {
       updateJoinPicker();
     }
   });
-  setupFruitPicker(localPickerGrid, (fruitId) => {
+  setupAvatarPicker(localPickerGrid, (avatarId) => {
     if (state.localStep === "p1") {
-      state.localFruits.one = fruitId;
-      if (state.localFruits.two === fruitId) {
-        state.localFruits.two = null;
+      state.localAvatars.one = avatarId;
+      if (state.localAvatars.two === avatarId) {
+        state.localAvatars.two = null;
       }
-      state.localStep = "p2";
-      updateLocalPickers();
-      return;
+    } else {
+      state.localAvatars.two = avatarId;
     }
-
-    state.localFruits.two = fruitId;
     updateLocalPickers();
-    const fruitOne = getFruit(state.localFruits.one);
-    const fruitTwo = getFruit(state.localFruits.two);
-    if (!fruitOne || !fruitTwo) {
-      showToast("Pick two fruits first.");
-      return;
-    }
-    state.mode = "local";
-    state.room = createLocalRoom(fruitOne, fruitTwo);
-    state.you = { playerId: state.room.players.host.id, role: "local" };
-    state.lastWinSignature = null;
-    state.lastLeaderId = null;
-    state.localHasSpun = false;
-    stopShuffleStripLoop();
-    state.localStrip = createInitialLocalStripState();
-    state.localStep = "p1";
-    saveLocalRejoinSnapshot(state.room);
-    updateLocalRejoinCard();
-    renderRoom();
-    showScreen("lobby", { history: "push" });
   });
+
+  const localContinue = document.getElementById("local-continue");
+  if (localContinue) {
+    localContinue.addEventListener("click", () => {
+      const selectedAvatarId = state.localStep === "p1" ? state.localAvatars.one : state.localAvatars.two;
+      if (!getAvatar(selectedAvatarId)) {
+        showToast("Pick a player first.");
+        return;
+      }
+      if (state.localStep === "p1") {
+        state.localStep = "p2";
+        updateLocalPickers();
+        return;
+      }
+      startLocalRoomFromSetupSelections();
+    });
+  }
   updateHostPicker();
   updateJoinPicker();
   updateLocalPickers();
@@ -2125,7 +2224,7 @@ function setup() {
   document.getElementById("go-local").addEventListener("click", () => {
     state.mode = "local";
     state.localStep = "p1";
-    state.localFruits = { one: null, two: null };
+    state.localAvatars = { one: null, two: null };
     state.localHasSpun = false;
     stopShuffleStripLoop();
     state.localStrip = createInitialLocalStripState();
@@ -2134,6 +2233,7 @@ function setup() {
   });
   document.getElementById("go-host").addEventListener("click", () => {
     state.mode = "online";
+    renderHostSetupCta();
     showScreen("host", { history: "push" });
   });
   document.getElementById("go-join").addEventListener("click", () => {
@@ -2144,14 +2244,14 @@ function setup() {
   });
   document.getElementById("create-room").addEventListener("click", () => {
     state.mode = "online";
-    const fruit = getFruit(state.hostFruit);
-    if (!fruit) {
-      showToast("Pick a fruit first.");
+    const avatar = getAvatar(state.hostAvatar);
+    if (!avatar) {
+      showToast("Pick an avatar first.");
       return;
     }
     send({
       type: "create_room",
-      fruit: fruit.id,
+      avatar: avatar.id,
       clientId: state.clientId
     });
   });
@@ -2165,15 +2265,15 @@ function setup() {
       return;
     }
 
-    const fruit = getFruit(state.joinFruit);
-    if (!fruit) {
-      showToast("Pick a fruit first.");
+    const avatar = getAvatar(state.joinAvatar);
+    if (!avatar) {
+      showToast("Pick an avatar first.");
       return;
     }
     send({
       type: "join_room",
       code: state.joinValidatedCode || code,
-      fruit: fruit.id,
+      avatar: avatar.id,
       clientId: state.clientId,
       seatToken: state.seatToken
     });
@@ -2328,8 +2428,10 @@ export function initLegacyApp() {
 function renderLocalSetup() {
   renderLocalSetupScreen({
     state,
-    getFruit,
-    updateFruitPicker,
+    getAvatar,
+    formatAvatarLabel: (avatar) => formatHonorificName(avatar?.name || "", state.honorific),
+    updateAvatarPicker,
+    renderLocalSetupCta,
     updateHeroActions
   });
 }
@@ -2477,7 +2579,7 @@ function resetJoinFlow() {
   state.joinValidating = false;
   state.joinValidationSource = null;
   state.pendingDeepLinkJoinCode = null;
-  state.joinFruit = null;
+  state.joinAvatar = null;
 }
 
 function beginJoinValidation(rawCode, options = {}) {
@@ -2523,19 +2625,23 @@ function renderJoinSetup() {
   const joinCode = document.getElementById("join-code");
   const joinButton = document.getElementById("join-room");
   const joinHint = document.getElementById("join-step-hint");
-  const joinPicker = document.getElementById("join-fruit-picker");
+  const joinPicker = document.getElementById("join-avatar-picker");
+  const joinHonorificToolbar = document.getElementById("join-honorific-toolbar");
   if (!joinCode || !joinButton || !joinHint || !joinPicker) return;
 
   const isCodeStep = state.joinStep === "code";
   joinCode.disabled = state.joinValidating;
   joinCode.placeholder = "ABCD";
   joinPicker.classList.toggle("hidden", isCodeStep);
+  if (joinHonorificToolbar) {
+    joinHonorificToolbar.classList.toggle("hidden", isCodeStep);
+  }
   joinButton.textContent = isCodeStep ? (state.joinValidating ? "Checking..." : "Continue") : "Join room";
   joinButton.disabled = state.joinValidating;
 
   if (isCodeStep) {
     joinHint.textContent = "Enter your room code to continue.";
-    joinPicker.querySelectorAll(".fruit-option").forEach((button) => {
+    joinPicker.querySelectorAll(".avatar-option").forEach((button) => {
       button.classList.remove("p1-locked");
       button.removeAttribute("aria-disabled");
     });
@@ -2543,15 +2649,65 @@ function renderJoinSetup() {
   }
 
   const hostTheme = state.joinPreview?.host?.theme || null;
-  joinHint.textContent = "Pick your player fruit.";
-  updateFruitPicker(joinPicker, state.joinFruit, hostTheme ? [hostTheme] : []);
-  joinPicker.querySelectorAll(".fruit-option").forEach((button) => {
-    const fruitId = button.dataset.fruit || "";
+  joinHint.textContent = "Pick your player avatar.";
+  updateAvatarPicker(joinPicker, state.joinAvatar, hostTheme ? [hostTheme] : []);
+  joinPicker.querySelectorAll(".avatar-option").forEach((button) => {
+    const avatarId = button.dataset.avatar || "";
     button.classList.remove("p1-locked");
     button.removeAttribute("aria-disabled");
-    if (hostTheme && fruitId === hostTheme) {
+    if (hostTheme && avatarId === hostTheme) {
       button.classList.add("p1-locked");
       button.setAttribute("aria-disabled", "true");
     }
   });
+}
+
+function renderHostSetupCta() {
+  const hostCta = document.getElementById("create-room");
+  if (!(hostCta instanceof HTMLButtonElement)) return;
+  const avatar = getAvatar(state.hostAvatar);
+  if (!avatar) {
+    hostCta.disabled = true;
+    hostCta.textContent = "Pick a player";
+    return;
+  }
+  hostCta.disabled = false;
+  hostCta.textContent = "Continue";
+}
+
+function renderLocalSetupCta() {
+  const localCta = document.getElementById("local-continue");
+  if (!(localCta instanceof HTMLButtonElement)) return;
+  const selectedAvatarId = state.localStep === "p1" ? state.localAvatars.one : state.localAvatars.two;
+  const avatar = getAvatar(selectedAvatarId);
+  if (!avatar) {
+    localCta.disabled = true;
+    localCta.textContent = "Pick a player";
+    return;
+  }
+  localCta.disabled = false;
+  localCta.textContent = "Continue";
+}
+
+function startLocalRoomFromSetupSelections() {
+  const avatarOne = getAvatar(state.localAvatars.one);
+  const avatarTwo = getAvatar(state.localAvatars.two);
+  if (!avatarOne || !avatarTwo) {
+    showToast("Pick a player first.");
+    return false;
+  }
+  state.mode = "local";
+  state.room = createLocalRoom(avatarOne, avatarTwo);
+  state.you = { playerId: state.room.players.host.id, role: "local" };
+  state.lastWinSignature = null;
+  state.lastLeaderId = null;
+  state.localHasSpun = false;
+  stopShuffleStripLoop();
+  state.localStrip = createInitialLocalStripState();
+  state.localStep = "p1";
+  saveLocalRejoinSnapshot(state.room);
+  updateLocalRejoinCard();
+  renderRoom();
+  showScreen("lobby", { history: "push" });
+  return true;
 }

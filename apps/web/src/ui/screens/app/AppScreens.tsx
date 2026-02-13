@@ -2,7 +2,8 @@ import {
   Button,
   Card,
   CardHeader,
-  FruitPickerGrid,
+  AvatarPickerGrid,
+  HonorificToggle,
   ScoreColumns,
   Screen
 } from "../../components";
@@ -17,8 +18,6 @@ import {
   ScreenGuardBoundary,
   TurnStatusBar
 } from "../../patterns";
-import localCardIcon from "../../../assets/local.svg";
-import onlineCardIcon from "../../../assets/online.svg";
 
 export interface AppScreensProps {
   isDevBuild: boolean;
@@ -55,6 +54,14 @@ export function AppScreens({ isDevBuild }: AppScreensProps) {
         <div className="landing-carousel">
           <div id="landing-track" className="landing-track" data-mode="local">
             <section id="landing-panel-local" className="landing-panel" role="tabpanel" aria-labelledby="landing-tab-local">
+              <Card id="landing-card-local" className="landing-card local-card">
+                <CardHeader className="landing-card-header landing-card-header-local">
+                  <span className="landing-card-icon landing-card-icon-local" aria-hidden="true" />
+                </CardHeader>
+                <h2 className="landing-title">Local Co-Op</h2>
+                <p className="subtext">Pass the device and play together on one screen.</p>
+                <Button id="go-local">Start</Button>
+              </Card>
               <div id="local-rejoin-card" className="rejoin-card hidden landing-rejoin-card">
                 <div className="landing-rejoin-content">
                   <h3>Resume local match</h3>
@@ -65,16 +72,19 @@ export function AppScreens({ isDevBuild }: AppScreensProps) {
                   <Button id="local-clear-rejoin" variant="ghost" className="compact-action banner-action">Leave</Button>
                 </div>
               </div>
-              <Card id="landing-card-local" className="landing-card local-card">
-                <CardHeader className="landing-card-header landing-card-header-local">
-                  <img src={localCardIcon} alt="" />
-                </CardHeader>
-                <h2 className="landing-title">Local Co-Op</h2>
-                <p className="subtext">Pass the device and play together on one screen.</p>
-                <Button id="go-local">Start</Button>
-              </Card>
             </section>
             <section id="landing-panel-online" className="landing-panel" role="tabpanel" aria-labelledby="landing-tab-online">
+              <Card id="landing-card-online" className="landing-card online-card">
+                <CardHeader className="landing-card-header landing-card-header-online">
+                  <span className="landing-card-icon landing-card-icon-online" aria-hidden="true" />
+                </CardHeader>
+                <h2 className="landing-title">Online play</h2>
+                <p className="subtext">Host a room or join a friend with a 4-letter code.</p>
+                <div className="button-row">
+                  <Button id="go-host">Host a room</Button>
+                  <Button id="go-join" variant="ghost">Join a room</Button>
+                </div>
+              </Card>
               <div id="rejoin-card" className="rejoin-card hidden landing-rejoin-card">
                 <div className="landing-rejoin-content">
                   <h3>Rejoin online room</h3>
@@ -87,17 +97,6 @@ export function AppScreens({ isDevBuild }: AppScreensProps) {
                   <Button id="clear-rejoin" variant="ghost" className="compact-action banner-action">Leave</Button>
                 </div>
               </div>
-              <Card id="landing-card-online" className="landing-card online-card">
-                <CardHeader className="landing-card-header landing-card-header-online">
-                  <img src={onlineCardIcon} alt="" />
-                </CardHeader>
-                <h2 className="landing-title">Online play</h2>
-                <p className="subtext">Host a room or join a friend with a 4-letter code.</p>
-                <div className="button-row">
-                  <Button id="go-host">Host a room</Button>
-                  <Button id="go-join" variant="ghost">Join a room</Button>
-                </div>
-              </Card>
             </section>
           </div>
         </div>
@@ -109,18 +108,17 @@ export function AppScreens({ isDevBuild }: AppScreensProps) {
             <span className="setup-card-tag">Local</span>
           </CardHeader>
           <div id="local-stage" className="local-wizard">
-            <div id="local-header-row" className="local-header-row">
+            <div id="local-header-row" className="local-header-row avatar-picker-header-row">
               <h3 id="local-step-title">Player 1 choice</h3>
-              <div id="local-stepper-inline" className="local-stepper-inline" aria-live="polite">
-                <div id="local-progress" className="local-progress" aria-hidden="true">
-                  <span className="local-progress-segment active"></span>
-                  <span className="local-progress-segment"></span>
-                </div>
-                <span id="local-step-count" className="local-step-count">1/2</span>
-              </div>
+              <HonorificToggle id="local-honorific-toolbar" inputId="local-honorific-toggle" />
             </div>
             <div className="local-choices">
-              <FruitPickerGrid id="local-fruit-grid" />
+              <div>
+                <AvatarPickerGrid id="local-avatar-grid" />
+              </div>
+              <div className="button-row local-setup-cta-row">
+                <Button id="local-continue" disabled>Pick a player</Button>
+              </div>
             </div>
           </div>
         </Card>
@@ -131,11 +129,15 @@ export function AppScreens({ isDevBuild }: AppScreensProps) {
           <CardHeader className="setup-card-header setup-card-header-online">
             <span className="setup-card-tag">Online</span>
           </CardHeader>
-          <h2>Host a room</h2>
-          <p className="subtext">Pick your fruit</p>
-          <FruitPickerGrid id="host-fruit-picker" />
-          <div className="button-row">
-            <Button id="create-room">Create room</Button>
+          <div className="avatar-picker-stack">
+            <div className="avatar-picker-header-row">
+              <h2>Host a room</h2>
+              <HonorificToggle id="host-honorific-toolbar" inputId="host-honorific-toggle" />
+            </div>
+            <AvatarPickerGrid id="host-avatar-picker" />
+          </div>
+          <div className="button-row host-setup-cta-row">
+            <Button id="create-room" disabled>Pick a player</Button>
           </div>
         </Card>
       </Screen>
