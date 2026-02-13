@@ -10,8 +10,11 @@ import {
   ScoreColumns,
   Toast
 } from "./components";
+import { DevKitchenScreen } from "./screens/DevKitchenScreen";
 
 export function App() {
+  const isDevBuild = import.meta.env.DEV;
+
   return (
     <>
       <AppShell>
@@ -217,6 +220,12 @@ export function App() {
             </div>
           </div>
         </Screen>
+
+        {isDevBuild ? (
+          <Screen id="screen-devkit">
+            <DevKitchenScreen />
+          </Screen>
+        ) : null}
       </AppShell>
 
       <Toast />
@@ -234,6 +243,12 @@ export function App() {
             <span className="mode-icon" aria-hidden="true">🌙</span>
           </div>
         </div>
+        {isDevBuild ? (
+          <div className="setting-row">
+            <span>Developer tools</span>
+            <Button id="open-devkit" variant="ghost">Open component kitchen sink</Button>
+          </div>
+        ) : null}
       </Modal>
     </>
   );
