@@ -13,6 +13,7 @@ export function renderLocalSetupScreen({ state, getFruit, updateFruitPicker, upd
   const title = document.getElementById("local-step-title");
   const grid = document.getElementById("local-fruit-grid");
   if (!title || !grid || !stepCount || !progress || !stage) return;
+  stage.dataset.localStep = state.localStep;
 
   const segments = Array.from(progress.querySelectorAll(".local-progress-segment"));
   const stepChanged = state.prevLocalStep !== state.localStep;

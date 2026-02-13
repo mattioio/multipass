@@ -12,6 +12,7 @@ import { setupFruitPicker, updateFruitPicker } from "./ui/shared/fruitPicker.js"
 import { createToastController } from "./ui/shared/toast.js";
 
 const LOCAL_REJOIN_KEY = "multipass_last_local_match";
+const ONLINE_REJOIN_AT_KEY = "multipass_last_room_started_at";
 const ONLINE_UI_PREFS_KEY = "multipass_online_ui_prefs";
 const SEAT_TOKEN_KEY = "multipass_seat_token";
 const SCREEN_TO_HASH = Object.freeze({
@@ -30,19 +31,21 @@ const HASH_TO_SCREEN = Object.freeze(
   Object.fromEntries(Object.entries(SCREEN_TO_HASH).map(([screen, hash]) => [hash, screen]))
 );
 const ROOM_REQUIRED_SCREENS = new Set(["lobby", "pick", "wait", "game", "shuffle", "winner"]);
-const STRIP_TILE_REPEAT_COUNT = 30;
+const SHUFFLE_CLOCKWISE_ORDER = [0, 1, 3, 2];
+const SHUFFLE_AUTO_STOP_MS = 2200;
+const SHUFFLE_STEP_MS = 115;
+const SHUFFLE_SETTLE_MIN_STEPS = 7;
 
 function createInitialLocalStripState() {
   return {
-    isLooping: false,
+    isAnimating: false,
     isSettling: false,
-    offsetPx: 0,
-    velocity: 680,
+    activeIndex: 0,
+    finalIndex: null,
     winnerId: null,
-    winnerTileIndex: null,
-    rafId: null,
-    lastTs: 0,
-    targetOffsetPx: 0
+    stepTimer: null,
+    autoStopTimer: null,
+    gridSignature: ""
   };
 }
 
@@ -58,6 +61,7 @@ function createInitialState() {
     keepPickOpen: false,
     lastScreen: localStorage.getItem("multipass_last_screen"),
     lastRoomCode: localStorage.getItem("multipass_last_room"),
+    lastRoomStartedAt: Number(localStorage.getItem(ONLINE_REJOIN_AT_KEY)) || null,
     autoJoinCode: null,
     shuffleTimer: null,
     lastLeaderId: null,
@@ -73,6 +77,8 @@ function createInitialState() {
     localStep: "p1",
     prevLocalStep: "p1",
     settingsLastFocus: null,
+    deferredInstallPrompt: null,
+    isAppInstalled: false,
     localHasSpun: false,
     landingMode: "local",
     localStrip: createInitialLocalStripState()
@@ -100,12 +106,35 @@ const landingTrack = document.getElementById("landing-track");
 const landingSegmented = document.querySelector(".landing-segmented");
 const landingTabLocal = document.getElementById("landing-tab-local");
 const landingTabOnline = document.getElementById("landing-tab-online");
+const landingPanelLocal = document.getElementById("landing-panel-local");
+const landingPanelOnline = document.getElementById("landing-panel-online");
 
 const toast = createToastController();
 const showToast = toast.showToast;
 const showActionToast = toast.showActionToast;
 const hideActionToast = toast.hideActionToast;
 const actionToastCta = toast.actionToastCta;
+
+function staggerLandingPanel(panel) {
+  if (!(panel instanceof HTMLElement)) return;
+  const children = Array.from(panel.children).filter((child) => {
+    if (!(child instanceof HTMLElement)) return false;
+    return !child.classList.contains("hidden");
+  });
+  panel.classList.remove("is-staggering");
+  children.forEach((child) => {
+    child.classList.remove("is-entered");
+    child.style.removeProperty("--item-index");
+  });
+  if (!children.length) return;
+  children.forEach((child, index) => {
+    child.style.setProperty("--item-index", String(index));
+  });
+  panel.classList.add("is-staggering");
+  requestAnimationFrame(() => {
+    children.forEach((child) => child.classList.add("is-entered"));
+  });
+}
 
 function parseScreenHash(hash = window.location.hash) {
   const normalized = String(hash || "").trim().toLowerCase();
@@ -233,6 +262,7 @@ function showScreen(key, options = {}) {
   const historyState = options.historyState || {};
   const allowSameHashPush = Boolean(options.allowSameHashPush);
   state.activeScreen = key;
+  document.body.dataset.screen = key;
   localStorage.setItem("multipass_last_screen", key);
   Object.entries(screens).forEach(([name, element]) => {
     element.classList.toggle("active", name === key);
@@ -247,7 +277,10 @@ function showScreen(key, options = {}) {
 }
 
 function getHeroActionConfig() {
-  if (state.activeScreen === "landing") return null;
+  if (state.activeScreen === "landing") {
+    const installAction = getInstallActionConfig();
+    return installAction;
+  }
   if (state.activeScreen === "local") {
     if (state.localStep === "p2") {
       return { label: "Back", action: () => {
@@ -309,6 +342,65 @@ function updateHeroActions() {
   button.onclick = config.action;
 }
 
+function isiOSBrowser() {
+  const ua = navigator.userAgent.toLowerCase();
+  return /iphone|ipad|ipod/.test(ua);
+}
+
+function isStandaloneMode() {
+  return window.matchMedia("(display-mode: standalone)").matches || Boolean(window.navigator.standalone);
+}
+
+function getInstallActionConfig() {
+  if (state.isAppInstalled || isStandaloneMode()) return null;
+  if (state.deferredInstallPrompt) {
+    return { label: "Install", action: promptInstallApp };
+  }
+  if (isiOSBrowser()) {
+    return {
+      label: "Install",
+      action: () => showToast("Use Share → Add to Home Screen.")
+    };
+  }
+  return null;
+}
+
+async function promptInstallApp() {
+  const deferred = state.deferredInstallPrompt;
+  if (!deferred) return;
+  try {
+    await deferred.prompt();
+    await deferred.userChoice;
+  } catch (err) {
+    // ignore install prompt failures
+  }
+  state.deferredInstallPrompt = null;
+  updateHeroActions();
+}
+
+function registerServiceWorker() {
+  if (!("serviceWorker" in navigator)) return;
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch(() => {
+      // ignore registration failures in unsupported contexts
+    });
+  });
+}
+
+function initInstallPromptHandling() {
+  state.isAppInstalled = isStandaloneMode();
+  window.addEventListener("beforeinstallprompt", (event) => {
+    event.preventDefault();
+    state.deferredInstallPrompt = event;
+    updateHeroActions();
+  });
+  window.addEventListener("appinstalled", () => {
+    state.deferredInstallPrompt = null;
+    state.isAppInstalled = true;
+    updateHeroActions();
+  });
+}
+
 function getWebSocketUrl() {
   const override = window.localStorage?.getItem("multipass_ws_url");
   if (override) return override;
@@ -358,7 +450,7 @@ function connect() {
       dispatch(actions.autoJoinCodeSet(null));
       if (state.room?.code) {
         dispatch(actions.lastRoomCodeSet(state.room.code));
-        localStorage.setItem("multipass_last_room", state.room.code);
+        setOnlineRejoinData(state.room.code, state.room.createdAt || Date.now());
       }
       const currentEndSignature = getEndSignature(state.room);
       if (!currentEndSignature) {
@@ -429,7 +521,7 @@ function connect() {
         if (message.message === "Room not found.") {
           dispatch(actions.autoJoinCodeSet(null));
           dispatch(actions.lastRoomCodeSet(null));
-          localStorage.removeItem("multipass_last_room");
+          clearOnlineRejoinData();
           updateRejoinCard();
           showToast("Room expired.");
           showScreen("landing", { history: "replace" });
@@ -573,8 +665,7 @@ function localId(prefix) {
   return `${prefix}_${Math.random().toString(36).slice(2, 9)}`;
 }
 
-function getLocalRejoinLabel(snapshot) {
-  const startedAt = Number(snapshot?.room?.createdAt) || Number(snapshot?.savedAt) || null;
+function formatStartedAgo(startedAt) {
   if (!startedAt) return "Started a bit ago.";
   const elapsedMs = Math.max(0, Date.now() - startedAt);
   const elapsedMinutes = Math.floor(elapsedMs / 60000);
@@ -584,6 +675,30 @@ function getLocalRejoinLabel(snapshot) {
   if (elapsedHours < 24) return `Started about ${elapsedHours} hr ago.`;
   const elapsedDays = Math.floor(elapsedHours / 24);
   return `Started about ${elapsedDays} day ago${elapsedDays === 1 ? "" : "s"}.`;
+}
+
+function getLocalRejoinLabel(snapshot) {
+  const startedAt = Number(snapshot?.room?.createdAt) || Number(snapshot?.savedAt) || null;
+  return formatStartedAgo(startedAt);
+}
+
+function setOnlineRejoinData(roomCode, startedAt) {
+  if (!roomCode) return;
+  const normalizedCode = String(roomCode).trim().toUpperCase();
+  if (!normalizedCode) return;
+  const normalizedStartedAt = Number(startedAt) || Date.now();
+  const shouldPreserveStart = state.lastRoomCode === normalizedCode && Number(state.lastRoomStartedAt);
+  state.lastRoomCode = normalizedCode;
+  state.lastRoomStartedAt = shouldPreserveStart ? Number(state.lastRoomStartedAt) : normalizedStartedAt;
+  localStorage.setItem("multipass_last_room", state.lastRoomCode);
+  localStorage.setItem(ONLINE_REJOIN_AT_KEY, String(state.lastRoomStartedAt));
+}
+
+function clearOnlineRejoinData() {
+  state.lastRoomCode = null;
+  state.lastRoomStartedAt = null;
+  localStorage.removeItem("multipass_last_room");
+  localStorage.removeItem(ONLINE_REJOIN_AT_KEY);
 }
 
 function isValidLocalRejoinSnapshot(snapshot) {
@@ -604,7 +719,7 @@ function saveLocalRejoinSnapshot(room, meta = {}) {
     mode: "local",
     savedAt: Date.now(),
     localHasSpun: Boolean(meta.localHasSpun ?? state.localHasSpun),
-    localStripOffset: Number.isFinite(meta.localStripOffset) ? meta.localStripOffset : state.localStrip.offsetPx,
+    localShuffleIndex: Number.isFinite(meta.localShuffleIndex) ? meta.localShuffleIndex : state.localStrip.activeIndex,
     room
   };
   try {
@@ -657,9 +772,7 @@ function hydrateLocalFromSnapshot(snapshot) {
   stopShuffleStripLoop();
   state.localStrip = {
     ...createInitialLocalStripState(),
-    offsetPx: Number.isFinite(snapshot.localStripOffset)
-      ? snapshot.localStripOffset
-      : (Number.isFinite(snapshot.localWheelAngle) ? snapshot.localWheelAngle : 0),
+    activeIndex: Number.isFinite(snapshot.localShuffleIndex) ? snapshot.localShuffleIndex : 0,
     winnerId: snapshot.room.round?.firstPlayerId || snapshot.room.round?.pickerId || null
   };
   renderRoom();
@@ -875,8 +988,7 @@ function leaveRoom(options = {}) {
   }
 
   if (state.room?.code) {
-    state.lastRoomCode = state.room.code;
-    localStorage.setItem("multipass_last_room", state.room.code);
+    setOnlineRejoinData(state.room.code, state.room.createdAt || Date.now());
   }
   updateRejoinCard();
 
@@ -953,11 +1065,13 @@ function renderLobby(room) {
   if (!cta) return;
   if (!room.players.guest) {
     cta.disabled = true;
-    cta.textContent = "Waiting for a second player...";
+    cta.textContent = "Waiting for second player";
+    cta.classList.add("is-waiting-copy");
     cta.dataset.action = "none";
     if (endGameButton) endGameButton.classList.add("hidden");
     return;
   }
+  cta.classList.remove("is-waiting-copy");
 
   const gameActive = Boolean(room.game && !room.game.state?.winnerId && !room.game.state?.draw);
 
@@ -966,11 +1080,13 @@ function renderLobby(room) {
     if (gameActive) {
       cta.disabled = true;
       cta.textContent = "Finish current game";
+      cta.classList.remove("is-waiting-copy");
       cta.dataset.action = "none";
       return;
     }
     cta.disabled = false;
     cta.textContent = "Pick a game";
+    cta.classList.remove("is-waiting-copy");
     cta.dataset.action = "pick";
     return;
   }
@@ -987,12 +1103,14 @@ function renderLobby(room) {
   if (state.you?.role !== "host" && state.you?.role !== "guest") {
     cta.disabled = true;
     cta.textContent = "Waiting for players...";
+    cta.classList.remove("is-waiting-copy");
     cta.dataset.action = "none";
     return;
   }
 
   cta.disabled = false;
   cta.textContent = "Pick a game";
+  cta.classList.remove("is-waiting-copy");
   cta.dataset.action = "pick";
 }
 
@@ -1003,17 +1121,28 @@ function renderScoreboard(room, leaderId) {
 
   const host = room.players.host;
   const guest = room.players.guest;
+  const isWaitingForGuest = !guest;
 
   columns.appendChild(buildScoreColumn(host, "Host", leaderId));
-  columns.appendChild(buildScoreColumn(guest, "Guest", leaderId));
+  columns.appendChild(buildScoreColumn(guest, "Guest", leaderId, { isWaiting: isWaitingForGuest }));
 }
 
-function buildScoreColumn(player, label, leaderId) {
+function buildScoreColumn(player, label, leaderId, options = {}) {
+  const isWaiting = Boolean(options.isWaiting);
   const column = document.createElement("div");
   column.className = "score-column";
+  if (label === "Guest") {
+    column.classList.add("score-column-guest");
+  }
+  if (isWaiting) {
+    column.classList.add("score-column-waiting");
+  }
   const theme = player?.theme || (label === "Host" ? "strawberry" : "kiwi");
   column.classList.add(`theme-${theme}`);
-  if (player && leaderId && player.id === leaderId) {
+  const showLeaderCrown = Boolean(
+    player && leaderId && player.id === leaderId && (player.gamesWon ?? 0) > 0
+  );
+  if (showLeaderCrown) {
     column.classList.add("leader");
   }
   const top = document.createElement("div");
@@ -1021,17 +1150,54 @@ function buildScoreColumn(player, label, leaderId) {
 
   const emoji = document.createElement("div");
   emoji.className = "score-emoji";
-  emoji.textContent = displayEmoji(player);
+  if (isWaiting) {
+    emoji.classList.add("score-emoji-waiting");
+  }
 
-  const crown = document.createElement("span");
-  crown.className = "score-crown";
-  crown.textContent = "👑";
-  emoji.appendChild(crown);
+  const avatarInner = document.createElement("span");
+  avatarInner.className = "score-emoji-inner";
+
+  const avatarArt = document.createElement("span");
+  avatarArt.className = "score-emoji-art";
+
+  if (isWaiting) {
+    avatarArt.classList.add("score-emoji-art-placeholder");
+  } else {
+    const avatarImage = document.createElement("img");
+    avatarImage.src = "/src/assets/player.svg";
+    avatarImage.alt = "";
+    avatarArt.appendChild(avatarImage);
+  }
+  avatarInner.appendChild(avatarArt);
+  emoji.appendChild(avatarInner);
+
+  if (isWaiting) {
+    const spinner = document.createElement("span");
+    spinner.className = "score-avatar-spinner";
+    spinner.setAttribute("aria-hidden", "true");
+    emoji.appendChild(spinner);
+  }
+
+  if (showLeaderCrown) {
+    const crown = document.createElement("span");
+    crown.className = "score-crown";
+    crown.textContent = "👑";
+    emoji.appendChild(crown);
+  }
 
   const info = document.createElement("div");
   const name = document.createElement("div");
   name.className = "score-name";
-  name.textContent = player ? player.name : `${label} (waiting)`;
+  if (isWaiting) {
+    name.classList.add("score-skeleton-name");
+    name.setAttribute("aria-label", `${label} waiting`);
+    const nameSkeleton = document.createElement("span");
+    nameSkeleton.className = "skeleton-name-bar";
+    nameSkeleton.setAttribute("aria-hidden", "true");
+    name.appendChild(nameSkeleton);
+  } else {
+    name.textContent = player ? player.name : `${label} (waiting)`;
+  }
   const role = document.createElement("div");
   role.className = "score-role";
   role.textContent = label;
@@ -1044,7 +1210,7 @@ function buildScoreColumn(player, label, leaderId) {
   const stats = document.createElement("div");
   stats.className = "score-stats";
 
-  stats.appendChild(buildStatRow("Games won", player ? player.gamesWon : "--"));
+  stats.appendChild(buildStatRow("Games won", player ? player.gamesWon : "--", { isWaiting }));
 
   column.appendChild(top);
   column.appendChild(stats);
@@ -1052,9 +1218,13 @@ function buildScoreColumn(player, label, leaderId) {
   return column;
 }
 
-function buildStatRow(label, value) {
+function buildStatRow(label, value, options = {}) {
+  const isWaiting = Boolean(options.isWaiting);
   const row = document.createElement("div");
   row.className = "stat-row";
+  if (isWaiting) {
+    row.classList.add("stat-row-waiting");
+  }
 
   const labelEl = document.createElement("div");
   labelEl.className = "stat-label";
@@ -1062,7 +1232,15 @@ function buildStatRow(label, value) {
 
   const valueEl = document.createElement("div");
   valueEl.className = "stat-value";
-  valueEl.textContent = value;
+  if (isWaiting) {
+    valueEl.classList.add("stat-value-waiting");
+    const valueSkeleton = document.createElement("span");
+    valueSkeleton.className = "skeleton-value-bar";
+    valueSkeleton.setAttribute("aria-hidden", "true");
+    valueEl.appendChild(valueSkeleton);
+  } else {
+    valueEl.textContent = value;
+  }
 
   row.appendChild(labelEl);
   row.appendChild(valueEl);
@@ -1200,24 +1378,71 @@ function renderGameList(room) {
 
 function renderTicTacToe(room) {
   const boardEl = document.getElementById("ttt-board");
-  const textEl = document.getElementById("turn-text");
   const indicatorEl = document.getElementById("turn-indicator");
   const isLocal = isLocalMode();
+  const host = room.players?.host || null;
+  const guest = room.players?.guest || null;
+
+  const renderTurnSplit = (activePlayerId = null, mode = "turn") => {
+    if (!indicatorEl) return;
+    indicatorEl.innerHTML = "";
+    indicatorEl.classList.remove("turn-passive");
+    if (!activePlayerId) {
+      indicatorEl.classList.add("turn-passive");
+    }
+
+    const sides = [
+      { player: host, side: "host", fallback: "Player 1" },
+      { player: guest, side: "guest", fallback: "Player 2" }
+    ];
+
+    sides.forEach(({ player, side, fallback }) => {
+      const pane = document.createElement("div");
+      pane.className = `turn-player turn-player-${side}`;
+
+      const theme = player?.theme || (side === "host" ? "strawberry" : "kiwi");
+      pane.classList.add(`theme-${theme}`);
+
+      const isActive = Boolean(activePlayerId && player && player.id === activePlayerId);
+      pane.classList.add(isActive ? "is-active" : "is-inactive");
+      if (!player) pane.classList.add("is-empty");
+
+      const avatar = document.createElement("span");
+      avatar.className = "turn-player-avatar";
+      const avatarImg = document.createElement("img");
+      avatarImg.src = "/src/assets/player.svg";
+      avatarImg.alt = "";
+      avatar.setAttribute("aria-hidden", "true");
+      avatar.appendChild(avatarImg);
+
+      const meta = document.createElement("span");
+      meta.className = "turn-player-meta";
+      const name = document.createElement("span");
+      name.className = "turn-player-name";
+      name.textContent = player?.name || fallback;
+      const stateLabel = document.createElement("span");
+      stateLabel.className = "turn-player-state";
+      if (mode === "winner") {
+        stateLabel.textContent = isActive ? "Won" : "Done";
+      } else if (mode === "draw") {
+        stateLabel.textContent = "Draw";
+      } else if (!player) {
+        stateLabel.textContent = "Waiting";
+      } else {
+        stateLabel.textContent = isActive ? "Turn" : "Waiting";
+      }
+      meta.appendChild(name);
+      meta.appendChild(stateLabel);
+
+      pane.appendChild(avatar);
+      pane.appendChild(meta);
+      indicatorEl.appendChild(pane);
+    });
+  };
 
   if (!room.game || room.game.id !== "tic_tac_toe") {
     boardEl.innerHTML = "";
-    if (textEl) textEl.textContent = room.game ? "Switch to Tic Tac Toe to play." : "Pick a game to start";
-    if (indicatorEl) {
-      indicatorEl.classList.remove(
-        "turn-active",
-        "turn-passive",
-        "theme-strawberry",
-        "theme-kiwi",
-        "theme-banana",
-        "theme-blueberry"
-      );
-      indicatorEl.classList.add("turn-passive");
-    }
+    renderTurnSplit(null, "idle");
     return;
   }
 
@@ -1232,57 +1457,11 @@ function renderTicTacToe(room) {
   });
 
   if (winner) {
-    if (textEl) textEl.textContent = `${winner.name} wins this round`;
-    if (indicatorEl) {
-      indicatorEl.classList.remove(
-        "turn-active",
-        "turn-passive",
-        "theme-strawberry",
-        "theme-kiwi",
-        "theme-banana",
-        "theme-blueberry"
-      );
-      indicatorEl.classList.add("turn-passive");
-    }
+    renderTurnSplit(winner.id, "winner");
   } else if (stateGame.draw) {
-    if (textEl) textEl.textContent = "Draw game";
-    if (indicatorEl) {
-      indicatorEl.classList.remove(
-        "turn-active",
-        "turn-passive",
-        "theme-strawberry",
-        "theme-kiwi",
-        "theme-banana",
-        "theme-blueberry"
-      );
-      indicatorEl.classList.add("turn-passive");
-    }
+    renderTurnSplit(null, "draw");
   } else {
-    const current = playerById(room, stateGame.nextPlayerId);
-    const isYourTurn = !isLocal && current && state.you?.playerId === current.id;
-    if (textEl) {
-      if (isYourTurn) {
-        textEl.textContent = "Your turn";
-      } else {
-        textEl.textContent = current ? `${current.name}'s turn` : "Waiting...";
-      }
-    }
-    if (indicatorEl) {
-      indicatorEl.classList.remove(
-        "turn-active",
-        "turn-passive",
-        "theme-strawberry",
-        "theme-kiwi",
-        "theme-banana",
-        "theme-blueberry"
-      );
-      if (isYourTurn || isLocal) {
-        indicatorEl.classList.add("turn-active");
-        if (current?.theme) indicatorEl.classList.add(`theme-${current.theme}`);
-      } else {
-        indicatorEl.classList.add("turn-passive");
-      }
-    }
+    renderTurnSplit(stateGame.nextPlayerId || null, "turn");
   }
 
   boardEl.innerHTML = "";
@@ -1423,19 +1602,16 @@ function renderEndRequest(room) {
 
 function renderShuffle(room) {
   const stage = document.getElementById("shuffle-strip-stage");
-  const track = document.getElementById("shuffle-strip-track");
+  const grid = document.getElementById("shuffle-grid");
   const spinButton = document.getElementById("shuffle-spin");
   const result = document.getElementById("shuffle-result");
-  if (!stage || !track || !spinButton || !result) return;
+  if (!stage || !grid || !spinButton || !result) return;
 
-  renderStripTiles(room);
-  if (!state.localStrip.isLooping && !state.localStrip.isSettling) {
-    track.style.transition = "none";
-    applyShuffleStripTransform(track, state.localStrip.offsetPx);
-  }
+  renderShuffleGrid(room);
+  paintShuffleSelection();
 
   const picker = playerById(room, room.round?.pickerId || room.round?.firstPlayerId);
-  if (state.localStrip.isLooping || state.localStrip.isSettling) {
+  if (state.localStrip.isAnimating || state.localStrip.isSettling) {
     result.textContent = "Spinning...";
     result.classList.add("show");
   } else if (room.round?.status === "shuffling") {
@@ -1457,108 +1633,163 @@ function renderShuffle(room) {
   const localCanSpin = room.round?.status === "shuffling" && !state.localHasSpun && Boolean(room.round?.resolvedGameId);
   const onlineCanSpin = room.round?.status === "shuffling" && Boolean(room.round?.resolvedGameId);
   const canSpin = isLocalMode() ? localCanSpin : onlineCanSpin;
-  const shouldShow = canSpin || state.localStrip.isLooping || state.localStrip.isSettling;
+  const shouldShow = canSpin || state.localStrip.isAnimating || state.localStrip.isSettling;
   spinButton.classList.toggle("hidden", !shouldShow);
-  spinButton.disabled = state.localStrip.isSettling || (!state.localStrip.isLooping && !canSpin);
+  spinButton.disabled = state.localStrip.isAnimating || state.localStrip.isSettling || !canSpin;
   const spinLabel = spinButton.querySelector(".wheel-spin-label");
   if (spinLabel) {
-    spinLabel.textContent = state.localStrip.isLooping ? "Stop" : "Spin";
+    spinLabel.textContent = "Spin";
   }
 
-  if (!isLocalMode() && room.round?.status === "playing" && state.localStrip.isLooping && !state.localStrip.isSettling) {
+  if (!isLocalMode() && room.round?.status === "playing" && state.localStrip.isAnimating && !state.localStrip.isSettling) {
     const winnerId = room.round?.pickerId || room.round?.firstPlayerId;
-    if (winnerId) settleShuffleStrip({ room, winnerId });
+    if (winnerId) beginShuffleSettle({ room, winnerId });
   }
 }
 
-function applyShuffleStripTransform(track, offsetPx) {
-  track.style.transform = `translate3d(${-offsetPx}px, -50%, 0)`;
+function paintShuffleSelection() {
+  const grid = document.getElementById("shuffle-grid");
+  if (!grid) return;
+  const cards = Array.from(grid.querySelectorAll(".shuffle-card"));
+  cards.forEach((card, index) => {
+    const isActive = index === state.localStrip.activeIndex;
+    const isFinal = state.localStrip.finalIndex === index && !state.localStrip.isAnimating && !state.localStrip.isSettling;
+    card.classList.toggle("is-active", isActive);
+    card.classList.toggle("is-final", isFinal);
+  });
 }
 
-function getShuffleStripMetrics(stage, track) {
-  const first = track.querySelector(".shuffle-strip-tile");
-  if (!first) return null;
-  const second = first.nextElementSibling;
-  const firstWidth = first.getBoundingClientRect().width;
-  let gap = 0;
-  if (second) {
-    gap = second.offsetLeft - first.offsetLeft - first.offsetWidth;
-  }
-  const tilePitch = firstWidth + Math.max(0, gap);
-  if (!tilePitch) return null;
-  return {
-    tilePitch,
-    stageCenter: stage.clientWidth / 2
-  };
-}
-
-function stopShuffleStripLoop() {
-  if (state.localStrip.rafId) {
-    cancelAnimationFrame(state.localStrip.rafId);
-    state.localStrip.rafId = null;
-  }
-  state.localStrip.isLooping = false;
-  state.localStrip.lastTs = 0;
-}
-
-function startShuffleStripLoop(stage, track) {
-  if (state.localStrip.isLooping || state.localStrip.isSettling) return;
-  const metrics = getShuffleStripMetrics(stage, track);
-  if (!metrics) return;
-  const cycleWidth = metrics.tilePitch * 2;
-  if (!cycleWidth) return;
-
-  state.localStrip.isLooping = true;
-  state.localStrip.lastTs = 0;
-
-  const tick = (timestamp) => {
-    if (!state.localStrip.isLooping) return;
-    if (!state.localStrip.lastTs) {
-      state.localStrip.lastTs = timestamp;
-    }
-    const delta = Math.max(0, (timestamp - state.localStrip.lastTs) / 1000);
-    state.localStrip.lastTs = timestamp;
-    state.localStrip.offsetPx += state.localStrip.velocity * delta;
-    if (state.localStrip.offsetPx >= cycleWidth) {
-      state.localStrip.offsetPx -= cycleWidth;
-    }
-    applyShuffleStripTransform(track, state.localStrip.offsetPx);
-    state.localStrip.rafId = requestAnimationFrame(tick);
-  };
-
-  state.localStrip.rafId = requestAnimationFrame(tick);
-}
-
-function renderStripTiles(room) {
-  const track = document.getElementById("shuffle-strip-track");
-  if (!track) return;
+function renderShuffleGrid(room) {
+  const grid = document.getElementById("shuffle-grid");
+  if (!grid) return;
   const players = getLocalPlayers(room);
   if (players.length < 2) {
-    track.innerHTML = "";
-    track.dataset.signature = "";
+    grid.innerHTML = "";
+    grid.dataset.signature = "";
     return;
   }
+
   const signature = players.map((player) => `${player.id}:${player.theme || "none"}`).join("|");
-  if (track.dataset.signature === signature) return;
-  track.dataset.signature = signature;
-  track.innerHTML = "";
+  if (grid.dataset.signature === signature) return;
+  grid.dataset.signature = signature;
+  grid.innerHTML = "";
+
+  const assignment = [players[0], players[1], players[1], players[0]];
   const fragment = document.createDocumentFragment();
-  for (let i = 0; i < STRIP_TILE_REPEAT_COUNT; i += 1) {
-    const tile = document.createElement("div");
-    const player = players[i % players.length];
-    tile.className = `shuffle-strip-tile${(i % 2) === 1 ? " alt" : ""}`;
-    tile.setAttribute("aria-hidden", "true");
-    tile.dataset.playerId = player.id;
-    tile.dataset.tileIndex = String(i);
+  for (let i = 0; i < 4; i += 1) {
+    const player = assignment[i];
+    const card = document.createElement("div");
+    card.className = `shuffle-card ${i === 0 || i === 3 ? "player-a" : "player-b"}${i === 1 || i === 3 ? " is-right" : ""}`;
+    card.dataset.cardIndex = String(i);
+    card.dataset.playerId = player.id;
+    card.setAttribute("aria-hidden", "true");
+
     const avatar = document.createElement("img");
-    avatar.className = "shuffle-strip-avatar";
+    avatar.className = "shuffle-card-avatar";
     avatar.src = "/src/assets/player.svg";
     avatar.alt = "";
     avatar.setAttribute("aria-hidden", "true");
-    tile.appendChild(avatar);
-    fragment.appendChild(tile);
+    card.appendChild(avatar);
+
+    fragment.appendChild(card);
   }
-  track.appendChild(fragment);
+  grid.appendChild(fragment);
+}
+
+function stopShuffleStripLoop() {
+  clearShuffleStepTimer();
+  clearShuffleAutoStopTimer();
+  state.localStrip.isAnimating = false;
+  state.localStrip.isSettling = false;
+}
+
+function clearShuffleAutoStopTimer() {
+  if (state.localStrip.autoStopTimer) {
+    clearTimeout(state.localStrip.autoStopTimer);
+    state.localStrip.autoStopTimer = null;
+  }
+}
+
+function clearShuffleStepTimer() {
+  if (state.localStrip.stepTimer) {
+    clearTimeout(state.localStrip.stepTimer);
+    state.localStrip.stepTimer = null;
+  }
+}
+
+function nextClockwiseIndex(index) {
+  const at = SHUFFLE_CLOCKWISE_ORDER.indexOf(index);
+  if (at < 0) return SHUFFLE_CLOCKWISE_ORDER[0];
+  return SHUFFLE_CLOCKWISE_ORDER[(at + 1) % SHUFFLE_CLOCKWISE_ORDER.length];
+}
+
+function clockwiseDistance(from, to) {
+  const start = SHUFFLE_CLOCKWISE_ORDER.indexOf(from);
+  const end = SHUFFLE_CLOCKWISE_ORDER.indexOf(to);
+  if (start < 0 || end < 0) return 0;
+  if (end >= start) return end - start;
+  return SHUFFLE_CLOCKWISE_ORDER.length - start + end;
+}
+
+function runShuffleStepLoop(intervalMs = SHUFFLE_STEP_MS) {
+  clearShuffleStepTimer();
+  if (!state.localStrip.isAnimating || state.localStrip.isSettling) return;
+  state.localStrip.stepTimer = setTimeout(() => {
+    state.localStrip.activeIndex = nextClockwiseIndex(state.localStrip.activeIndex);
+    paintShuffleSelection();
+    runShuffleStepLoop(intervalMs);
+  }, intervalMs);
+}
+
+function beginShuffleSpin(room) {
+  state.localStrip.isAnimating = true;
+  state.localStrip.isSettling = false;
+  state.localStrip.finalIndex = null;
+  state.localStrip.winnerId = null;
+  clearShuffleStepTimer();
+  clearShuffleAutoStopTimer();
+  runShuffleStepLoop();
+  scheduleShuffleAutoStop(room);
+}
+
+function pickFinalIndexForWinner(room, winnerId) {
+  const players = getLocalPlayers(room);
+  if (players.length < 2 || !winnerId) return null;
+  const forA = winnerId === players[0].id;
+  const choices = forA ? [0, 3] : [1, 2];
+  return choices[Math.floor(Math.random() * choices.length)];
+}
+
+function finalizeShuffleSelection({ room, winnerId, finalIndex }) {
+  clearShuffleStepTimer();
+  clearShuffleAutoStopTimer();
+
+  state.localStrip.isAnimating = false;
+  state.localStrip.isSettling = false;
+  state.localStrip.winnerId = winnerId;
+  state.localStrip.finalIndex = finalIndex;
+  state.localStrip.activeIndex = finalIndex;
+  paintShuffleSelection();
+
+  if (isLocalMode()) {
+    state.localHasSpun = true;
+    state.room.round.pickerId = winnerId;
+    state.room.round.firstPlayerId = winnerId;
+    state.room.round.hasPickedStarter = true;
+    state.room.round.status = "shuffling";
+    state.room.round.shuffleAt = Date.now();
+    state.room.updatedAt = Date.now();
+    renderRoom();
+    const chosenGameId = state.room.round.resolvedGameId;
+    clearTimeout(state.shuffleTimer);
+    state.shuffleTimer = setTimeout(() => {
+      if (!chosenGameId || state.activeScreen !== "shuffle") return;
+      startLocalGame(chosenGameId);
+    }, 1200);
+    return;
+  }
+
+  renderRoom();
 }
 
 function resolveStopWinner(room) {
@@ -1571,108 +1802,73 @@ function resolveStopWinner(room) {
   return room.round?.pickerId || room.round?.firstPlayerId || null;
 }
 
-function settleShuffleStrip({ room, winnerId }) {
-  const stage = document.getElementById("shuffle-strip-stage");
-  const track = document.getElementById("shuffle-strip-track");
-  if (!stage || !track || !winnerId || state.localStrip.isSettling) return;
-  const metrics = getShuffleStripMetrics(stage, track);
-  if (!metrics) return;
-  const winnerTiles = Array.from(track.querySelectorAll(`.shuffle-strip-tile[data-player-id="${winnerId}"]`));
-  if (!winnerTiles.length) return;
-
-  stopShuffleStripLoop();
+function beginShuffleSettle({ room, winnerId }) {
+  if (!winnerId || !state.localStrip.isAnimating || state.localStrip.isSettling) return;
   state.localStrip.isSettling = true;
   state.localStrip.winnerId = winnerId;
+  clearShuffleAutoStopTimer();
+  clearShuffleStepTimer();
 
-  const minTravel = metrics.tilePitch * (4 + Math.floor(Math.random() * 3));
-  const currentOffset = state.localStrip.offsetPx;
-  let chosenTile = null;
-  let targetOffset = Number.POSITIVE_INFINITY;
-
-  winnerTiles.forEach((tile) => {
-    const center = tile.offsetLeft + tile.offsetWidth / 2;
-    const candidate = center - metrics.stageCenter;
-    if (candidate > currentOffset + minTravel && candidate < targetOffset) {
-      targetOffset = candidate;
-      chosenTile = tile;
-    }
-  });
-
-  if (!chosenTile) {
-    const fallback = winnerTiles[winnerTiles.length - 1];
-    chosenTile = fallback;
-    targetOffset = fallback.offsetLeft + fallback.offsetWidth / 2 - metrics.stageCenter;
+  const finalIndex = pickFinalIndexForWinner(room, winnerId);
+  if (finalIndex == null) {
+    stopShuffleStripLoop();
+    return;
   }
+  state.localStrip.finalIndex = finalIndex;
 
-  const jitter = (Math.random() * 8) - 4;
-  const settleDuration = 920 + Math.floor(Math.random() * 340);
-  const finalOffset = Math.max(currentOffset, targetOffset + jitter);
-  state.localStrip.targetOffsetPx = finalOffset;
-  state.localStrip.winnerTileIndex = Number(chosenTile.dataset.tileIndex || 0);
+  const distance = clockwiseDistance(state.localStrip.activeIndex, finalIndex);
+  const extraSteps = SHUFFLE_SETTLE_MIN_STEPS + Math.floor(Math.random() * 5);
+  const totalSteps = distance + extraSteps;
 
-  track.style.transition = `transform ${settleDuration}ms cubic-bezier(0.12, 0.86, 0.16, 1)`;
+  const step = (stepIndex, delay) => {
+    if (stepIndex >= totalSteps) {
+      finalizeShuffleSelection({ room, winnerId, finalIndex });
+      return;
+    }
+    state.localStrip.stepTimer = setTimeout(() => {
+      state.localStrip.activeIndex = nextClockwiseIndex(state.localStrip.activeIndex);
+      paintShuffleSelection();
+      step(stepIndex + 1, Math.min(delay + 22, 260));
+    }, delay);
+  };
+  step(0, 112);
+}
 
-  let settled = false;
-  const finalize = () => {
-    if (settled) return;
-    settled = true;
-    track.style.transition = "none";
-    state.localStrip.offsetPx = finalOffset;
-    state.localStrip.isSettling = false;
+function scheduleShuffleAutoStop(room, attempt = 0) {
+  clearShuffleAutoStopTimer();
+  state.localStrip.autoStopTimer = setTimeout(() => {
+    state.localStrip.autoStopTimer = null;
+    if (!state.room || state.room !== room || state.localStrip.isSettling || !state.localStrip.isAnimating) return;
 
-    if (isLocalMode()) {
-      state.localHasSpun = true;
-      state.room.round.pickerId = winnerId;
-      state.room.round.firstPlayerId = winnerId;
-      state.room.round.hasPickedStarter = true;
-      state.room.round.status = "shuffling";
-      state.room.round.shuffleAt = Date.now();
-      state.room.updatedAt = Date.now();
-      renderRoom();
-      const chosenGameId = state.room.round.resolvedGameId;
-      clearTimeout(state.shuffleTimer);
-      state.shuffleTimer = setTimeout(() => {
-        if (!chosenGameId || state.activeScreen !== "shuffle") return;
-        startLocalGame(chosenGameId);
-      }, 1200);
+    const winnerId = resolveStopWinner(room);
+    if (winnerId) {
+      beginShuffleSettle({ room, winnerId });
       return;
     }
 
+    if (attempt < 3) {
+      scheduleShuffleAutoStop(room, attempt + 1);
+      return;
+    }
+
+    stopShuffleStripLoop();
+    showToast("Couldn't pick a starter. Try again.");
     renderRoom();
-  };
-
-  const onTransitionEnd = () => finalize();
-  track.addEventListener("transitionend", onTransitionEnd, { once: true });
-  setTimeout(finalize, settleDuration + 120);
-
-  requestAnimationFrame(() => {
-    applyShuffleStripTransform(track, finalOffset);
-  });
+  }, attempt === 0 ? SHUFFLE_AUTO_STOP_MS : 240);
 }
 
 function startWheelSpin() {
   if (!state.room) return;
   const stage = document.getElementById("shuffle-strip-stage");
-  const track = document.getElementById("shuffle-strip-track");
-  if (!stage || !track) return;
+  if (!stage) return;
   const players = getLocalPlayers(state.room);
   if (players.length < 2) return;
   const canSpin = state.room.round?.status === "shuffling" && Boolean(state.room.round?.resolvedGameId);
-  if (!canSpin || state.localStrip.isSettling) return;
-  if (isLocalMode() && state.localHasSpun && !state.localStrip.isLooping) return;
+  if (!canSpin || state.localStrip.isAnimating || state.localStrip.isSettling) return;
+  if (isLocalMode() && state.localHasSpun) return;
 
-  if (state.localStrip.isLooping) {
-    const winnerId = resolveStopWinner(state.room);
-    if (!winnerId) {
-      showToast("Still deciding who starts.");
-      return;
-    }
-    settleShuffleStrip({ room: state.room, winnerId });
-    return;
-  }
-
-  renderStripTiles(state.room);
-  startShuffleStripLoop(stage, track);
+  renderShuffleGrid(state.room);
+  beginShuffleSpin(state.room);
   renderRoom();
 }
 
@@ -1710,6 +1906,8 @@ function setup() {
 
   initModeToggle();
   initSettingsModal();
+  registerServiceWorker();
+  initInstallPromptHandling();
   state.localRejoinSnapshot = loadLocalRejoinSnapshot();
 
   const updateHostPicker = () => updateFruitPicker(hostPicker, state.hostFruit);
@@ -1942,8 +2140,7 @@ function setup() {
   }
 
   document.getElementById("clear-rejoin").addEventListener("click", () => {
-    state.lastRoomCode = null;
-    localStorage.removeItem("multipass_last_room");
+    clearOnlineRejoinData();
     updateRejoinCard();
   });
 
@@ -2029,12 +2226,31 @@ function initSettingsModal() {
 function updateRejoinCard() {
   const card = document.getElementById("rejoin-card");
   const codeEl = document.getElementById("rejoin-code");
-  if (!card || !codeEl) return;
+  const startedEl = document.getElementById("online-rejoin-started");
+  if (!card || !codeEl || !startedEl) return;
   if (state.lastRoomCode) {
     codeEl.textContent = state.lastRoomCode;
+    startedEl.textContent = formatStartedAgo(state.lastRoomStartedAt);
     card.classList.remove("hidden");
+    card.classList.add("has-alert");
   } else {
     card.classList.add("hidden");
+    card.classList.remove("has-alert");
+  }
+  updateLandingRejoinIndicators();
+}
+
+function updateLandingRejoinIndicators() {
+  const hasLocalRejoin = Boolean(state.localRejoinSnapshot || loadLocalRejoinSnapshot());
+  const hasOnlineRejoin = Boolean(state.lastRoomCode);
+  if (landingSegmented) {
+    landingSegmented.classList.toggle("has-alert", hasLocalRejoin || hasOnlineRejoin);
+  }
+  if (landingTabLocal) {
+    landingTabLocal.classList.toggle("has-alert", hasLocalRejoin);
+  }
+  if (landingTabOnline) {
+    landingTabOnline.classList.toggle("has-alert", hasOnlineRejoin);
   }
 }
 
@@ -2046,17 +2262,14 @@ function updateLocalRejoinCard() {
   if (snapshot && isValidLocalRejoinSnapshot(snapshot)) {
     state.localRejoinSnapshot = snapshot;
     summary.textContent = getLocalRejoinLabel(snapshot);
-    card.classList.toggle("hidden", state.landingMode !== "local");
+    card.classList.remove("hidden");
     card.classList.add("has-alert");
-    if (landingSegmented) landingSegmented.classList.add("has-local-alert");
-    if (landingTabLocal) landingTabLocal.classList.add("has-alert");
-    return;
+  } else {
+    state.localRejoinSnapshot = null;
+    card.classList.add("hidden");
+    card.classList.remove("has-alert");
   }
-  state.localRejoinSnapshot = null;
-  card.classList.add("hidden");
-  card.classList.remove("has-alert");
-  if (landingSegmented) landingSegmented.classList.remove("has-local-alert");
-  if (landingTabLocal) landingTabLocal.classList.remove("has-alert");
+  updateLandingRejoinIndicators();
 }
 
 function setLandingMode(mode) {
@@ -2081,6 +2294,12 @@ function setLandingMode(mode) {
     landingTabOnline.tabIndex = isOnline ? 0 : -1;
   }
   updateLocalRejoinCard();
+  updateRejoinCard();
+  if (nextMode === "online") {
+    staggerLandingPanel(landingPanelOnline);
+  } else {
+    staggerLandingPanel(landingPanelLocal);
+  }
 }
 
 function resetJoinFlow() {

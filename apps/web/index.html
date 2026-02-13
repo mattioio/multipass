@@ -3,12 +3,17 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f14666" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>multipass</title>
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" />
     <link rel="stylesheet" media="screen" href="https://fontlibrary.org//face/office-code-pro" type="text/css" />
     <link rel="stylesheet" href="styles.css" />
   </head>
-  <body data-ui-variant="soft">
+  <body data-ui-variant="soft" data-screen="landing">
     <div id="app">
       <header class="hero">
         <div class="hero-top">
@@ -32,57 +37,59 @@
         <section id="screen-landing" class="screen active">
           <div class="landing-segmented-wrap">
             <div class="landing-segmented" role="tablist" aria-label="Choose play mode">
-              <button id="landing-tab-local" class="landing-segment active" role="tab" type="button" aria-selected="true" aria-controls="landing-card-local">
+              <button id="landing-tab-local" class="landing-segment active" role="tab" type="button" aria-selected="true" aria-controls="landing-panel-local">
                 Local
               </button>
-              <button id="landing-tab-online" class="landing-segment" role="tab" type="button" aria-selected="false" aria-controls="landing-card-online">
+              <button id="landing-tab-online" class="landing-segment" role="tab" type="button" aria-selected="false" aria-controls="landing-panel-online">
                 Online
               </button>
             </div>
           </div>
-          <div id="local-rejoin-card" class="rejoin-card hidden landing-rejoin-card">
-            <div class="landing-rejoin-content">
-              <h3>Resume local match</h3>
-              <p id="local-rejoin-summary" class="subtext">Started just now.</p>
-            </div>
-            <div class="button-row landing-rejoin-actions">
-              <button id="local-rejoin-room" class="glow-button banner-action">Resume</button>
-              <button id="local-clear-rejoin" class="ghost compact-action banner-action">Leave</button>
-            </div>
-          </div>
           <div class="landing-carousel">
             <div id="landing-track" class="landing-track" data-mode="local">
-              <div id="landing-card-local" class="card landing-card local-card" role="tabpanel" aria-labelledby="landing-tab-local">
-                <div class="landing-card-header landing-card-header-local" aria-hidden="true">
-                  <img src="/src/assets/local.svg" alt="" />
-                </div>
-                <h2 class="landing-title">Local play</h2>
-                <p class="subtext">Pass the device and play together on one screen.</p>
-                <button id="go-local" class="glow-button">Start</button>
-              </div>
-              <div id="landing-card-online" class="card landing-card online-card" role="tabpanel" aria-labelledby="landing-tab-online">
-                <div class="landing-card-header landing-card-header-online" aria-hidden="true">
-                  <img src="/src/assets/online.svg" alt="" />
-                </div>
-                <h2 class="landing-title">Online play</h2>
-                <p class="subtext">Host a room or join a friend with a 4-letter code.</p>
-                <div class="button-row">
-                  <button id="go-host" class="glow-button">Host a room</button>
-                  <button id="go-join" class="ghost">Join a room</button>
-                </div>
-                <div id="rejoin-card" class="rejoin-card hidden">
-                  <h3>Rejoin your room</h3>
-                  <p class="subtext">Jump back in where you left off.</p>
-                  <div class="rejoin-pill">
-                    <span class="room-label">Room code</span>
-                    <span id="rejoin-code" class="code-hero">----</span>
+              <section id="landing-panel-local" class="landing-panel" role="tabpanel" aria-labelledby="landing-tab-local">
+                <div id="local-rejoin-card" class="rejoin-card hidden landing-rejoin-card">
+                  <div class="landing-rejoin-content">
+                    <h3>Resume local match</h3>
+                    <p id="local-rejoin-summary" class="subtext">Started just now.</p>
                   </div>
+                  <div class="button-row landing-rejoin-actions">
+                    <button id="local-rejoin-room" class="glow-button banner-action">Resume</button>
+                    <button id="local-clear-rejoin" class="ghost compact-action banner-action">Leave</button>
+                  </div>
+                </div>
+                <div id="landing-card-local" class="card landing-card local-card">
+                  <div class="landing-card-header landing-card-header-local" aria-hidden="true">
+                    <img src="/src/assets/local.svg" alt="" />
+                  </div>
+                  <h2 class="landing-title">Local Co-Op</h2>
+                  <p class="subtext">Pass the device and play together on one screen.</p>
+                  <button id="go-local" class="glow-button">Start</button>
+                </div>
+              </section>
+              <section id="landing-panel-online" class="landing-panel" role="tabpanel" aria-labelledby="landing-tab-online">
+                <div id="rejoin-card" class="rejoin-card hidden landing-rejoin-card">
+                  <div class="landing-rejoin-content">
+                    <h3>Rejoin online room</h3>
+                    <p id="online-rejoin-summary" class="subtext">Room <strong id="rejoin-code">----</strong> · <span id="online-rejoin-started">Started a bit ago.</span></p>
+                  </div>
+                  <div class="button-row landing-rejoin-actions">
+                    <button id="rejoin-room" class="glow-button banner-action">Rejoin</button>
+                    <button id="clear-rejoin" class="ghost compact-action banner-action">Leave</button>
+                  </div>
+                </div>
+                <div id="landing-card-online" class="card landing-card online-card">
+                  <div class="landing-card-header landing-card-header-online" aria-hidden="true">
+                    <img src="/src/assets/online.svg" alt="" />
+                  </div>
+                  <h2 class="landing-title">Online play</h2>
+                  <p class="subtext">Host a room or join a friend with a 4-letter code.</p>
                   <div class="button-row">
-                    <button id="rejoin-room" class="glow-button">Rejoin now</button>
-                    <button id="clear-rejoin" class="ghost">Clear</button>
+                    <button id="go-host" class="glow-button">Host a room</button>
+                    <button id="go-join" class="ghost">Join a room</button>
                   </div>
                 </div>
-              </div>
+              </section>
             </div>
           </div>
         </section>
@@ -291,10 +298,9 @@
             <div id="shuffle-display" class="shuffle-display wheel-stage">
               <div class="shuffle-strip-wrap">
                 <div id="shuffle-strip-stage" class="shuffle-strip-stage" aria-label="Player starter picker">
-                  <div id="shuffle-strip-track" class="shuffle-strip-track"></div>
-                  <div id="shuffle-lens" class="shuffle-lens" aria-hidden="true"></div>
+                  <div id="shuffle-grid" class="shuffle-grid" aria-hidden="true"></div>
                 </div>
-                <button id="shuffle-spin" class="wheel-spin-button" type="button" aria-label="Start or stop the starter picker">
+                <button id="shuffle-spin" class="glow-button" type="button" aria-label="Spin to choose who starts">
                   <span class="wheel-spin-label">Spin</span>
                 </button>
               </div>
@@ -332,12 +338,7 @@
           </div>
 
           <div class="game-panel">
-            <div id="turn-indicator" class="turn-indicator">
-              <span id="turn-emoji" class="turn-emoji" aria-hidden="true">
-                <img src="/src/assets/player.svg" alt="" />
-              </span>
-              <span id="turn-text" class="turn-text">Pick a game to start</span>
-            </div>
+            <div id="turn-indicator" class="turn-indicator turn-passive" aria-live="polite"></div>
             <div id="ttt-board" class="ttt-board"></div>
             <button id="new-round" class="ghost hidden">New round</button>
           </div>
