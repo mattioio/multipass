@@ -1,4 +1,5 @@
 const JOIN_HASH = "#join";
+const LEGACY_LANDING_HASH = "#landing";
 
 export function normalizeRoomCode(rawCode) {
   return String(rawCode || "")
@@ -22,6 +23,13 @@ export function parseScreenRoute(hash, hashToScreen) {
     return {
       screen: "join",
       joinCode: normalizedJoinCode.length === 4 ? normalizedJoinCode : null
+    };
+  }
+
+  if (routeHash === LEGACY_LANDING_HASH) {
+    return {
+      screen: "landing",
+      joinCode: null
     };
   }
 

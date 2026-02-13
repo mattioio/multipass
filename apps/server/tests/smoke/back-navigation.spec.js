@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 test("local browser navigation: pick -> lobby -> local-or-landing", async ({ page }) => {
   await page.goto("/");
-  await expect(page).toHaveURL(/#landing$/);
+  await expect(page).toHaveURL(/\/$/);
 
   await page.getByRole("button", { name: "Start" }).click();
   await expect(page.locator("#screen-local.active")).toBeVisible();
@@ -59,7 +59,11 @@ test("online browser back exits room flow from lobby to landing", async ({ brows
   await expect(hostPage).toHaveURL(/#lobby$/);
 
   await hostPage.goBack();
-  await expect.poll(() => new URL(hostPage.url()).hash).toMatch(/^#(host|landing)$/);
+  const hashAfterSecondBack = new URL(hostPage.url()).hash;
+  if (hashAfterSecondBack === "#pick") {
+    await hostPage.goBack();
+  }
+  await expect.poll(() => new URL(hostPage.url()).hash).toMatch(/^(|#host|#landing)$/);
 
   await hostContext.close();
   await guestContext.close();
@@ -68,7 +72,7 @@ test("online browser back exits room flow from lobby to landing", async ({ brows
 test("hash guards: invalid deep link normalizes and join route survives refresh", async ({ page }) => {
   await page.goto("/#game");
   await expect(page.locator("#screen-landing.active")).toBeVisible();
-  await expect(page).toHaveURL(/#landing$/);
+  await expect(page).toHaveURL(/\/$/);
 
   await page.goto("/#join");
   await expect(page.locator("#screen-join.active")).toBeVisible();

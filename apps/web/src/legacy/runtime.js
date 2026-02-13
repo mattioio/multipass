@@ -19,7 +19,7 @@ const ONLINE_REJOIN_AT_KEY = "multipass_last_room_started_at";
 const ONLINE_UI_PREFS_KEY = "multipass_online_ui_prefs";
 const SEAT_TOKEN_KEY = "multipass_seat_token";
 const SCREEN_TO_HASH = Object.freeze({
-  landing: "#landing",
+  landing: "",
   local: "#local",
   host: "#host",
   join: "#join",

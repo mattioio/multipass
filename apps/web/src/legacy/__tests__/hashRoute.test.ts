@@ -2,7 +2,6 @@ import { normalizeRoomCode, parseScreenRoute } from "../hashRoute.js";
 
 describe("hash route parser", () => {
   const hashToScreen = {
-    "#landing": "landing",
     "#join": "join",
     "#host": "host"
   };
@@ -36,6 +35,13 @@ describe("hash route parser", () => {
   it("parses non-join hashes via map", () => {
     expect(parseScreenRoute("#host", hashToScreen)).toEqual({
       screen: "host",
+      joinCode: null
+    });
+  });
+
+  it("supports legacy #landing route without requiring map entry", () => {
+    expect(parseScreenRoute("#landing", hashToScreen)).toEqual({
+      screen: "landing",
       joinCode: null
     });
   });
