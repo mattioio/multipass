@@ -22,6 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       VITE_WS_URL: wss://api.loreandorder.com
+      VITE_BASE_PATH: /
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -43,6 +44,14 @@ jobs:
             exit 1
           fi
           echo "Using VITE_WS_URL=$VITE_WS_URL"
+
+      - name: Assert production base path
+        run: |
+          if [ -z "$VITE_BASE_PATH" ]; then
+            echo "VITE_BASE_PATH is required for GitHub Pages builds."
+            exit 1
+          fi
+          echo "Using VITE_BASE_PATH=$VITE_BASE_PATH"
 
       - name: Build web app
         run: |
