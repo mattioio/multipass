@@ -26,7 +26,7 @@ body::before {
   opacity: var(--bg-texture-opacity);
   mix-blend-mode: var(--bg-texture-blend);
   animation: bg-texture-scroll var(--bg-texture-speed) linear infinite;
-  transform: rotate(0deg);
+  transform: rotate(-3deg);
   transform-origin: center;
   will-change: background-position, transform;
   /* Confine moving texture to center; edges/corners fully masked out */
