@@ -36,6 +36,7 @@ const SHUFFLE_AUTO_STOP_MS = 2200;
 const SHUFFLE_STEP_MS = 115;
 const SHUFFLE_SETTLE_MIN_STEPS = 7;
 const LEGACY_BOOTSTRAP_FLAG = "__multipassLegacyInitialized";
+const PROD_WS_FALLBACK_URL = "wss://api.loreandorder.com";
 
 function createInitialLocalStripState() {
   return {
@@ -418,30 +419,47 @@ function initInstallPromptHandling() {
   });
 }
 
+function logWs(message, details) {
+  if (typeof details === "undefined") {
+    console.info(`[multipass/ws] ${message}`);
+    return;
+  }
+  console.info(`[multipass/ws] ${message}`, details);
+}
+
 function getWebSocketUrl() {
+  // 1) Build-time production override from CI/deploy.
   const envOverride = typeof import.meta !== "undefined" && import.meta.env
     ? import.meta.env.VITE_WS_URL
     : null;
   if (envOverride) return envOverride;
+  // 2) Local override for live debugging in browser.
   const override = window.localStorage?.getItem("multipass_ws_url");
   if (override) return override;
+  // 3) Dev fallback when running Vite + local API server.
   if (typeof import.meta !== "undefined" && import.meta.env?.DEV) {
     const protocol = window.location.protocol === "https:" ? "wss" : "ws";
     return `${protocol}://${window.location.hostname}:3001`;
   }
+  // 4) Legacy localhost fallback if app is served by local static host.
   const host = window.location.hostname;
   if (host === "localhost" || host === "127.0.0.1") {
     const protocol = window.location.protocol === "https:" ? "wss" : "ws";
     return `${protocol}://${window.location.host}`;
   }
-  return "wss://api.loreandorder.com";
+  return PROD_WS_FALLBACK_URL;
 }
 
 function connect() {
+  const wsUrl = getWebSocketUrl();
+  let hasConnected = false;
+  logWs(`connecting to ${wsUrl}`);
   const socket = wsClient.connect();
   dispatch(actions.wsSet(socket));
 
   wsClient.subscribe("open", () => {
+    hasConnected = true;
+    logWs("open");
     if (state.lastRoomCode && state.mode === "online") {
       dispatch(actions.autoJoinCodeSet(state.lastRoomCode));
       send({
@@ -568,7 +586,18 @@ function connect() {
     }
   });
 
-  wsClient.subscribe("close", () => {
+  wsClient.subscribe("error", (event) => {
+    logWs("error", event);
+  });
+
+  wsClient.subscribe("close", (event) => {
+    logWs(
+      `close code=${event?.code ?? "unknown"} reason=${event?.reason || "n/a"} clean=${Boolean(event?.wasClean)}`
+    );
+    if (!hasConnected) {
+      showToast("Could not connect to rooms. Check network/backend and retry.");
+      return;
+    }
     showToast("Disconnected. Refresh to reconnect.");
   });
 }

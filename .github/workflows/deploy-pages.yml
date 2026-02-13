@@ -20,6 +20,8 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
+    env:
+      VITE_WS_URL: wss://api.loreandorder.com
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -27,10 +29,30 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Assert production websocket URL
+        run: |
+          if [ -z "$VITE_WS_URL" ]; then
+            echo "VITE_WS_URL is required for GitHub Pages builds."
+            exit 1
+          fi
+          echo "Using VITE_WS_URL=$VITE_WS_URL"
+
+      - name: Build web app
+        run: |
+          npm --prefix apps/web ci
+          npm --prefix apps/web run build
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: apps/web
+          path: apps/web/dist
 
       - name: Deploy to GitHub Pages
         id: deployment

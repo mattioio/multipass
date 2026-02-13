@@ -28,6 +28,19 @@ If you want to run only the API server, use:
 
 Playwright will boot both required servers automatically.
 
+## Production WebSocket endpoint
+- GitHub Pages production builds inject `VITE_WS_URL=wss://api.loreandorder.com`.
+- The app connects to that endpoint for online room features (host/join/rejoin).
+
+Quick check in browser DevTools console:
+- `new WebSocket("wss://api.loreandorder.com")`
+- Expected result: socket opens (no immediate close/error).
+
+Temporary browser override (for debugging):
+- `localStorage.setItem("multipass_ws_url", "wss://your-endpoint.example.com")`
+- Refresh the page after setting the override.
+- To clear the override: `localStorage.removeItem("multipass_ws_url")`
+
 ## Project structure
 - `apps/web`: React + TypeScript + Vite frontend
 - `apps/server`: Node HTTP + WebSocket server, in-memory rooms
