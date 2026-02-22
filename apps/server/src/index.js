@@ -318,13 +318,11 @@ function getOtherPlayerId(room, playerId) {
 function resolveFirstPlayerId(room) {
   const players = getRoomPlayers(room);
   if (players.length < 2) return null;
-  if (!room.round.hasPickedStarter) {
-    return players[Math.floor(Math.random() * players.length)].id;
-  }
+  const hostId = room.players.host?.id || players[0]?.id || null;
   if (!room.round.firstPlayerId) {
-    return players[0].id;
+    return hostId;
   }
-  return getOtherPlayerId(room, room.round.firstPlayerId) || players[0].id;
+  return getOtherPlayerId(room, room.round.firstPlayerId) || hostId;
 }
 
 function startRoundFromResolvedGame(room) {
@@ -344,15 +342,9 @@ function startRoundFromResolvedGame(room) {
   room.endRequest = null;
   room.round.firstPlayerId = firstPlayerId;
   room.round.pickerId = firstPlayerId;
-
-  if (!room.round.hasPickedStarter) {
-    room.round.hasPickedStarter = true;
-    room.round.status = "shuffling";
-    room.round.shuffleAt = now();
-  } else {
-    room.round.status = "playing";
-    room.round.shuffleAt = null;
-  }
+  room.round.hasPickedStarter = true;
+  room.round.status = "playing";
+  room.round.shuffleAt = null;
   return { ok: true };
 }
 
@@ -584,20 +576,8 @@ wss.on("connection", (ws) => {
         return;
       }
 
-      const roomCode = room.code;
-      const shuffleAt = room.round.shuffleAt;
       touchRoom(room);
       broadcastRoom(room);
-      if (room.round.status === "shuffling" && shuffleAt) {
-        setTimeout(() => {
-          const nextRoom = rooms.get(roomCode);
-          if (!nextRoom || nextRoom.round?.status !== "shuffling") return;
-          if (nextRoom.round.shuffleAt !== shuffleAt) return;
-          nextRoom.round.status = "playing";
-          touchRoom(nextRoom);
-          broadcastRoom(nextRoom);
-        }, 2200);
-      }
       return;
     }
 

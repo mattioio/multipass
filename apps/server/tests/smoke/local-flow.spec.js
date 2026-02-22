@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("local happy path: setup -> lobby -> pick -> shuffle -> game", async ({ page }) => {
+test("local happy path: setup -> lobby -> pick -> game", async ({ page }) => {
   await page.goto("/");
   await page.waitForFunction(() => window.__multipassLegacyReady === true);
 
@@ -53,10 +53,15 @@ test("local happy path: setup -> lobby -> pick -> shuffle -> game", async ({ pag
   await expect(page.locator("#screen-pick.active")).toBeVisible();
   await page.getByRole("button", { name: "Play Tic Tac Toe", exact: true }).click();
 
-  await expect(page.locator("#screen-shuffle.active")).toBeVisible();
-  await page.locator("#shuffle-spin").click();
-
   await expect(page.locator("#screen-game.active")).toBeVisible();
+  const firstRoundStarter = await page.evaluate(() => {
+    const room = window.__multipassStore.getState().room;
+    return {
+      firstPlayerId: room.round?.firstPlayerId || null,
+      hostId: room.players?.host?.id || null
+    };
+  });
+  expect(firstRoundStarter.firstPlayerId).toBe(firstRoundStarter.hostId);
   await expect(page.locator("#ttt-board .ttt-cell")).toHaveCount(9);
   await expect(page.locator("#ttt-board")).toHaveClass(/game-board-highlight/);
   await expect(page.locator("#ttt-board")).toHaveClass(/theme-(red|yellow|green|blue)/);
@@ -74,6 +79,17 @@ test("local happy path: setup -> lobby -> pick -> shuffle -> game", async ({ pag
   await expect(page.locator("#winner-score-columns .score-broadcast-row")).toHaveCount(1);
   await expect(page.locator("#winner-score-columns .score-role")).toHaveCount(0);
   await expect(page.locator("#winner-score-columns .score-column")).toHaveCount(0);
+
+  await page.locator("#winner-play-again").click();
+  await expect(page.locator("#screen-pick.active")).toBeVisible();
+  const secondRoundStarter = await page.evaluate(() => {
+    const room = window.__multipassStore.getState().room;
+    return {
+      firstPlayerId: room.round?.firstPlayerId || null,
+      guestId: room.players?.guest?.id || null
+    };
+  });
+  expect(secondRoundStarter.firstPlayerId).toBe(secondRoundStarter.guestId);
 });
 
 test("local tic-tac-toe supports touch drag preview + release, tap, and cancel", async ({ page }) => {
@@ -92,8 +108,6 @@ test("local tic-tac-toe supports touch drag preview + release, tap, and cancel",
   await page.getByRole("button", { name: "Pick a game" }).click();
   await expect(page.locator("#screen-pick.active")).toBeVisible();
   await page.getByRole("button", { name: "Play Tic Tac Toe", exact: true }).click();
-  await expect(page.locator("#screen-shuffle.active")).toBeVisible();
-  await page.locator("#shuffle-spin").click();
   await expect(page.locator("#screen-game.active")).toBeVisible();
 
   const board = page.locator("#ttt-board");
@@ -253,7 +267,7 @@ test("landing supports swipe between local and online modes", async ({ page }) =
   await expect(page.locator("#landing-tab-local")).toHaveAttribute("aria-selected", "true");
 });
 
-test("local non-default registry game: pick -> shuffle -> game", async ({ page }) => {
+test("local non-default registry game: pick -> game", async ({ page }) => {
   await page.goto("/");
   await page.waitForFunction(() => window.__multipassLegacyReady === true);
 
@@ -274,8 +288,6 @@ test("local non-default registry game: pick -> shuffle -> game", async ({ page }
   await expect(page.locator("#screen-pick.active")).toBeVisible();
   await page.getByRole("button", { name: "Play Tic Tac Toe Blitz" }).click();
 
-  await expect(page.locator("#screen-shuffle.active")).toBeVisible();
-  await page.locator("#shuffle-spin").click();
   await expect(page.locator("#screen-game.active")).toBeVisible();
   await expect(page.locator("#ttt-board .ttt-cell")).toHaveCount(9);
 });
@@ -352,8 +364,6 @@ test("battleships uses a single board with tap-then-confirm fire", async ({ page
   await page.getByRole("button", { name: "Pick a game" }).click();
   await expect(page.locator("#screen-pick.active")).toBeVisible();
   await page.getByRole("button", { name: "Play Battleships" }).click();
-  await expect(page.locator("#screen-shuffle.active")).toBeVisible();
-  await page.locator("#shuffle-spin").click();
   await expect(page.locator("#screen-game.active")).toBeVisible();
 
   await expect(page.locator("#battleship-layout")).not.toHaveClass(/hidden/);

@@ -11,15 +11,15 @@ export function renderPickHint({ room, state, isLocalMode, getGameName }) {
   if (!hint) return;
 
   if (isLocalMode()) {
-    if (room.round?.status === "shuffling") {
-      hint.textContent = "Game chosen. Spin to decide who starts.";
+    const localStarterId = room.round?.firstPlayerId || null;
+    const localStarter = [room.players?.host, room.players?.guest]
+      .filter(Boolean)
+      .find((player) => player.id === localStarterId);
+    if (!localStarter) {
+      hint.textContent = "Pick a game. Player 1 starts the first round.";
       return;
     }
-    if (state.localHasSpun) {
-      hint.textContent = "Pick the next game.";
-      return;
-    }
-    hint.textContent = "Pick a game, then spin for first turn.";
+    hint.textContent = `Pick the next game. ${localStarter.name || "Player 1"} starts this round.`;
     return;
   }
 
@@ -34,8 +34,11 @@ export function renderPickHint({ room, state, isLocalMode, getGameName }) {
   const hostName = room.players.host?.name || "Host";
   const guestName = room.players.guest?.name || "Guest";
 
-  if (room.round?.status === "shuffling") {
-    hint.textContent = `Game: ${getGameName(room, resolved)}. Choosing who starts...`;
+  if (resolved && room.round?.firstPlayerId) {
+    const starter = room.round.firstPlayerId === room.players.host?.id
+      ? room.players.host
+      : room.players.guest;
+    hint.textContent = `Game: ${getGameName(room, resolved)}. ${starter?.name || "Player 1"} starts.`;
     return;
   }
 

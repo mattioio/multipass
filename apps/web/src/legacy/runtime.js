@@ -48,19 +48,14 @@ const SCREEN_TO_HASH = Object.freeze({
   wait: "#wait",
   game: "#game",
   pass: "#pass",
-  shuffle: "#shuffle",
   winner: "#winner",
   devkit: "#devkit"
 });
 const HASH_TO_SCREEN = Object.freeze(
   Object.fromEntries(Object.entries(SCREEN_TO_HASH).map(([screen, hash]) => [hash, screen]))
 );
-const ROOM_REQUIRED_SCREENS = new Set(["lobby", "pick", "wait", "game", "pass", "shuffle", "winner"]);
-const ONLINE_HERO_ROOM_SCREENS = new Set(["lobby", "pick", "wait", "game", "shuffle", "winner"]);
-const SHUFFLE_CLOCKWISE_ORDER = [0, 1, 3, 2];
-const SHUFFLE_AUTO_STOP_MS = 2200;
-const SHUFFLE_STEP_MS = 115;
-const SHUFFLE_SETTLE_MIN_STEPS = 7;
+const ROOM_REQUIRED_SCREENS = new Set(["lobby", "pick", "wait", "game", "pass", "winner"]);
+const ONLINE_HERO_ROOM_SCREENS = new Set(["lobby", "pick", "wait", "game", "winner"]);
 const LEGACY_BOOTSTRAP_FLAG = "__multipassLegacyInitialized";
 const PROD_WS_FALLBACK_URL = "wss://api.loreandorder.com";
 const IS_DEV_BUILD = Boolean(typeof import.meta !== "undefined" && import.meta.env?.DEV);
@@ -83,19 +78,6 @@ const FIXED_FOOTER_SCREEN_SLOT_MAP = Object.freeze({
   winner: "winner-play-again"
 });
 const HERO_ACTION_BUTTON_IDS = ["hero-left-action", "hero-left-action-2", "hero-left-action-3"];
-
-function createInitialLocalStripState() {
-  return {
-    isAnimating: false,
-    isSettling: false,
-    activeIndex: 0,
-    finalIndex: null,
-    winnerId: null,
-    stepTimer: null,
-    autoStopTimer: null,
-    gridSignature: ""
-  };
-}
 
 function createInitialBoardGestureState() {
   return {
@@ -143,7 +125,6 @@ function createInitialState() {
     autoJoinCode: null,
     recentLeftRoomCode: null,
     recentLeftRoomUntil: 0,
-    shuffleTimer: null,
     lastLeaderId: null,
     lastWinSignature: null,
     hostAvatar: null,
@@ -162,7 +143,6 @@ function createInitialState() {
     settingsLastFocus: null,
     deferredInstallPrompt: null,
     isAppInstalled: false,
-    localHasSpun: false,
     localPrivacy: createInitialLocalPrivacyState(),
     localBattleshipOrientation: "h",
     localBattleshipPendingTargetIndex: null,
@@ -172,7 +152,6 @@ function createInitialState() {
     localHonorifics: { p1: "mr", p2: "mr" },
     landingMode: "local",
     devkitReturnScreen: "landing",
-    localStrip: createInitialLocalStripState(),
     boardGesture: createInitialBoardGestureState(),
     landingGesture: createInitialLandingGestureState()
   };
@@ -194,7 +173,6 @@ const screens = {
   wait: document.getElementById("screen-wait"),
   game: document.getElementById("screen-game"),
   pass: document.getElementById("screen-pass"),
-  shuffle: document.getElementById("screen-shuffle"),
   winner: document.getElementById("screen-winner"),
   devkit: document.getElementById("screen-devkit")
 };
@@ -674,7 +652,7 @@ function shouldIgnoreRoomState(roomCode) {
 function normalizeTargetScreen(screen) {
   if (!screen || !(screen in screens) || !screens[screen]) return "landing";
   if (ROOM_REQUIRED_SCREENS.has(screen) && !state.room) return "landing";
-  if (screen === "game" && (!state.room?.game || state.room.round?.status === "shuffling")) {
+  if (screen === "game" && !state.room?.game) {
     return state.room ? resolveScreen(state.room) : "landing";
   }
   if (screen === "pass" && !shouldShowLocalPassScreen(state.room, state.localPrivacy)) {
@@ -684,9 +662,6 @@ function normalizeTargetScreen(screen) {
     const gameState = state.room?.game?.state;
     const ended = Boolean(gameState?.winnerId || gameState?.draw);
     return ended ? "winner" : (state.room ? resolveScreen(state.room) : "landing");
-  }
-  if (screen === "shuffle" && state.room?.round?.status !== "shuffling") {
-    return state.room ? resolveScreen(state.room) : "landing";
   }
   return screen;
 }
@@ -823,7 +798,6 @@ function getPrimaryHeroActionConfig() {
   if (isLocalMode() && state.room && (
     state.activeScreen === "lobby" ||
     state.activeScreen === "pick" ||
-    state.activeScreen === "shuffle" ||
     state.activeScreen === "game" ||
     state.activeScreen === "pass" ||
     state.activeScreen === "winner"
@@ -1106,9 +1080,6 @@ function connect() {
       }
       updateRejoinCard();
       const nextScreen = resolveScreen(state.room);
-      if (nextScreen === "shuffle" && state.activeScreen !== "shuffle") {
-        showScreen("shuffle", { history: "replace" });
-      }
       renderRoom();
       const endSignature = getEndSignature(state.room);
       if (endSignature && endSignature !== state.lastWinSignature) {
@@ -1118,15 +1089,6 @@ function connect() {
           showScreen("winner", { history: "replace" });
           return;
         }
-      }
-      if (state.activeScreen === "shuffle" && nextScreen === "game") {
-        clearTimeout(state.shuffleTimer);
-        state.shuffleTimer = setTimeout(() => {
-          if (state.activeScreen === "shuffle") {
-            showScreen("game", { history: "replace" });
-          }
-        }, 900);
-        return;
       }
       showScreen(nextScreen, { history: "replace" });
       return;
@@ -1437,14 +1399,12 @@ function isValidLocalRejoinSnapshot(snapshot) {
   return true;
 }
 
-function saveLocalRejoinSnapshot(room, meta = {}) {
+function saveLocalRejoinSnapshot(room) {
   if (!room) return;
   const snapshot = {
     version: 1,
     mode: "local",
     savedAt: Date.now(),
-    localHasSpun: Boolean(meta.localHasSpun ?? state.localHasSpun),
-    localShuffleIndex: Number.isFinite(meta.localShuffleIndex) ? meta.localShuffleIndex : state.localStrip.activeIndex,
     localPrivacy: {
       viewerPlayerId: state.localPrivacy.viewerPlayerId || null,
       pendingViewerPlayerId: state.localPrivacy.pendingViewerPlayerId || null,
@@ -1499,11 +1459,6 @@ function hydrateLocalFromSnapshot(snapshot) {
   state.keepPickOpen = false;
   state.lastLeaderId = null;
   state.lastWinSignature = null;
-  state.localHasSpun = Boolean(
-    snapshot.localHasSpun ??
-    snapshot.room.round?.hasPickedStarter ??
-    snapshot.room.round?.firstPlayerId
-  );
   state.localPrivacy = {
     ...createInitialLocalPrivacyState(getDefaultLocalViewerId(snapshot.room)),
     ...(snapshot.localPrivacy && typeof snapshot.localPrivacy === "object" ? snapshot.localPrivacy : {})
@@ -1514,12 +1469,6 @@ function hydrateLocalFromSnapshot(snapshot) {
     ? snapshot.localBattleshipPendingTargetIndex
     : null;
   state.localBattleshipLastPhase = snapshot.room?.game?.state?.phase || null;
-  stopShuffleStripLoop();
-  state.localStrip = {
-    ...createInitialLocalStripState(),
-    activeIndex: Number.isFinite(snapshot.localShuffleIndex) ? snapshot.localShuffleIndex : 0,
-    winnerId: snapshot.room.round?.firstPlayerId || snapshot.room.round?.pickerId || null
-  };
   renderRoom();
   showScreen(resolveScreen(state.room), { history: "replace" });
 }
@@ -1589,11 +1538,8 @@ function advanceLocalRoundByAlternation() {
   if (!state.room) return;
   const players = getLocalPlayers(state.room);
   if (players.length < 2) return;
-  let next = null;
-  if (state.localHasSpun) {
-    const current = state.room.round?.firstPlayerId || state.room.round?.pickerId;
-    next = current ? getOtherLocalPlayerId(state.room, current) : players[0].id;
-  }
+  const current = state.room.round?.firstPlayerId || state.room.round?.pickerId;
+  const next = current ? getOtherLocalPlayerId(state.room, current) : players[0].id;
   state.room.round = {
     pickerId: next,
     firstPlayerId: next,
@@ -1602,9 +1548,8 @@ function advanceLocalRoundByAlternation() {
     hostGameId: null,
     guestGameId: null,
     resolvedGameId: null,
-    hasPickedStarter: Boolean(state.localHasSpun)
+    hasPickedStarter: Boolean(next)
   };
-  state.localStrip.winnerId = next;
   state.room.game = null;
   resetLocalPrivacy(state.room);
   state.localBattleshipPendingTargetIndex = null;
@@ -1694,14 +1639,6 @@ function startLocalRoundFromChoice(gameId) {
   state.localBattleshipPendingTargetIndex = null;
   state.localBattleshipLastPhase = null;
 
-  if (!state.localHasSpun) {
-    state.room.round.status = "shuffling";
-    state.room.round.shuffleAt = Date.now();
-    state.room.updatedAt = Date.now();
-    handleLocalUpdate();
-    return;
-  }
-
   if (!state.room.round.firstPlayerId) {
     const players = getLocalPlayers(state.room);
     const first = players[0]?.id || null;
@@ -1763,7 +1700,6 @@ function acknowledgeLocalPassHandoff() {
 
 function leaveRoom(options = {}) {
   const historyMode = options.history || "push";
-  stopShuffleStripLoop();
   if (isLocalMode()) {
     leaveLocalMatch({ saveForRejoin: false, history: historyMode });
     return;
@@ -1801,13 +1737,10 @@ function leaveLocalMatch({ saveForRejoin, history = "push" } = {}) {
   state.you = null;
   state.lastLeaderId = null;
   state.lastWinSignature = null;
-  state.localHasSpun = false;
   state.localPrivacy = createInitialLocalPrivacyState();
   state.localBattleshipOrientation = "h";
   state.localBattleshipPendingTargetIndex = null;
   state.localBattleshipLastPhase = null;
-  stopShuffleStripLoop();
-  state.localStrip = createInitialLocalStripState();
   document.body.removeAttribute("data-theme");
   updateLocalRejoinCard();
   showScreen("landing", { history });
@@ -1828,7 +1761,6 @@ function renderRoom() {
   const leaderId = getLeaderId([room.players.host, room.players.guest]);
 
   renderLobby(room);
-  renderShuffle(room);
   renderScoreboard(room, leaderId);
   renderWinner(room, leaderId, previousLeader);
   renderPickScreen(room);
@@ -2034,7 +1966,7 @@ function renderGameList(room) {
   const finished = Boolean(room.game?.state?.winnerId || room.game?.state?.draw);
   const gameActive = Boolean(room.game && !finished);
   const isPlayer = isLocalMode() || state.you?.role === "host" || state.you?.role === "guest";
-  const canPick = Boolean(isPlayer && room.players.host && room.players.guest && !gameActive && room.round?.status !== "shuffling");
+  const canPick = Boolean(isPlayer && room.players.host && room.players.guest && !gameActive);
   const hostChoiceId = room.round?.hostGameId || null;
   const guestChoiceId = room.round?.guestGameId || null;
   const resolvedGameId = room.round?.resolvedGameId || null;
@@ -2843,292 +2775,16 @@ function renderEndRequest(room) {
   });
 }
 
-function renderShuffle(room) {
-  const stage = document.getElementById("shuffle-strip-stage");
-  const grid = document.getElementById("shuffle-grid");
-  const spinButton = document.getElementById("shuffle-spin");
-  const result = document.getElementById("shuffle-result");
-  if (!stage || !grid || !spinButton || !result) return;
-
-  renderShuffleGrid(room);
-  paintShuffleSelection();
-
-  const picker = playerById(room, room.round?.pickerId || room.round?.firstPlayerId);
-  if (state.localStrip.isAnimating || state.localStrip.isSettling) {
-    result.textContent = "Spinning...";
-    result.classList.add("show");
-  } else if (room.round?.status === "shuffling") {
-    if (state.localHasSpun && picker) {
-      result.textContent = `${getDisplayPlayerName(picker, "Player")} starts`;
-      result.classList.add("show");
-    } else {
-      result.textContent = "";
-      result.classList.remove("show");
-    }
-  } else if (picker && room.round?.status === "playing") {
-    result.textContent = `${getDisplayPlayerName(picker, "Player")} starts`;
-    result.classList.add("show");
-  } else {
-    result.textContent = "";
-    result.classList.remove("show");
-  }
-
-  const localCanSpin = room.round?.status === "shuffling" && !state.localHasSpun && Boolean(room.round?.resolvedGameId);
-  const onlineCanSpin = room.round?.status === "shuffling" && Boolean(room.round?.resolvedGameId);
-  const canSpin = isLocalMode() ? localCanSpin : onlineCanSpin;
-  const shouldShow = canSpin || state.localStrip.isAnimating || state.localStrip.isSettling;
-  spinButton.classList.toggle("hidden", !shouldShow);
-  spinButton.disabled = state.localStrip.isAnimating || state.localStrip.isSettling || !canSpin;
-  const spinLabel = spinButton.querySelector(".wheel-spin-label");
-  if (spinLabel) {
-    spinLabel.textContent = "Spin";
-  }
-
-  if (!isLocalMode() && room.round?.status === "playing" && state.localStrip.isAnimating && !state.localStrip.isSettling) {
-    const winnerId = room.round?.pickerId || room.round?.firstPlayerId;
-    if (winnerId) beginShuffleSettle({ room, winnerId });
-  }
-}
-
-function paintShuffleSelection() {
-  const grid = document.getElementById("shuffle-grid");
-  if (!grid) return;
-  const cards = Array.from(grid.querySelectorAll(".shuffle-card"));
-  cards.forEach((card, index) => {
-    const isActive = index === state.localStrip.activeIndex;
-    const isFinal = state.localStrip.finalIndex === index && !state.localStrip.isAnimating && !state.localStrip.isSettling;
-    card.classList.toggle("is-active", isActive);
-    card.classList.toggle("is-final", isFinal);
-  });
-}
-
-function renderShuffleGrid(room) {
-  const grid = document.getElementById("shuffle-grid");
-  if (!grid) return;
-  const players = getLocalPlayers(room);
-  if (players.length < 2) {
-    grid.innerHTML = "";
-    grid.dataset.signature = "";
-    return;
-  }
-
-  const signature = players
-    .map((player) => `${player.id}:${player.theme || "none"}:${getPlayerHonorific(player, "mr")}`)
-    .join("|");
-  if (grid.dataset.signature === signature) return;
-  grid.dataset.signature = signature;
-  grid.innerHTML = "";
-
-  const assignment = [players[0], players[1], players[1], players[0]];
-  const fragment = document.createDocumentFragment();
-  for (let i = 0; i < 4; i += 1) {
-    const player = assignment[i];
-    const card = document.createElement("div");
-    card.className = `shuffle-card ${i === 0 || i === 3 ? "player-a" : "player-b"}${i === 1 || i === 3 ? " is-right" : ""}`;
-    card.dataset.cardIndex = String(i);
-    card.dataset.playerId = player.id;
-    card.setAttribute("aria-hidden", "true");
-
-    const avatar = document.createElement("img");
-    avatar.className = "shuffle-card-avatar";
-    avatar.src = getPlayerArtSrc(player);
-    avatar.alt = "";
-    avatar.setAttribute("aria-hidden", "true");
-    card.appendChild(avatar);
-
-    fragment.appendChild(card);
-  }
-  grid.appendChild(fragment);
-}
-
-function stopShuffleStripLoop() {
-  clearShuffleStepTimer();
-  clearShuffleAutoStopTimer();
-  state.localStrip.isAnimating = false;
-  state.localStrip.isSettling = false;
-}
-
-function clearShuffleAutoStopTimer() {
-  if (state.localStrip.autoStopTimer) {
-    clearTimeout(state.localStrip.autoStopTimer);
-    state.localStrip.autoStopTimer = null;
-  }
-}
-
-function clearShuffleStepTimer() {
-  if (state.localStrip.stepTimer) {
-    clearTimeout(state.localStrip.stepTimer);
-    state.localStrip.stepTimer = null;
-  }
-}
-
-function nextClockwiseIndex(index) {
-  const at = SHUFFLE_CLOCKWISE_ORDER.indexOf(index);
-  if (at < 0) return SHUFFLE_CLOCKWISE_ORDER[0];
-  return SHUFFLE_CLOCKWISE_ORDER[(at + 1) % SHUFFLE_CLOCKWISE_ORDER.length];
-}
-
-function clockwiseDistance(from, to) {
-  const start = SHUFFLE_CLOCKWISE_ORDER.indexOf(from);
-  const end = SHUFFLE_CLOCKWISE_ORDER.indexOf(to);
-  if (start < 0 || end < 0) return 0;
-  if (end >= start) return end - start;
-  return SHUFFLE_CLOCKWISE_ORDER.length - start + end;
-}
-
-function runShuffleStepLoop(intervalMs = SHUFFLE_STEP_MS) {
-  clearShuffleStepTimer();
-  if (!state.localStrip.isAnimating || state.localStrip.isSettling) return;
-  state.localStrip.stepTimer = setTimeout(() => {
-    state.localStrip.activeIndex = nextClockwiseIndex(state.localStrip.activeIndex);
-    paintShuffleSelection();
-    runShuffleStepLoop(intervalMs);
-  }, intervalMs);
-}
-
-function beginShuffleSpin(room) {
-  state.localStrip.isAnimating = true;
-  state.localStrip.isSettling = false;
-  state.localStrip.finalIndex = null;
-  state.localStrip.winnerId = null;
-  clearShuffleStepTimer();
-  clearShuffleAutoStopTimer();
-  runShuffleStepLoop();
-  scheduleShuffleAutoStop(room);
-}
-
-function pickFinalIndexForWinner(room, winnerId) {
-  const players = getLocalPlayers(room);
-  if (players.length < 2 || !winnerId) return null;
-  const forA = winnerId === players[0].id;
-  const choices = forA ? [0, 3] : [1, 2];
-  return choices[Math.floor(Math.random() * choices.length)];
-}
-
-function finalizeShuffleSelection({ room, winnerId, finalIndex }) {
-  clearShuffleStepTimer();
-  clearShuffleAutoStopTimer();
-
-  state.localStrip.isAnimating = false;
-  state.localStrip.isSettling = false;
-  state.localStrip.winnerId = winnerId;
-  state.localStrip.finalIndex = finalIndex;
-  state.localStrip.activeIndex = finalIndex;
-  paintShuffleSelection();
-
-  if (isLocalMode()) {
-    state.localHasSpun = true;
-    state.room.round.pickerId = winnerId;
-    state.room.round.firstPlayerId = winnerId;
-    state.room.round.hasPickedStarter = true;
-    state.room.round.status = "shuffling";
-    state.room.round.shuffleAt = Date.now();
-    state.room.updatedAt = Date.now();
-    renderRoom();
-    const chosenGameId = state.room.round.resolvedGameId;
-    clearTimeout(state.shuffleTimer);
-    state.shuffleTimer = setTimeout(() => {
-      if (!chosenGameId || state.activeScreen !== "shuffle") return;
-      startLocalGame(chosenGameId);
-    }, 1200);
-    return;
-  }
-
-  renderRoom();
-}
-
-function resolveStopWinner(room) {
-  if (isLocalMode()) {
-    const players = getLocalPlayers(room);
-    if (players.length < 2) return null;
-    const winner = Math.random() < 0.5 ? players[0] : players[1];
-    return winner.id;
-  }
-  return room.round?.pickerId || room.round?.firstPlayerId || null;
-}
-
-function beginShuffleSettle({ room, winnerId }) {
-  if (!winnerId || !state.localStrip.isAnimating || state.localStrip.isSettling) return;
-  state.localStrip.isSettling = true;
-  state.localStrip.winnerId = winnerId;
-  clearShuffleAutoStopTimer();
-  clearShuffleStepTimer();
-
-  const finalIndex = pickFinalIndexForWinner(room, winnerId);
-  if (finalIndex == null) {
-    stopShuffleStripLoop();
-    return;
-  }
-  state.localStrip.finalIndex = finalIndex;
-
-  const distance = clockwiseDistance(state.localStrip.activeIndex, finalIndex);
-  const extraSteps = SHUFFLE_SETTLE_MIN_STEPS + Math.floor(Math.random() * 5);
-  const totalSteps = distance + extraSteps;
-
-  const step = (stepIndex, delay) => {
-    if (stepIndex >= totalSteps) {
-      finalizeShuffleSelection({ room, winnerId, finalIndex });
-      return;
-    }
-    state.localStrip.stepTimer = setTimeout(() => {
-      state.localStrip.activeIndex = nextClockwiseIndex(state.localStrip.activeIndex);
-      paintShuffleSelection();
-      step(stepIndex + 1, Math.min(delay + 22, 260));
-    }, delay);
-  };
-  step(0, 112);
-}
-
-function scheduleShuffleAutoStop(room, attempt = 0) {
-  clearShuffleAutoStopTimer();
-  state.localStrip.autoStopTimer = setTimeout(() => {
-    state.localStrip.autoStopTimer = null;
-    if (!state.room || state.room !== room || state.localStrip.isSettling || !state.localStrip.isAnimating) return;
-
-    const winnerId = resolveStopWinner(room);
-    if (winnerId) {
-      beginShuffleSettle({ room, winnerId });
-      return;
-    }
-
-    if (attempt < 3) {
-      scheduleShuffleAutoStop(room, attempt + 1);
-      return;
-    }
-
-    stopShuffleStripLoop();
-    showToast("Couldn't pick a starter. Try again.");
-    renderRoom();
-  }, attempt === 0 ? SHUFFLE_AUTO_STOP_MS : 240);
-}
-
-function startWheelSpin() {
-  if (!state.room) return;
-  const stage = document.getElementById("shuffle-strip-stage");
-  if (!stage) return;
-  const players = getLocalPlayers(state.room);
-  if (players.length < 2) return;
-  const canSpin = state.room.round?.status === "shuffling" && Boolean(state.room.round?.resolvedGameId);
-  if (!canSpin || state.localStrip.isAnimating || state.localStrip.isSettling) return;
-  if (isLocalMode() && state.localHasSpun) return;
-
-  renderShuffleGrid(state.room);
-  beginShuffleSpin(state.room);
-  renderRoom();
-}
-
 function resolveScreen(room) {
   const finished = room.game?.state?.winnerId || room.game?.state?.draw;
   if (isLocalMode()) {
     if (finished) return "winner";
     if (shouldShowLocalPassScreen(room, state.localPrivacy)) return "pass";
-    if (room.round?.status === "shuffling") return "shuffle";
     if (room.game && !finished) return "game";
     if (room.round?.status === "waiting_game") return "lobby";
     return "lobby";
   }
   const preferred = getPreferredRoomScreen(room?.code);
-  if (room.round?.status === "shuffling") return "shuffle";
   if (room.game && !finished) return "game";
   if (finished) {
     const endSignature = getEndSignature(room);
@@ -3164,9 +2820,6 @@ function setup() {
     state.localHonorifics = { p1: "mr", p2: "mr" };
     state.localBattleshipPendingTargetIndex = null;
     state.localBattleshipLastPhase = null;
-    state.localHasSpun = false;
-    stopShuffleStripLoop();
-    state.localStrip = createInitialLocalStripState();
     updateLocalPickers();
     showScreen("local", { history: "push" });
   });
@@ -3379,11 +3032,6 @@ function setup() {
       seatToken: state.seatToken
     });
   });
-
-  const spinButton = document.getElementById("shuffle-spin");
-  if (spinButton) {
-    spinButton.addEventListener("click", () => startWheelSpin());
-  }
 
   const battleshipOrientation = document.getElementById("battleship-orientation");
   if (battleshipOrientation) {
@@ -3957,13 +3605,10 @@ function startLocalRoomFromSetupSelections() {
   state.you = { playerId: state.room.players.host.id, role: "local" };
   state.lastWinSignature = null;
   state.lastLeaderId = null;
-  state.localHasSpun = false;
   resetLocalPrivacy(state.room);
   state.localBattleshipOrientation = "h";
   state.localBattleshipPendingTargetIndex = null;
   state.localBattleshipLastPhase = null;
-  stopShuffleStripLoop();
-  state.localStrip = createInitialLocalStripState();
   state.localStep = "p1";
   saveLocalRejoinSnapshot(state.room);
   updateLocalRejoinCard();

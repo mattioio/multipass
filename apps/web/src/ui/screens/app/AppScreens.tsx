@@ -12,6 +12,7 @@ import {
   GameActionRow,
   GameSurfaceShell,
   JoinCodeForm,
+  LobbyActions,
   PlayerStatusStrip,
   ResultBanner,
   ScreenGuardBoundary,
@@ -26,6 +27,30 @@ export function AppScreens({ isDevBuild }: AppScreensProps) {
   return (
     <>
       <Screen id="screen-landing" active>
+        <div className="landing-segmented-wrap">
+          <div className="landing-segmented" role="tablist" aria-label="Choose play mode">
+            <button
+              id="landing-tab-local"
+              className="landing-segment active"
+              role="tab"
+              type="button"
+              aria-selected="true"
+              aria-controls="landing-panel-local"
+            >
+              Local
+            </button>
+            <button
+              id="landing-tab-online"
+              className="landing-segment"
+              role="tab"
+              type="button"
+              aria-selected="false"
+              aria-controls="landing-panel-online"
+            >
+              Online
+            </button>
+          </div>
+        </div>
         <div className="landing-carousel">
           <div id="landing-track" className="landing-track" data-mode="local">
             <section id="landing-panel-local" className="landing-panel" role="tabpanel" aria-labelledby="landing-tab-local">
@@ -91,6 +116,11 @@ export function AppScreens({ isDevBuild }: AppScreensProps) {
               <div>
                 <AvatarPickerGrid id="local-avatar-grid" />
               </div>
+              <div className="button-row local-setup-cta-row">
+                <Button id="local-continue" className="cta-main" disabled>
+                  Pick a player
+                </Button>
+              </div>
             </div>
           </div>
         </Card>
@@ -107,6 +137,11 @@ export function AppScreens({ isDevBuild }: AppScreensProps) {
               <HonorificToggle id="host-honorific-toolbar" inputId="host-honorific-toggle" />
             </div>
             <AvatarPickerGrid id="host-avatar-picker" />
+            <div className="button-row host-setup-cta-row">
+              <Button id="create-room" className="cta-main" disabled>
+                Pick a player
+              </Button>
+            </div>
           </div>
         </Card>
       </Screen>
@@ -118,29 +153,18 @@ export function AppScreens({ isDevBuild }: AppScreensProps) {
           </CardHeader>
           <h2>Join a room</h2>
           <JoinCodeForm />
+          <div className="button-row join-setup-cta-row">
+            <Button id="join-room" className="cta-main">
+              Continue
+            </Button>
+          </div>
         </Card>
       </Screen>
 
       <Screen id="screen-lobby">
         <div className="panel lobby-panel">
           <ScoreColumns id="score-columns" />
-        </div>
-      </Screen>
-
-      <Screen id="screen-shuffle">
-        <div className="panel shuffle-panel">
-          <h2>Who starts?</h2>
-          <div id="shuffle-display" className="shuffle-display wheel-stage">
-            <div className="shuffle-strip-wrap">
-              <div id="shuffle-strip-stage" className="shuffle-strip-stage" aria-label="Player starter picker">
-                <div id="shuffle-grid" className="shuffle-grid" aria-hidden="true"></div>
-              </div>
-              <Button id="shuffle-spin" aria-label="Spin to choose who starts">
-                <span className="wheel-spin-label">Spin</span>
-              </Button>
-            </div>
-            <p id="shuffle-result" className="shuffle-name"></p>
-          </div>
+          <LobbyActions />
         </div>
       </Screen>
 
@@ -225,6 +249,11 @@ export function AppScreens({ isDevBuild }: AppScreensProps) {
         <div className="panel winner-panel">
           <ResultBanner title="Winner" />
           <ScoreColumns id="winner-score-columns" className="score-columns winner-columns" />
+          <div className="button-row winner-actions">
+            <Button id="winner-play-again" className="cta-main">
+              Next game
+            </Button>
+          </div>
         </div>
       </Screen>
 

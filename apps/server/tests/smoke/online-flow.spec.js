@@ -12,7 +12,7 @@ async function fillJoinCodeSlots(page, rawCode) {
   }
 }
 
-test("online happy path: host + guest choose game -> shuffle/game", async ({ browser }) => {
+test("online happy path: host + guest choose game -> game", async ({ browser }) => {
   const hostContext = await browser.newContext();
   const guestContext = await browser.newContext();
   const hostPage = await hostContext.newPage();
@@ -59,6 +59,14 @@ test("online happy path: host + guest choose game -> shuffle/game", async ({ bro
 
   await expect(hostPage.locator("#screen-game.active")).toBeVisible();
   await expect(guestPage.locator("#screen-game.active")).toBeVisible();
+  const firstRoundStarter = await hostPage.evaluate(() => {
+    const room = window.__multipassStore.getState().room;
+    return {
+      firstPlayerId: room.round?.firstPlayerId || null,
+      hostId: room.players?.host?.id || null
+    };
+  });
+  expect(firstRoundStarter.firstPlayerId).toBe(firstRoundStarter.hostId);
 
   await expect(hostPage.locator("#ttt-board .ttt-cell")).toHaveCount(9);
   await expect(guestPage.locator("#ttt-board .ttt-cell")).toHaveCount(9);
