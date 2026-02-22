@@ -9,6 +9,8 @@ export interface CatalogGameDefinition {
   isAvailable: boolean;
   bannerKey: string;
   surfaceType: string;
+  mode: "board" | "dice" | "card";
+  visibility: "public" | "hidden_pass_device";
   localEngine?: LocalGameEngine;
 }
 

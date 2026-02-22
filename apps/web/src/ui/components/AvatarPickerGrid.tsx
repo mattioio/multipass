@@ -10,10 +10,10 @@ export interface AvatarPickerGridProps {
 }
 
 const avatarOptions = [
-  { id: "yellow", label: "Mr Yellow", themeClass: "theme-yellow" },
-  { id: "red", label: "Mr Red", themeClass: "theme-red" },
-  { id: "green", label: "Mr Green", themeClass: "theme-green" },
-  { id: "blue", label: "Mr Blue", themeClass: "theme-blue" }
+  { id: "yellow", label: "Yellow", themeClass: "theme-yellow" },
+  { id: "red", label: "Red", themeClass: "theme-red" },
+  { id: "green", label: "Green", themeClass: "theme-green" },
+  { id: "blue", label: "Blue", themeClass: "theme-blue" }
 ] as const;
 
 export function AvatarPickerGrid({

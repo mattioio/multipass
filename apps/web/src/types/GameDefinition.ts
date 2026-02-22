@@ -8,6 +8,7 @@ export interface LocalGameEngine<TState = Record<string, unknown>> {
     move: Record<string, unknown>,
     playerId: string
   ) => { state: TState } | { error: string };
+  getVisibleState?: (state: TState, viewerPlayerId: string | null) => Record<string, unknown>;
 }
 
 export interface GameDefinition<TState = Record<string, unknown>> {
@@ -19,6 +20,8 @@ export interface GameDefinition<TState = Record<string, unknown>> {
   isAvailable: boolean;
   comingSoon: boolean;
   surfaceType: string;
+  mode: "board" | "dice" | "card";
+  visibility: "public" | "hidden_pass_device";
   Component: ComponentType<GameComponentProps<TState>>;
   localEngine?: LocalGameEngine<TState>;
 }

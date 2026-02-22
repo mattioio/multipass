@@ -1,4 +1,5 @@
-import { PlayerAvatar } from "./PlayerAvatar";
+import playerAvatar from "../../assets/player.svg";
+import { PlayerCardShell } from "./PlayerCardShell";
 
 export interface AvatarTileProps {
   avatarId: string;
@@ -27,23 +28,13 @@ export function AvatarTile({
       disabled={disabled}
       onClick={() => onSelect?.(avatarId)}
     >
-      <span className="avatar-shell">
-        <span className="avatar-inner">
-          <PlayerAvatar />
-          <span className="avatar-lower-third">
-            <span className="avatar-name">{label}</span>
-          </span>
-        </span>
-        {selected ? (
-          <span className="avatar-selected-badge" aria-hidden="true">
-            <span className="avatar-selected-check">✓</span>
-            <span className="avatar-selected-label">Selected</span>
-          </span>
-        ) : null}
-        <span className="lock-badge" aria-hidden="true">
-          🔒<span>Player 1</span>
-        </span>
-      </span>
+      <PlayerCardShell
+        variant="picker"
+        themeClass={themeClass}
+        name={label}
+        artSrc={playerAvatar}
+        selected={selected}
+      />
     </button>
   );
 }

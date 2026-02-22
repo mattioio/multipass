@@ -28,6 +28,12 @@ test("online happy path: host + guest choose game -> shuffle/game", async ({ bro
 
   await expect(guestPage.locator("#screen-lobby.active")).toBeVisible();
   await expect(hostPage.locator("#screen-lobby.active")).toBeVisible();
+  await expect(hostPage.locator("#score-columns .score-duel-panel")).toHaveCount(1);
+  await expect(hostPage.locator("#score-columns .score-duel-side")).toHaveCount(2);
+  await expect(hostPage.locator("#score-columns .score-duel-scorebar-wrap")).toHaveCount(1);
+  await expect(hostPage.locator("#score-columns .score-broadcast-row")).toHaveCount(1);
+  await expect(hostPage.locator("#score-columns .score-role")).toHaveCount(0);
+  await expect(hostPage.locator("#score-columns .score-column")).toHaveCount(0);
 
   await hostPage.getByRole("button", { name: "Pick a game" }).click();
   await guestPage.getByRole("button", { name: "Pick a game" }).click();
@@ -129,6 +135,43 @@ test("online game Exit leaves on first click and stays on landing", async ({ bro
   await hostPage.waitForTimeout(800);
   await expect(hostPage.locator("#screen-landing.active")).toBeVisible();
   await expect.poll(() => new URL(hostPage.url()).hash).toMatch(/^(|#landing)$/);
+
+  await hostContext.close();
+  await guestContext.close();
+});
+
+test("online honorific picker is independent per player", async ({ browser }) => {
+  const hostContext = await browser.newContext();
+  const guestContext = await browser.newContext();
+  const hostPage = await hostContext.newPage();
+  const guestPage = await guestContext.newPage();
+
+  await hostPage.goto("http://127.0.0.1:3000/");
+  await hostPage.getByRole("tab", { name: "Online" }).click();
+  await hostPage.getByRole("button", { name: "Host a room" }).click();
+  await hostPage.locator("#host-honorific-toolbar .switch").click();
+  await hostPage.locator('#host-avatar-picker .avatar-option[data-avatar="yellow"]').click();
+  await hostPage.getByRole("button", { name: "Continue" }).click();
+  await expect(hostPage.locator("#screen-lobby.active")).toBeVisible();
+  await expect(hostPage.locator("#score-columns")).toContainText("Mrs Yellow");
+  const roomCode = (await hostPage.locator("#room-code").textContent())?.trim() || "";
+
+  await guestPage.goto("http://127.0.0.1:3000/");
+  await guestPage.getByRole("tab", { name: "Online" }).click();
+  await guestPage.getByRole("button", { name: "Join a room" }).click();
+  await guestPage.locator("#join-code").fill(roomCode);
+  await guestPage.getByRole("button", { name: "Continue" }).click();
+  await guestPage.locator('#join-avatar-picker .avatar-option[data-avatar="green"]').click();
+  await guestPage.getByRole("button", { name: "Join room" }).click();
+  await expect(guestPage.locator("#screen-lobby.active")).toBeVisible();
+  await expect(guestPage.locator("#score-columns")).toContainText("Mrs Yellow");
+  await expect(guestPage.locator("#score-columns")).toContainText("Mr Green");
+  await expect(guestPage.locator("#score-columns .score-duel-panel")).toHaveCount(1);
+  await expect(guestPage.locator("#score-columns .score-duel-side")).toHaveCount(2);
+  await expect(guestPage.locator("#score-columns .score-duel-scorebar-wrap")).toHaveCount(1);
+  await expect(guestPage.locator("#score-columns .score-broadcast-row")).toHaveCount(1);
+  await expect(guestPage.locator("#score-columns .score-role")).toHaveCount(0);
+  await expect(guestPage.locator("#score-columns .score-column")).toHaveCount(0);
 
   await hostContext.close();
   await guestContext.close();

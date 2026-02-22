@@ -5,7 +5,7 @@ import { createRequire } from "node:module";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const webRoot = path.resolve(scriptDir, "..");
-const sourceSvgPath = path.resolve(webRoot, "icons/icon-source-checkerboard.svg");
+const sourceSvgPath = path.resolve(webRoot, "src/assets/appicon.svg");
 
 const icon192 = path.resolve(webRoot, "icons/icon-192.png");
 const icon512 = path.resolve(webRoot, "icons/icon-512.png");
@@ -58,49 +58,112 @@ function mimeTypeFor(assetPath) {
   return "application/octet-stream";
 }
 
+async function readCanonicalSourceSvg() {
+  let svgText = "";
+  try {
+    svgText = await readFile(sourceSvgPath, "utf-8");
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      throw new Error(
+        `Canonical icon source is missing: ${sourceSvgPath}\nCreate or restore this file, then rerun the generator.`
+      );
+    }
+    if (error?.code === "EACCES") {
+      throw new Error(
+        `Canonical icon source is not readable: ${sourceSvgPath}\nCheck file permissions, then rerun the generator.`
+      );
+    }
+    throw new Error(`Failed to read canonical icon source ${sourceSvgPath}: ${error?.message || error}`);
+  }
+
+  if (!svgText.trim()) {
+    throw new Error(`Canonical icon source is empty: ${sourceSvgPath}`);
+  }
+
+  if (!/<svg[\s>]/i.test(svgText)) {
+    throw new Error(`Canonical icon source does not contain a valid <svg> root: ${sourceSvgPath}`);
+  }
+
+  return svgText;
+}
+
 async function inlineSvgAssetHrefs(svgText) {
-  const hrefRegex = /href="([^"]+)"/g;
+  const hrefRegex = /\b(?:href|xlink:href)="([^"]+)"/g;
   const uniqueRefs = new Set();
   let match = hrefRegex.exec(svgText);
   while (match) {
     const href = match[1];
-    if (!href.startsWith("data:")) uniqueRefs.add(href);
+    if (href.startsWith("data:") || href.startsWith("#")) {
+      match = hrefRegex.exec(svgText);
+      continue;
+    }
+    if (/^https?:\/\//i.test(href)) {
+      throw new Error(
+        `External SVG asset URLs are not supported in ${sourceSvgPath}: ${href}\nUse local relative assets so exports are deterministic.`
+      );
+    }
+    uniqueRefs.add(href);
     match = hrefRegex.exec(svgText);
   }
 
   let inlinedSvg = svgText;
   for (const href of uniqueRefs) {
     const absoluteAssetPath = path.resolve(path.dirname(sourceSvgPath), href);
-    const assetBuffer = await readFile(absoluteAssetPath);
+    let assetBuffer;
+    try {
+      assetBuffer = await readFile(absoluteAssetPath);
+    } catch (error) {
+      if (error?.code === "ENOENT") {
+        throw new Error(
+          `SVG references a missing asset: "${href}"\nExpected at: ${absoluteAssetPath}\nFix the path in ${sourceSvgPath}.`
+        );
+      }
+      if (error?.code === "EACCES") {
+        throw new Error(
+          `SVG references an unreadable asset: "${href}"\nPath: ${absoluteAssetPath}\nCheck permissions and rerun.`
+        );
+      }
+      throw new Error(
+        `Failed to read SVG referenced asset "${href}" at ${absoluteAssetPath}: ${error?.message || error}`
+      );
+    }
     const mimeType = mimeTypeFor(absoluteAssetPath);
     const dataUri = `data:${mimeType};base64,${assetBuffer.toString("base64")}`;
     const quotedHref = href.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    inlinedSvg = inlinedSvg.replace(new RegExp(`href="${quotedHref}"`, "g"), `href="${dataUri}"`);
+    inlinedSvg = inlinedSvg
+      .replace(new RegExp(`href="${quotedHref}"`, "g"), `href="${dataUri}"`)
+      .replace(new RegExp(`xlink:href="${quotedHref}"`, "g"), `xlink:href="${dataUri}"`);
   }
 
   return inlinedSvg;
 }
 
-async function renderIcon(page, size, outputPath) {
+async function renderIcon(page, size, outputPath, inlinedSvg) {
   await page.setViewportSize({ width: size, height: size });
-  const svgText = await readFile(sourceSvgPath, "utf-8");
-  const inlinedSvg = await inlineSvgAssetHrefs(svgText);
-  await page.setContent(iconHtml(inlinedSvg, size), { waitUntil: "load" });
+  try {
+    await page.setContent(iconHtml(inlinedSvg, size), { waitUntil: "load" });
 
-  await page.waitForFunction(() => {
-    const imageNodes = document.querySelectorAll("image");
-    for (const node of imageNodes) {
-      const href = node.getAttribute("href") || "";
-      if (!href.startsWith("data:")) return false;
-    }
-    return true;
-  });
+    await page.waitForFunction(() => {
+      const svg = document.querySelector("svg");
+      if (!svg) return false;
+      const imageNodes = document.querySelectorAll("image");
+      for (const node of imageNodes) {
+        const href = node.getAttribute("href") || node.getAttribute("xlink:href") || "";
+        if (href && !href.startsWith("data:")) return false;
+      }
+      return true;
+    }, { timeout: 5000 });
 
-  await page.screenshot({
-    path: outputPath,
-    type: "png",
-    omitBackground: true
-  });
+    await page.screenshot({
+      path: outputPath,
+      type: "png",
+      omitBackground: true
+    });
+  } catch (error) {
+    throw new Error(
+      `Failed to render ${size}x${size} icon from ${sourceSvgPath}: ${error?.message || error}`
+    );
+  }
 }
 
 async function ensureOutputDirs() {
@@ -118,13 +181,15 @@ async function ensureOutputDirs() {
 
 async function main() {
   await ensureOutputDirs();
+  const svgText = await readCanonicalSourceSvg();
+  const inlinedSvg = await inlineSvgAssetHrefs(svgText);
 
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
 
   try {
     for (const outputSpec of outputSpecs) {
-      await renderIcon(page, outputSpec.size, outputSpec.path);
+      await renderIcon(page, outputSpec.size, outputSpec.path, inlinedSvg);
       console.log(`Generated ${path.relative(webRoot, outputSpec.path)} (${outputSpec.size}x${outputSpec.size})`);
     }
   } finally {

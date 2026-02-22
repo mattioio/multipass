@@ -26,9 +26,8 @@ describe("game host patterns", () => {
   });
 
   it("renders result banner", () => {
-    render(<ResultBanner emoji="🎉" title="Winner" />);
+    render(<ResultBanner title="Winner" />);
 
-    expect(screen.getByText("🎉")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Winner" })).toBeInTheDocument();
   });
 });

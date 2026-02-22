@@ -190,7 +190,6 @@ export function AppScreens({ isDevBuild }: AppScreensProps) {
         <div className="panel wait-panel">
           <h2>Waiting for a game</h2>
           <div className="wait-card">
-            <div id="wait-emoji" className="wait-emoji">🎲</div>
             <div>
               <div id="wait-name" className="wait-name">Picker</div>
               <p id="wait-text" className="subtext">is choosing the next game.</p>
@@ -219,13 +218,52 @@ export function AppScreens({ isDevBuild }: AppScreensProps) {
           )}
         >
           <TurnStatusBar />
+          <p id="game-subtext" className="subtext game-subtext hidden"></p>
           <div id="ttt-board" className="ttt-board"></div>
+          <div id="battleship-layout" className="battleship-layout hidden">
+            <div className="battleship-controls">
+              <p id="battleship-phase-label" className="subtext battleship-phase-label"></p>
+              <div className="battleship-control-actions">
+                <div className="battleship-view-controls" role="tablist" aria-label="Battleship board view">
+                  <Button id="battleship-view-own" variant="ghost" className="compact-action battleship-view-toggle">
+                    Your waters
+                  </Button>
+                  <Button id="battleship-view-target" variant="ghost" className="compact-action battleship-view-toggle">
+                    Target grid
+                  </Button>
+                </div>
+                <Button id="battleship-orientation" variant="ghost" className="compact-action">
+                  Orientation: Horizontal
+                </Button>
+              </div>
+            </div>
+            <div className="battleship-boards">
+              <section id="battleship-own-card" className="battleship-board-card">
+                <h3 id="battleship-own-title">Your waters</h3>
+                <div id="battleship-own-board" className="battleship-board"></div>
+              </section>
+              <section id="battleship-target-card" className="battleship-board-card">
+                <h3 id="battleship-target-title">Target grid</h3>
+                <div id="battleship-target-board" className="battleship-board"></div>
+              </section>
+            </div>
+          </div>
         </GameSurfaceShell>
+      </Screen>
+
+      <Screen id="screen-pass">
+        <div className="panel pass-panel">
+          <h2 id="pass-title">Pass the device</h2>
+          <p id="pass-message" className="subtext">Hand over to the next player, then continue.</p>
+          <div className="button-row winner-actions">
+            <Button id="pass-ready">Ready</Button>
+          </div>
+        </div>
       </Screen>
 
       <Screen id="screen-winner">
         <div className="panel winner-panel">
-          <ResultBanner emoji="🎉" title="Winner" />
+          <ResultBanner title="Winner" />
           <ScoreColumns id="winner-score-columns" className="score-columns winner-columns" />
           <div className="button-row winner-actions">
             <Button id="winner-play-again">Next game</Button>

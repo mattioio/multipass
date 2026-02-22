@@ -1,8 +1,8 @@
 export const AVATARS = {
-  yellow: { id: "yellow", name: "Mr Yellow", emoji: "🍌", theme: "yellow" },
-  red: { id: "red", name: "Mr Red", emoji: "🍓", theme: "red" },
-  green: { id: "green", name: "Mr Green", emoji: "🥝", theme: "green" },
-  blue: { id: "blue", name: "Mr Blue", emoji: "🫐", theme: "blue" }
+  yellow: { id: "yellow", name: "Yellow", theme: "yellow" },
+  red: { id: "red", name: "Red", theme: "red" },
+  green: { id: "green", name: "Green", theme: "green" },
+  blue: { id: "blue", name: "Blue", theme: "blue" }
 };
 
 export function getAvatar(id) {

@@ -10,18 +10,33 @@ import { createStore } from "../state/store.js";
 import { renderLocalSetupScreen } from "../ui/screens/localSetup.js";
 import { renderPickHint } from "../ui/screens/pickHint.js";
 import { setupAvatarPicker, updateAvatarPicker } from "../ui/shared/avatarPicker.js";
+import { PLAYER_CARD_VARIANTS } from "../ui/shared/playerCardContract.js";
+import { createPlayerCardElement } from "../ui/shared/playerCardDom.js";
 import { getPatternConfig, resetPatternConfig, setPatternConfig } from "../ui/shared/patternSystem.ts";
 import { createToastController } from "../ui/shared/toast.js";
 import playerAvatar from "../assets/player.svg";
 import playerAvatarAlt from "../assets/player2.svg";
 import { normalizeRoomCode, parseScreenRoute } from "./hashRoute.js";
+import {
+  clamp,
+  classifySwipeAxis,
+  computeSwipeVelocityPxPerMs,
+  hasMetDragActivation,
+  resolveLandingSnapMode,
+  shouldSuppressClick
+} from "./gestures.js";
+import {
+  confirmLocalHandoff,
+  createInitialLocalPrivacyState,
+  queueLocalHandoff,
+  shouldShowLocalPassScreen
+} from "./localPrivacy.js";
 import { copyRoomInviteLink } from "./shareLink.js";
 
 const LOCAL_REJOIN_KEY = "multipass_last_local_match";
 const ONLINE_REJOIN_AT_KEY = "multipass_last_room_started_at";
 const ONLINE_UI_PREFS_KEY = "multipass_online_ui_prefs";
 const SEAT_TOKEN_KEY = "multipass_seat_token";
-const HONORIFIC_PREF_KEY = "multipass_honorific";
 const HONORIFIC_TOGGLE_SELECTOR = 'input[data-honorific-toggle="true"]';
 const SCREEN_TO_HASH = Object.freeze({
   landing: "",
@@ -32,6 +47,7 @@ const SCREEN_TO_HASH = Object.freeze({
   pick: "#pick",
   wait: "#wait",
   game: "#game",
+  pass: "#pass",
   shuffle: "#shuffle",
   winner: "#winner",
   devkit: "#devkit"
@@ -39,7 +55,7 @@ const SCREEN_TO_HASH = Object.freeze({
 const HASH_TO_SCREEN = Object.freeze(
   Object.fromEntries(Object.entries(SCREEN_TO_HASH).map(([screen, hash]) => [hash, screen]))
 );
-const ROOM_REQUIRED_SCREENS = new Set(["lobby", "pick", "wait", "game", "shuffle", "winner"]);
+const ROOM_REQUIRED_SCREENS = new Set(["lobby", "pick", "wait", "game", "pass", "shuffle", "winner"]);
 const ONLINE_HERO_ROOM_SCREENS = new Set(["lobby", "pick", "wait", "game", "shuffle", "winner"]);
 const SHUFFLE_CLOCKWISE_ORDER = [0, 1, 3, 2];
 const SHUFFLE_AUTO_STOP_MS = 2200;
@@ -49,6 +65,13 @@ const LEGACY_BOOTSTRAP_FLAG = "__multipassLegacyInitialized";
 const PROD_WS_FALLBACK_URL = "wss://api.loreandorder.com";
 const IS_DEV_BUILD = Boolean(typeof import.meta !== "undefined" && import.meta.env?.DEV);
 const RECENT_LEAVE_GUARD_MS = 5000;
+const PLAYER_THEME_CLASS_NAMES = ["theme-red", "theme-yellow", "theme-green", "theme-blue"];
+const BOARD_DRAG_ACTIVATION_PX = 6;
+const BOARD_CLICK_SUPPRESS_MS = 260;
+const LANDING_DRAG_ACTIVATION_PX = 14;
+const LANDING_SWIPE_DISTANCE_RATIO = 0.18;
+const LANDING_SWIPE_MIN_DISTANCE_PX = 32;
+const LANDING_SWIPE_VELOCITY_PX_PER_MS = 0.36;
 
 function createInitialLocalStripState() {
   return {
@@ -60,6 +83,36 @@ function createInitialLocalStripState() {
     stepTimer: null,
     autoStopTimer: null,
     gridSignature: ""
+  };
+}
+
+function createInitialBoardGestureState() {
+  return {
+    activePointerId: null,
+    startX: 0,
+    startY: 0,
+    lastX: 0,
+    lastY: 0,
+    startedAt: 0,
+    isDragging: false,
+    previewIndex: null,
+    suppressClickUntil: 0
+  };
+}
+
+function createInitialLandingGestureState() {
+  return {
+    activePointerId: null,
+    startX: 0,
+    startY: 0,
+    lastX: 0,
+    lastY: 0,
+    startedAt: 0,
+    startMode: "local",
+    startOffsetPx: 0,
+    panelWidthPx: 0,
+    isDragging: false,
+    suppressClickUntil: 0
   };
 }
 
@@ -98,10 +151,18 @@ function createInitialState() {
     deferredInstallPrompt: null,
     isAppInstalled: false,
     localHasSpun: false,
-    honorific: "mr",
+    localPrivacy: createInitialLocalPrivacyState(),
+    localBattleshipOrientation: "h",
+    localBattleshipView: "own",
+    localBattleshipLastPhase: null,
+    hostHonorific: "mr",
+    joinHonorific: "mr",
+    localHonorifics: { p1: "mr", p2: "mr" },
     landingMode: "local",
     devkitReturnScreen: "landing",
-    localStrip: createInitialLocalStripState()
+    localStrip: createInitialLocalStripState(),
+    boardGesture: createInitialBoardGestureState(),
+    landingGesture: createInitialLandingGestureState()
   };
 }
 
@@ -120,6 +181,7 @@ const screens = {
   pick: document.getElementById("screen-pick"),
   wait: document.getElementById("screen-wait"),
   game: document.getElementById("screen-game"),
+  pass: document.getElementById("screen-pass"),
   shuffle: document.getElementById("screen-shuffle"),
   winner: document.getElementById("screen-winner"),
   devkit: document.getElementById("screen-devkit")
@@ -130,6 +192,7 @@ const landingTabLocal = document.getElementById("landing-tab-local");
 const landingTabOnline = document.getElementById("landing-tab-online");
 const landingPanelLocal = document.getElementById("landing-panel-local");
 const landingPanelOnline = document.getElementById("landing-panel-online");
+const landingCarousel = document.querySelector(".landing-carousel");
 
 const toast = createToastController();
 const showToast = toast.showToast;
@@ -233,38 +296,67 @@ function normalizeHonorific(value) {
   return String(value || "").trim().toLowerCase() === "mrs" ? "mrs" : "mr";
 }
 
-function formatHonorificName(name, honorific = state.honorific) {
+function formatHonorificName(name, honorific = "mr") {
   const trimmed = String(name || "").trim();
   if (!trimmed) return "";
   const base = trimmed.replace(/^(mr|mrs)\.?\s+/i, "").trim() || trimmed;
   return `${normalizeHonorific(honorific) === "mrs" ? "Mrs" : "Mr"} ${base}`;
 }
 
+function currentLocalStepKey() {
+  return state.localStep === "p2" ? "p2" : "p1";
+}
+
+function getArtSrcForHonorific(honorific) {
+  return normalizeHonorific(honorific) === "mrs" ? playerAvatarAlt : playerAvatar;
+}
+
+function getPlayerHonorific(player, fallbackHonorific = "mr") {
+  const direct = normalizeHonorific(player?.honorific || "");
+  if (player?.honorific) return direct;
+  const rawName = String(player?.name || "").trim().toLowerCase();
+  if (rawName.startsWith("mrs ")) return "mrs";
+  if (rawName.startsWith("mr ")) return "mr";
+  return normalizeHonorific(fallbackHonorific);
+}
+
+function getPlayerArtSrc(player, fallbackHonorific = "mr") {
+  return getArtSrcForHonorific(getPlayerHonorific(player, fallbackHonorific));
+}
+
 function getDisplayPlayerName(player, fallback = "Player") {
   if (!player) return fallback;
+  if (player.name) return player.name;
   const avatar = getAvatarByTheme(player.theme);
-  if (avatar?.name) return formatHonorificName(avatar.name, state.honorific);
-  if (player.name) return formatHonorificName(player.name, state.honorific);
+  if (avatar?.name) return formatHonorificName(avatar.name, getPlayerHonorific(player, "mr"));
   return fallback;
 }
 
-function getCurrentPlayerArtSrc() {
-  return state.honorific === "mrs" ? playerAvatarAlt : playerAvatar;
-}
-
 function syncHonorificToggleInputs() {
-  document.querySelectorAll(HONORIFIC_TOGGLE_SELECTOR).forEach((node) => {
-    if (!(node instanceof HTMLInputElement)) return;
-    node.checked = state.honorific === "mrs";
-  });
+  const hostToggle = document.getElementById("host-honorific-toggle");
+  if (hostToggle instanceof HTMLInputElement) {
+    hostToggle.checked = state.hostHonorific === "mrs";
+  }
+
+  const joinToggle = document.getElementById("join-honorific-toggle");
+  if (joinToggle instanceof HTMLInputElement) {
+    joinToggle.checked = state.joinHonorific === "mrs";
+  }
+
+  const localToggle = document.getElementById("local-honorific-toggle");
+  if (localToggle instanceof HTMLInputElement) {
+    localToggle.checked = state.localHonorifics[currentLocalStepKey()] === "mrs";
+  }
 }
 
-function refreshAvatarPickerLabels() {
-  document.querySelectorAll(".avatar-option").forEach((button) => {
+function updateAvatarLabelsInContainer(containerId, honorific) {
+  const container = document.getElementById(containerId);
+  if (!(container instanceof HTMLElement)) return;
+  container.querySelectorAll(".avatar-option").forEach((button) => {
     if (!(button instanceof HTMLElement)) return;
     const avatarId = button.dataset.avatar || "";
     const avatar = getAvatar(avatarId);
-    const displayName = avatar ? formatHonorificName(avatar.name, state.honorific) : "";
+    const displayName = avatar ? formatHonorificName(avatar.name, honorific) : "";
     if (!displayName) return;
 
     const labelEl = button.querySelector(".avatar-name");
@@ -276,23 +368,42 @@ function refreshAvatarPickerLabels() {
   });
 }
 
-function refreshStaticPlayerArt() {
-  const src = getCurrentPlayerArtSrc();
-  document.querySelectorAll(".player-art img").forEach((node) => {
+function refreshAvatarPickerLabels() {
+  updateAvatarLabelsInContainer("host-avatar-picker", state.hostHonorific);
+  updateAvatarLabelsInContainer("join-avatar-picker", state.joinHonorific);
+  updateAvatarLabelsInContainer("local-avatar-grid", state.localHonorifics[currentLocalStepKey()]);
+}
+
+function updateAvatarArtInContainer(containerId, honorific) {
+  const container = document.getElementById(containerId);
+  if (!(container instanceof HTMLElement)) return;
+  const src = getArtSrcForHonorific(honorific);
+  container.querySelectorAll(".player-art img").forEach((node) => {
     if (!(node instanceof HTMLImageElement)) return;
     node.src = src;
   });
 }
 
-function applyHonorific(honorific, persist = false) {
-  state.honorific = normalizeHonorific(honorific);
-  document.body.dataset.honorific = state.honorific;
+function refreshStaticPlayerArt() {
+  updateAvatarArtInContainer("host-avatar-picker", state.hostHonorific);
+  updateAvatarArtInContainer("join-avatar-picker", state.joinHonorific);
+  updateAvatarArtInContainer("local-avatar-grid", state.localHonorifics[currentLocalStepKey()]);
+}
+
+function applyHonorificForInput(inputId, honorific) {
+  const normalized = normalizeHonorific(honorific);
+  if (inputId === "host-honorific-toggle") {
+    state.hostHonorific = normalized;
+  } else if (inputId === "join-honorific-toggle") {
+    state.joinHonorific = normalized;
+  } else if (inputId === "local-honorific-toggle") {
+    state.localHonorifics[currentLocalStepKey()] = normalized;
+  }
+
   syncHonorificToggleInputs();
   refreshAvatarPickerLabels();
   refreshStaticPlayerArt();
-  if (persist) {
-    localStorage.setItem(HONORIFIC_PREF_KEY, state.honorific);
-  }
+
   if (state.room) {
     renderRoom();
     return;
@@ -306,12 +417,13 @@ function applyHonorific(honorific, persist = false) {
 }
 
 function initHonorificToggle() {
-  const stored = normalizeHonorific(localStorage.getItem(HONORIFIC_PREF_KEY));
-  applyHonorific(stored);
+  syncHonorificToggleInputs();
+  refreshAvatarPickerLabels();
+  refreshStaticPlayerArt();
   document.querySelectorAll(HONORIFIC_TOGGLE_SELECTOR).forEach((node) => {
     if (!(node instanceof HTMLInputElement)) return;
     node.addEventListener("change", () => {
-      applyHonorific(node.checked ? "mrs" : "mr", true);
+      applyHonorificForInput(node.id, node.checked ? "mrs" : "mr");
     });
   });
 }
@@ -344,6 +456,9 @@ function normalizeTargetScreen(screen) {
   if (!screen || !(screen in screens) || !screens[screen]) return "landing";
   if (ROOM_REQUIRED_SCREENS.has(screen) && !state.room) return "landing";
   if (screen === "game" && (!state.room?.game || state.room.round?.status === "shuffling")) {
+    return state.room ? resolveScreen(state.room) : "landing";
+  }
+  if (screen === "pass" && !shouldShowLocalPassScreen(state.room, state.localPrivacy)) {
     return state.room ? resolveScreen(state.room) : "landing";
   }
   if (screen === "winner") {
@@ -465,6 +580,7 @@ function getHeroActionConfig() {
     state.activeScreen === "pick" ||
     state.activeScreen === "shuffle" ||
     state.activeScreen === "game" ||
+    state.activeScreen === "pass" ||
     state.activeScreen === "winner"
   )) {
     return { label: "Close", action: () => leaveLocalMatch({ saveForRejoin: true }) };
@@ -774,7 +890,7 @@ function connect() {
           showScreen("landing", { history: "replace" });
           return;
         }
-        if (message.message === "Pick an avatar." || message.message === "Pick a fruit.") {
+        if (message.message === "Pick an avatar.") {
           dispatch(actions.autoJoinCodeSet(null));
           const joinCodeInput = document.getElementById("join-code");
           if (joinCodeInput && state.lastRoomCode) {
@@ -845,6 +961,43 @@ function getGameBannerLabel(game) {
 
 function isLocalMode() {
   return state.mode === "local";
+}
+
+function isHiddenPassGame(gameId) {
+  return localGames[gameId]?.visibility === "hidden_pass_device";
+}
+
+function getDefaultLocalViewerId(room) {
+  if (!room) return null;
+  return room.game?.state?.nextPlayerId || room.round?.firstPlayerId || room.players.host?.id || null;
+}
+
+function ensureLocalViewer(room) {
+  if (!room) return null;
+  const currentViewer = state.localPrivacy.viewerPlayerId;
+  if (currentViewer && playerById(room, currentViewer)) {
+    return currentViewer;
+  }
+  const fallbackViewer = getDefaultLocalViewerId(room);
+  state.localPrivacy.viewerPlayerId = fallbackViewer;
+  return fallbackViewer;
+}
+
+function resetLocalPrivacy(room) {
+  state.localPrivacy = createInitialLocalPrivacyState(getDefaultLocalViewerId(room));
+}
+
+function getDisplayStateForRoomGame(room) {
+  const gameId = room?.game?.id;
+  const fullState = room?.game?.state;
+  if (!gameId || !fullState) return null;
+  const game = localGames[gameId];
+  if (!isLocalMode() || !game) return fullState;
+  if (game.visibility !== "hidden_pass_device" || typeof game.getVisibleState !== "function") {
+    return fullState;
+  }
+  const viewerPlayerId = ensureLocalViewer(room);
+  return game.getVisibleState(fullState, viewerPlayerId);
 }
 
 function shouldShowHeroRoomCode() {
@@ -990,6 +1143,14 @@ function saveLocalRejoinSnapshot(room, meta = {}) {
     savedAt: Date.now(),
     localHasSpun: Boolean(meta.localHasSpun ?? state.localHasSpun),
     localShuffleIndex: Number.isFinite(meta.localShuffleIndex) ? meta.localShuffleIndex : state.localStrip.activeIndex,
+    localPrivacy: {
+      viewerPlayerId: state.localPrivacy.viewerPlayerId || null,
+      pendingViewerPlayerId: state.localPrivacy.pendingViewerPlayerId || null,
+      stage: state.localPrivacy.stage === "handoff" ? "handoff" : "visible",
+      prompt: String(state.localPrivacy.prompt || "")
+    },
+    localBattleshipOrientation: state.localBattleshipOrientation === "v" ? "v" : "h",
+    localBattleshipView: state.localBattleshipView === "target" ? "target" : "own",
     room
   };
   try {
@@ -1039,6 +1200,14 @@ function hydrateLocalFromSnapshot(snapshot) {
     snapshot.room.round?.hasPickedStarter ??
     snapshot.room.round?.firstPlayerId
   );
+  state.localPrivacy = {
+    ...createInitialLocalPrivacyState(getDefaultLocalViewerId(snapshot.room)),
+    ...(snapshot.localPrivacy && typeof snapshot.localPrivacy === "object" ? snapshot.localPrivacy : {})
+  };
+  state.localPrivacy.stage = state.localPrivacy.stage === "handoff" ? "handoff" : "visible";
+  state.localBattleshipOrientation = snapshot.localBattleshipOrientation === "v" ? "v" : "h";
+  state.localBattleshipView = snapshot.localBattleshipView === "target" ? "target" : "own";
+  state.localBattleshipLastPhase = snapshot.room?.game?.state?.phase || null;
   stopShuffleStripLoop();
   state.localStrip = {
     ...createInitialLocalStripState(),
@@ -1049,11 +1218,13 @@ function hydrateLocalFromSnapshot(snapshot) {
   showScreen(resolveScreen(state.room), { history: "replace" });
 }
 
-function createLocalRoom(avatarOne, avatarTwo) {
+function createLocalRoom(avatarOne, avatarTwo, honorificOne = "mr", honorificTwo = "mr") {
+  const hostHonorific = normalizeHonorific(honorificOne);
+  const guestHonorific = normalizeHonorific(honorificTwo);
   const host = {
     id: localId("player"),
-    name: formatHonorificName(avatarOne.name, state.honorific),
-    emoji: avatarOne.emoji,
+    name: formatHonorificName(avatarOne.name, hostHonorific),
+    honorific: hostHonorific,
     theme: avatarOne.theme,
     role: "host",
     score: 0,
@@ -1063,8 +1234,8 @@ function createLocalRoom(avatarOne, avatarTwo) {
   };
   const guest = {
     id: localId("player"),
-    name: formatHonorificName(avatarTwo.name, state.honorific),
-    emoji: avatarTwo.emoji,
+    name: formatHonorificName(avatarTwo.name, guestHonorific),
+    honorific: guestHonorific,
     theme: avatarTwo.theme,
     role: "guest",
     score: 0,
@@ -1129,6 +1300,7 @@ function advanceLocalRoundByAlternation() {
   };
   state.localStrip.winnerId = next;
   state.room.game = null;
+  resetLocalPrivacy(state.room);
   state.room.updatedAt = Date.now();
   handleLocalUpdate();
 }
@@ -1168,6 +1340,14 @@ function startLocalGame(gameId) {
     name: game.name,
     state: game.init(ordered)
   };
+  if (game.visibility === "hidden_pass_device") {
+    resetLocalPrivacy(state.room);
+  } else {
+    state.localPrivacy = createInitialLocalPrivacyState(getDefaultLocalViewerId(state.room));
+  }
+  state.localBattleshipOrientation = "h";
+  state.localBattleshipView = "own";
+  state.localBattleshipLastPhase = null;
   if (state.room.round) {
     state.room.round.hostGameId = game.id;
     state.room.round.guestGameId = game.id;
@@ -1202,6 +1382,9 @@ function startLocalRoundFromChoice(gameId) {
   state.room.round.hostGameId = gameId;
   state.room.round.guestGameId = gameId;
   state.room.round.resolvedGameId = gameId;
+  state.localPrivacy = createInitialLocalPrivacyState(getDefaultLocalViewerId(state.room));
+  state.localBattleshipView = "own";
+  state.localBattleshipLastPhase = null;
 
   if (!state.localHasSpun) {
     state.room.round.status = "shuffling";
@@ -1220,12 +1403,14 @@ function startLocalRoundFromChoice(gameId) {
   startLocalGame(gameId);
 }
 
-function applyLocalMove(index) {
+function applyLocalMove(move) {
   if (!state.room?.game) return;
   const game = localGames[state.room.game.id];
   if (!game) return;
+  const actingPlayerId = state.room.game.state.nextPlayerId;
+  if (!actingPlayerId) return;
   const previousWinner = state.room.game.state.winnerId;
-  const result = game.applyMove(state.room.game.state, { index }, state.room.game.state.nextPlayerId);
+  const result = game.applyMove(state.room.game.state, move, actingPlayerId);
   if (result?.error) {
     showToast(result.error);
     return;
@@ -1238,15 +1423,30 @@ function applyLocalMove(index) {
       winner.score += 1;
     }
   }
+  const hasEnded = Boolean(result.state.winnerId || result.state.draw);
+  if (game.visibility === "hidden_pass_device") {
+    if (hasEnded) {
+      state.localPrivacy = queueLocalHandoff(state.localPrivacy, {
+        nextViewerPlayerId: null,
+        prompt: ""
+      });
+    } else {
+      const nextPlayer = playerById(state.room, result.state.nextPlayerId);
+      state.localPrivacy = queueLocalHandoff(state.localPrivacy, {
+        nextViewerPlayerId: result.state.nextPlayerId,
+        prompt: `Pass now to ${getDisplayPlayerName(nextPlayer, "next player")}.`
+      });
+    }
+  }
   state.room.updatedAt = Date.now();
   handleLocalUpdate();
 }
 
-function displayEmoji(player) {
-  if (!player) return "🙂";
-  if (player.emoji) return player.emoji;
-  const avatar = Object.values(AVATARS).find((entry) => entry.theme === player.theme);
-  return avatar ? avatar.emoji : "🙂";
+function acknowledgeLocalPassHandoff() {
+  if (!state.room || state.localPrivacy.stage !== "handoff") return;
+  state.localPrivacy = confirmLocalHandoff(state.localPrivacy);
+  state.room.updatedAt = Date.now();
+  handleLocalUpdate();
 }
 
 function leaveRoom(options = {}) {
@@ -1290,6 +1490,10 @@ function leaveLocalMatch({ saveForRejoin, history = "push" } = {}) {
   state.lastLeaderId = null;
   state.lastWinSignature = null;
   state.localHasSpun = false;
+  state.localPrivacy = createInitialLocalPrivacyState();
+  state.localBattleshipOrientation = "h";
+  state.localBattleshipView = "own";
+  state.localBattleshipLastPhase = null;
   stopShuffleStripLoop();
   state.localStrip = createInitialLocalStripState();
   document.body.removeAttribute("data-theme");
@@ -1326,6 +1530,8 @@ function renderRoom() {
   renderWaitScreen(room);
   renderGame(room);
   renderGameList(room);
+  renderPassScreen(room);
+  renderBattleships(room);
   renderTicTacToe(room);
   renderEndRequest(room);
 
@@ -1396,71 +1602,76 @@ function renderScoreboard(room, leaderId) {
   const guest = room.players.guest;
   const isWaitingForGuest = !guest;
 
-  columns.appendChild(buildScoreColumn(host, "Host", leaderId));
-  columns.appendChild(buildScoreColumn(guest, "Guest", leaderId, { isWaiting: isWaitingForGuest }));
+  columns.appendChild(buildScoreDuelPanel(host, guest, leaderId, {
+    guestWaiting: isWaitingForGuest
+  }));
 }
 
-function buildScoreColumn(player, label, leaderId, options = {}) {
+function buildScoreDuelPanel(host, guest, leaderId, options = {}) {
+  const panel = document.createElement("div");
+  panel.className = "score-duel-panel";
+
+  const sides = document.createElement("div");
+  sides.className = "score-duel-sides";
+
+  const hostSide = buildScoreDuelSide(host, "Host", leaderId);
+  const guestSide = buildScoreDuelSide(guest, "Guest", leaderId, {
+    isWaiting: Boolean(options.guestWaiting)
+  });
+  const divider = document.createElement("div");
+  divider.className = "score-duel-divider";
+  divider.setAttribute("aria-hidden", "true");
+
+  sides.appendChild(hostSide);
+  sides.appendChild(divider);
+  sides.appendChild(guestSide);
+  panel.appendChild(sides);
+
+  const scorebarWrap = document.createElement("div");
+  scorebarWrap.className = "score-duel-scorebar-wrap";
+  scorebarWrap.appendChild(buildSharedScoreBroadcastRow({
+    host,
+    guest,
+    isWaiting: Boolean(options.guestWaiting)
+  }));
+  panel.appendChild(scorebarWrap);
+
+  return panel;
+}
+
+function buildScoreDuelSide(player, label, leaderId, options = {}) {
   const isWaiting = Boolean(options.isWaiting);
-  const column = document.createElement("div");
-  column.className = "score-column";
+  const side = document.createElement("div");
+  side.className = "score-duel-side";
   if (label === "Guest") {
-    column.classList.add("score-column-guest");
+    side.classList.add("score-duel-side-guest");
   }
   if (isWaiting) {
-    column.classList.add("score-column-waiting");
+    side.classList.add("score-duel-side-waiting");
   }
   const theme = player?.theme || (label === "Host" ? "red" : "green");
-  column.classList.add(`theme-${theme}`);
+  side.classList.add(`theme-${theme}`);
   const showLeaderCrown = Boolean(
     player && leaderId && player.id === leaderId && (player.gamesWon ?? 0) > 0
   );
-  if (showLeaderCrown) {
-    column.classList.add("leader");
-  }
+
   const top = document.createElement("div");
-  top.className = "score-top";
+  top.className = "score-duel-top";
 
-  const emoji = document.createElement("div");
-  emoji.className = "score-emoji";
-  if (isWaiting) {
-    emoji.classList.add("score-emoji-waiting");
-  }
-
-  const avatarInner = document.createElement("span");
-  avatarInner.className = "score-emoji-inner";
-
-  const avatarArt = document.createElement("span");
-  avatarArt.className = "score-emoji-art";
-
-  if (isWaiting) {
-    avatarArt.classList.add("score-emoji-art-placeholder");
-  } else {
-    const avatarImage = document.createElement("img");
-    avatarImage.src = getCurrentPlayerArtSrc();
-    avatarImage.alt = "";
-    avatarArt.appendChild(avatarImage);
-  }
-  avatarInner.appendChild(avatarArt);
-  emoji.appendChild(avatarInner);
-
-  if (isWaiting) {
-    const spinner = document.createElement("span");
-    spinner.className = "score-avatar-spinner";
-    spinner.setAttribute("aria-hidden", "true");
-    emoji.appendChild(spinner);
-  }
-
-  if (showLeaderCrown) {
-    const crown = document.createElement("span");
-    crown.className = "score-crown";
-    crown.textContent = "👑";
-    emoji.appendChild(crown);
-  }
+  const card = createPlayerCardElement({
+    id: player?.id || "",
+    name: player ? getDisplayPlayerName(player, label) : "",
+    roleLabel: label,
+    theme,
+    artSrc: getPlayerArtSrc(player),
+    isWaiting,
+    isLeader: showLeaderCrown
+  }, { variant: PLAYER_CARD_VARIANTS.score });
 
   const info = document.createElement("div");
+  info.className = "score-duel-meta";
   const name = document.createElement("div");
-  name.className = "score-name";
+  name.className = "score-name player-card-name player-card-name--score";
   if (isWaiting) {
     name.classList.add("score-skeleton-name");
     name.setAttribute("aria-label", `${label} waiting`);
@@ -1471,52 +1682,83 @@ function buildScoreColumn(player, label, leaderId, options = {}) {
   } else {
     name.textContent = player ? getDisplayPlayerName(player, label) : `${label} (waiting)`;
   }
-  const role = document.createElement("div");
-  role.className = "score-role";
-  role.textContent = label;
   info.appendChild(name);
-  info.appendChild(role);
 
-  top.appendChild(emoji);
+  top.appendChild(card);
   top.appendChild(info);
+  side.appendChild(top);
 
-  const stats = document.createElement("div");
-  stats.className = "score-stats";
-
-  stats.appendChild(buildStatRow("Games won", player ? player.gamesWon : "--", { isWaiting }));
-
-  column.appendChild(top);
-  column.appendChild(stats);
-
-  return column;
+  return side;
 }
 
-function buildStatRow(label, value, options = {}) {
+function getThemePalette(themeId, fallbackTheme = "red") {
+  const theme = themeId || fallbackTheme;
+  const tokens = {
+    red: { strong: "var(--red-1)", mid: "var(--red-2)", soft: "var(--red-3)" },
+    yellow: { strong: "var(--yellow-1)", mid: "var(--yellow-2)", soft: "var(--yellow-3)" },
+    green: { strong: "var(--green-1)", mid: "var(--green-2)", soft: "var(--green-3)" },
+    blue: { strong: "var(--blue-1)", mid: "var(--blue-2)", soft: "var(--blue-3)" }
+  };
+  return tokens[theme] || tokens[fallbackTheme];
+}
+
+function buildSharedScoreBroadcastRow(options = {}) {
   const isWaiting = Boolean(options.isWaiting);
+  const host = options.host || null;
+  const guest = options.guest || null;
+  const hostName = getDisplayPlayerName(host, "Player 1");
+  const guestName = getDisplayPlayerName(guest, "Waiting");
+  const hostScoreValue = host ? String(host.gamesWon ?? 0) : "0";
+  const guestScoreValue = guest ? String(guest.gamesWon ?? 0) : "--";
+  const leftPalette = getThemePalette(host?.theme, "red");
+  const rightPalette = getThemePalette(guest?.theme, "green");
+
   const row = document.createElement("div");
-  row.className = "stat-row";
+  row.className = "score-broadcast-row";
   if (isWaiting) {
-    row.classList.add("stat-row-waiting");
+    row.classList.add("score-broadcast-row-waiting");
   }
+  row.style.setProperty("--score-left-strong", leftPalette.strong);
+  row.style.setProperty("--score-left-mid", leftPalette.mid);
+  row.style.setProperty("--score-left-soft", leftPalette.soft);
+  row.style.setProperty("--score-right-strong", rightPalette.strong);
+  row.style.setProperty("--score-right-mid", rightPalette.mid);
+  row.style.setProperty("--score-right-soft", rightPalette.soft);
+  row.setAttribute("role", "group");
+  row.setAttribute("aria-label", `${hostName} ${hostScoreValue}, ${guestName} ${guestScoreValue}`);
 
-  const labelEl = document.createElement("div");
-  labelEl.className = "stat-label";
-  labelEl.textContent = label;
+  const leftTeam = document.createElement("div");
+  leftTeam.className = "score-broadcast-team score-broadcast-team-left";
+  leftTeam.textContent = hostName;
 
-  const valueEl = document.createElement("div");
-  valueEl.className = "stat-value";
+  const leftScore = document.createElement("div");
+  leftScore.className = "score-broadcast-score score-broadcast-score-left";
+  leftScore.textContent = hostScoreValue;
+
+  const seam = document.createElement("div");
+  seam.className = "score-broadcast-seam";
+  seam.setAttribute("aria-hidden", "true");
+
+  const rightScore = document.createElement("div");
+  rightScore.className = "score-broadcast-score score-broadcast-score-right";
   if (isWaiting) {
-    valueEl.classList.add("stat-value-waiting");
-    const valueSkeleton = document.createElement("span");
-    valueSkeleton.className = "skeleton-value-bar";
-    valueSkeleton.setAttribute("aria-hidden", "true");
-    valueEl.appendChild(valueSkeleton);
+    const rightScoreSkeleton = document.createElement("span");
+    rightScoreSkeleton.className = "skeleton-value-bar";
+    rightScoreSkeleton.setAttribute("aria-hidden", "true");
+    rightScore.appendChild(rightScoreSkeleton);
   } else {
-    valueEl.textContent = value;
+    rightScore.textContent = guestScoreValue;
   }
 
-  row.appendChild(labelEl);
-  row.appendChild(valueEl);
+  const rightTeam = document.createElement("div");
+  rightTeam.className = "score-broadcast-team score-broadcast-team-right";
+  rightTeam.textContent = guestName;
+
+  row.appendChild(leftTeam);
+  row.appendChild(leftScore);
+  row.appendChild(seam);
+  row.appendChild(rightScore);
+  row.appendChild(rightTeam);
   return row;
 }
 
@@ -1649,12 +1891,250 @@ function renderGameList(room) {
   }
 }
 
+function getTicTacToeState(room) {
+  const activeGameId = room?.game?.id || null;
+  const isTicTacToeSurface = Boolean(activeGameId) && (
+    activeGameId === "tic_tac_toe" ||
+    isTicTacToeSurfaceGame(activeGameId)
+  );
+  if (!room?.game || !isTicTacToeSurface) return null;
+  return getDisplayStateForRoomGame(room) || room.game.state;
+}
+
+function isTicTacToeCellPlayable(room, index, providedState = null) {
+  const numericIndex = Number(index);
+  if (!Number.isInteger(numericIndex) || numericIndex < 0) return false;
+  const stateGame = providedState || getTicTacToeState(room);
+  if (!stateGame || !Array.isArray(stateGame.board) || numericIndex >= stateGame.board.length) return false;
+  if (stateGame.winnerId || stateGame.draw) return false;
+  if (stateGame.board[numericIndex]) return false;
+
+  const isPlayer = isLocalMode() || state.you?.role === "host" || state.you?.role === "guest";
+  if (!isPlayer) return false;
+
+  const isYourTurn = isLocalMode()
+    ? Boolean(stateGame.nextPlayerId)
+    : stateGame.nextPlayerId === state.you?.playerId;
+
+  return Boolean(isYourTurn);
+}
+
+function commitTicTacToeMove(index, options = {}) {
+  if (!state.room?.game) return false;
+  if (!isTicTacToeCellPlayable(state.room, index)) return false;
+
+  const numericIndex = Number(index);
+  if (isLocalMode()) {
+    applyLocalMove({ index: numericIndex });
+  } else {
+    send({ type: "move", gameId: state.room.game?.id, move: { index: numericIndex } });
+  }
+
+  if (options.fromPointer) {
+    state.boardGesture.suppressClickUntil = Date.now() + BOARD_CLICK_SUPPRESS_MS;
+    if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+      try {
+        navigator.vibrate(12);
+      } catch (error) {
+        // ignore unsupported vibration errors
+      }
+    }
+  }
+
+  return true;
+}
+
+function getTicTacToeCellIndexFromNode(boardEl, node) {
+  if (!(node instanceof Element)) return null;
+  const cell = node.closest(".ttt-cell");
+  if (!(cell instanceof HTMLElement) || !boardEl.contains(cell)) return null;
+  const numericIndex = Number(cell.dataset.index);
+  return Number.isInteger(numericIndex) ? numericIndex : null;
+}
+
+function getTicTacToeCellIndexFromEvent(boardEl, event) {
+  return getTicTacToeCellIndexFromNode(boardEl, event.target);
+}
+
+function getTicTacToeCellIndexFromPoint(boardEl, clientX, clientY) {
+  const node = document.elementFromPoint(clientX, clientY);
+  return getTicTacToeCellIndexFromNode(boardEl, node);
+}
+
+function setTicTacToePreviewCell(boardEl, index = null) {
+  boardEl.querySelectorAll(".ttt-cell.is-preview, .ttt-cell.is-pressing").forEach((node) => {
+    node.classList.remove("is-preview", "is-pressing");
+  });
+
+  if (!Number.isInteger(index)) {
+    state.boardGesture.previewIndex = null;
+    return;
+  }
+
+  const previewCell = boardEl.querySelector(`.ttt-cell[data-index="${index}"]`);
+  if (!(previewCell instanceof HTMLElement)) {
+    state.boardGesture.previewIndex = null;
+    return;
+  }
+
+  previewCell.classList.add("is-preview");
+  state.boardGesture.previewIndex = index;
+}
+
+function clearBoardGestureTracking(boardEl, options = {}) {
+  const preserveSuppression = Boolean(options.preserveSuppression);
+  if (boardEl) {
+    setTicTacToePreviewCell(boardEl, null);
+  } else {
+    state.boardGesture.previewIndex = null;
+  }
+  state.boardGesture.activePointerId = null;
+  state.boardGesture.startX = 0;
+  state.boardGesture.startY = 0;
+  state.boardGesture.lastX = 0;
+  state.boardGesture.lastY = 0;
+  state.boardGesture.startedAt = 0;
+  state.boardGesture.isDragging = false;
+  if (!preserveSuppression) {
+    state.boardGesture.suppressClickUntil = 0;
+  }
+}
+
+function handleTicTacToeBoardPointerDown(event) {
+  const boardEl = event.currentTarget;
+  if (!(boardEl instanceof HTMLElement)) return;
+  if (boardEl.classList.contains("hidden")) return;
+  if (state.activeScreen !== "game") return;
+  if (event.pointerType === "mouse" && event.button !== 0) return;
+  if (state.boardGesture.activePointerId !== null) return;
+
+  const index = getTicTacToeCellIndexFromEvent(boardEl, event);
+  if (!Number.isInteger(index) || !isTicTacToeCellPlayable(state.room, index)) return;
+
+  state.boardGesture.activePointerId = event.pointerId;
+  state.boardGesture.startX = event.clientX;
+  state.boardGesture.startY = event.clientY;
+  state.boardGesture.lastX = event.clientX;
+  state.boardGesture.lastY = event.clientY;
+  state.boardGesture.startedAt = Date.now();
+  state.boardGesture.isDragging = false;
+  setTicTacToePreviewCell(boardEl, index);
+
+  if (typeof boardEl.setPointerCapture === "function") {
+    try {
+      boardEl.setPointerCapture(event.pointerId);
+    } catch (error) {
+      // ignore if pointer capture is unavailable
+    }
+  }
+}
+
+function handleTicTacToeBoardPointerMove(event) {
+  const boardEl = event.currentTarget;
+  if (!(boardEl instanceof HTMLElement)) return;
+  if (state.boardGesture.activePointerId !== event.pointerId) return;
+
+  const deltaX = event.clientX - state.boardGesture.startX;
+  const deltaY = event.clientY - state.boardGesture.startY;
+  if (!state.boardGesture.isDragging && hasMetDragActivation(deltaX, deltaY, BOARD_DRAG_ACTIVATION_PX)) {
+    state.boardGesture.isDragging = true;
+  }
+
+  state.boardGesture.lastX = event.clientX;
+  state.boardGesture.lastY = event.clientY;
+
+  const hoveredIndex = getTicTacToeCellIndexFromPoint(boardEl, event.clientX, event.clientY);
+  const previewIndex = Number.isInteger(hoveredIndex) && isTicTacToeCellPlayable(state.room, hoveredIndex)
+    ? hoveredIndex
+    : null;
+  if (state.boardGesture.previewIndex !== previewIndex) {
+    setTicTacToePreviewCell(boardEl, previewIndex);
+  }
+
+  if (event.pointerType !== "mouse" && state.boardGesture.isDragging && event.cancelable) {
+    event.preventDefault();
+  }
+}
+
+function handleTicTacToeBoardPointerUp(event) {
+  const boardEl = event.currentTarget;
+  if (!(boardEl instanceof HTMLElement)) return;
+  if (state.boardGesture.activePointerId !== event.pointerId) return;
+
+  const commitIndex = state.boardGesture.previewIndex;
+  clearBoardGestureTracking(boardEl, { preserveSuppression: true });
+
+  if (typeof boardEl.releasePointerCapture === "function") {
+    try {
+      if (boardEl.hasPointerCapture(event.pointerId)) {
+        boardEl.releasePointerCapture(event.pointerId);
+      }
+    } catch (error) {
+      // ignore release failures
+    }
+  }
+
+  if (Number.isInteger(commitIndex)) {
+    commitTicTacToeMove(commitIndex, { fromPointer: true });
+  }
+
+  if (event.pointerType !== "mouse" && event.cancelable) {
+    event.preventDefault();
+  }
+}
+
+function handleTicTacToeBoardPointerCancel(event) {
+  const boardEl = event.currentTarget;
+  if (!(boardEl instanceof HTMLElement)) return;
+  if (state.boardGesture.activePointerId !== event.pointerId) return;
+
+  clearBoardGestureTracking(boardEl, { preserveSuppression: true });
+  if (typeof boardEl.releasePointerCapture === "function") {
+    try {
+      if (boardEl.hasPointerCapture(event.pointerId)) {
+        boardEl.releasePointerCapture(event.pointerId);
+      }
+    } catch (error) {
+      // ignore release failures
+    }
+  }
+}
+
+function handleTicTacToeBoardClick(event) {
+  const boardEl = event.currentTarget;
+  if (!(boardEl instanceof HTMLElement)) return;
+  if (boardEl.classList.contains("hidden")) return;
+
+  if (shouldSuppressClick(state.boardGesture.suppressClickUntil, Date.now(), 0)) {
+    event.preventDefault();
+    event.stopPropagation();
+    return;
+  }
+
+  const index = getTicTacToeCellIndexFromEvent(boardEl, event);
+  if (!Number.isInteger(index)) return;
+  commitTicTacToeMove(index, { fromPointer: false });
+}
+
+function initTicTacToeBoardGestures() {
+  const boardEl = document.getElementById("ttt-board");
+  if (!(boardEl instanceof HTMLElement)) return;
+  if (boardEl.dataset.gestureInit === "true") return;
+  boardEl.dataset.gestureInit = "true";
+  boardEl.addEventListener("pointerdown", handleTicTacToeBoardPointerDown);
+  boardEl.addEventListener("pointermove", handleTicTacToeBoardPointerMove);
+  boardEl.addEventListener("pointerup", handleTicTacToeBoardPointerUp);
+  boardEl.addEventListener("pointercancel", handleTicTacToeBoardPointerCancel);
+  boardEl.addEventListener("click", handleTicTacToeBoardClick);
+}
+
 function renderTicTacToe(room) {
   const boardEl = document.getElementById("ttt-board");
   const indicatorEl = document.getElementById("turn-indicator");
-  const isLocal = isLocalMode();
+  const gameSubtext = document.getElementById("game-subtext");
   const host = room.players?.host || null;
   const guest = room.players?.guest || null;
+  if (!boardEl || !indicatorEl) return;
 
   const renderTurnSplit = (activePlayerId = null, mode = "turn") => {
     if (!indicatorEl) return;
@@ -1683,7 +2163,7 @@ function renderTicTacToe(room) {
       const avatar = document.createElement("span");
       avatar.className = "turn-player-avatar";
       const avatarImg = document.createElement("img");
-      avatarImg.src = getCurrentPlayerArtSrc();
+      avatarImg.src = getPlayerArtSrc(player);
       avatarImg.alt = "";
       avatar.setAttribute("aria-hidden", "true");
       avatar.appendChild(avatarImg);
@@ -1713,19 +2193,25 @@ function renderTicTacToe(room) {
     });
   };
 
-  const activeGameId = room.game?.id || null;
-  const isTicTacToeSurface = Boolean(activeGameId) && (
-    activeGameId === "tic_tac_toe" ||
-    isTicTacToeSurfaceGame(activeGameId)
-  );
+  const stateGame = getTicTacToeState(room);
 
-  if (!room.game || !isTicTacToeSurface) {
+  if (!stateGame) {
+    clearBoardGestureTracking(boardEl, { preserveSuppression: true });
+    boardEl.classList.add("hidden");
+    boardEl.classList.remove("game-board-highlight", "game-board-passive");
+    PLAYER_THEME_CLASS_NAMES.forEach((className) => boardEl.classList.remove(className));
     boardEl.innerHTML = "";
+    if (gameSubtext) gameSubtext.classList.add("hidden");
     renderTurnSplit(null, "idle");
     return;
   }
 
-  const stateGame = room.game.state;
+  boardEl.classList.remove("hidden");
+  if (gameSubtext) {
+    gameSubtext.classList.remove("hidden");
+    gameSubtext.textContent = "Classic 3x3 tactical duel. First to line up three marks wins.";
+  }
+
   const winner = stateGame.winnerId ? playerById(room, stateGame.winnerId) : null;
   const symbolOwners = new Map();
   Object.entries(stateGame.symbols || {}).forEach(([playerId, symbol]) => {
@@ -1743,11 +2229,26 @@ function renderTicTacToe(room) {
     renderTurnSplit(stateGame.nextPlayerId || null, "turn");
   }
 
+  const boardThemePlayer = winner
+    || (!stateGame.draw ? playerById(room, stateGame.nextPlayerId) : null)
+    || host
+    || guest
+    || null;
+  boardEl.classList.remove("game-board-passive");
+  boardEl.classList.add("game-board-highlight");
+  PLAYER_THEME_CLASS_NAMES.forEach((className) => boardEl.classList.remove(className));
+  if (boardThemePlayer?.theme) {
+    boardEl.classList.add(`theme-${boardThemePlayer.theme}`);
+  } else {
+    boardEl.classList.add("game-board-passive");
+  }
+
   boardEl.innerHTML = "";
   stateGame.board.forEach((cell, index) => {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "ttt-cell";
+    button.dataset.index = String(index);
     if (cell) {
       const owner = symbolOwners.get(cell);
       const mark = document.createElement("span");
@@ -1763,21 +2264,213 @@ function renderTicTacToe(room) {
       button.appendChild(mark);
     }
 
-    const isPlayable = !cell && !stateGame.winnerId && !stateGame.draw;
-    const isYourTurn = isLocal ? Boolean(stateGame.nextPlayerId) : stateGame.nextPlayerId === state.you?.playerId;
-    const isPlayer = isLocal || state.you?.role === "host" || state.you?.role === "guest";
-    button.disabled = !(isPlayable && isYourTurn && isPlayer);
-
-    button.addEventListener("click", () => {
-      if (isLocal) {
-        applyLocalMove(index);
-        return;
-      }
-      send({ type: "move", gameId: room.game?.id, move: { index } });
-    });
+    button.disabled = !isTicTacToeCellPlayable(room, index, stateGame);
 
     boardEl.appendChild(button);
   });
+
+  if (Number.isInteger(state.boardGesture.previewIndex)) {
+    const previewIndex = isTicTacToeCellPlayable(room, state.boardGesture.previewIndex, stateGame)
+      ? state.boardGesture.previewIndex
+      : null;
+    setTicTacToePreviewCell(boardEl, previewIndex);
+  }
+}
+
+function renderPassScreen(room) {
+  const passMessage = document.getElementById("pass-message");
+  if (!passMessage) return;
+  if (!isLocalMode() || !room?.game) {
+    passMessage.textContent = "Hand over to the next player, then continue.";
+    return;
+  }
+  passMessage.textContent = state.localPrivacy.prompt || "Hand over to the next player, then continue.";
+}
+
+function renderBattleships(room) {
+  const activeGameId = room.game?.id || null;
+  const isBattleships = activeGameId === "battleships";
+  const battleshipLayout = document.getElementById("battleship-layout");
+  const tttBoard = document.getElementById("ttt-board");
+  const subtext = document.getElementById("game-subtext");
+  const indicatorEl = document.getElementById("turn-indicator");
+  const ownBoardEl = document.getElementById("battleship-own-board");
+  const targetBoardEl = document.getElementById("battleship-target-board");
+  const ownCard = document.getElementById("battleship-own-card");
+  const targetCard = document.getElementById("battleship-target-card");
+  const ownTitle = document.getElementById("battleship-own-title");
+  const targetTitle = document.getElementById("battleship-target-title");
+  const phaseLabel = document.getElementById("battleship-phase-label");
+  const orientationButton = document.getElementById("battleship-orientation");
+  const viewOwnButton = document.getElementById("battleship-view-own");
+  const viewTargetButton = document.getElementById("battleship-view-target");
+
+  if (!battleshipLayout || !ownBoardEl || !targetBoardEl || !ownCard || !targetCard) return;
+
+  if (!room.game || !isBattleships) {
+    battleshipLayout.classList.add("hidden");
+    ownBoardEl.innerHTML = "";
+    targetBoardEl.innerHTML = "";
+    ownCard.classList.remove("hidden");
+    targetCard.classList.remove("hidden");
+    return;
+  }
+
+  battleshipLayout.classList.remove("hidden");
+  if (tttBoard) tttBoard.classList.add("hidden");
+  if (subtext) subtext.classList.add("hidden");
+
+  const gameState = getDisplayStateForRoomGame(room) || room.game.state;
+  const fullState = room.game.state;
+  const viewerPlayerId = ensureLocalViewer(room);
+  const viewer = playerById(room, viewerPlayerId);
+  const opponent = fullState.playerOrder
+    .map((id) => playerById(room, id))
+    .find((player) => player?.id && player.id !== viewerPlayerId) || null;
+  const isViewerTurn = Boolean(fullState.nextPlayerId && fullState.nextPlayerId === viewerPlayerId);
+  const isFinished = Boolean(fullState.winnerId || fullState.draw || fullState.phase === "finished");
+  const canInteract = isLocalMode() && state.localPrivacy.stage !== "handoff" && !isFinished && isViewerTurn;
+  const phase = fullState.phase || gameState.phase || "placement";
+
+  if (state.localBattleshipLastPhase !== phase) {
+    if (phase === "placement") {
+      state.localBattleshipView = "own";
+    } else if (phase === "battle") {
+      state.localBattleshipView = "target";
+    } else {
+      state.localBattleshipView = "target";
+    }
+    state.localBattleshipLastPhase = phase;
+  }
+  if (state.localBattleshipView !== "own" && state.localBattleshipView !== "target") {
+    state.localBattleshipView = phase === "placement" ? "own" : "target";
+  }
+  const activeView = state.localBattleshipView;
+
+  if (ownTitle) ownTitle.textContent = `${getDisplayPlayerName(viewer, "You")} waters`;
+  if (targetTitle) targetTitle.textContent = `${getDisplayPlayerName(opponent, "Opponent")} grid`;
+
+  if (phaseLabel) {
+    if (gameState.phase === "placement") {
+      phaseLabel.textContent = `Placement phase: place ${fullState.shipLength}-cell ships (${fullState.shipsPerPlayer} total).`;
+    } else if (gameState.phase === "battle") {
+      phaseLabel.textContent = "Battle phase: fire at the target grid.";
+    } else {
+      phaseLabel.textContent = "Round complete.";
+    }
+  }
+
+  const canPlace = gameState.phase === "placement" && canInteract;
+  const canFirePhase = gameState.phase === "battle" && canInteract;
+  if (orientationButton instanceof HTMLButtonElement) {
+    orientationButton.disabled = !canPlace;
+    orientationButton.textContent = `Orientation: ${state.localBattleshipOrientation === "v" ? "Vertical" : "Horizontal"}`;
+  }
+  if (viewOwnButton instanceof HTMLButtonElement) {
+    viewOwnButton.classList.toggle("is-active", activeView === "own");
+    viewOwnButton.setAttribute("aria-pressed", String(activeView === "own"));
+  }
+  if (viewTargetButton instanceof HTMLButtonElement) {
+    viewTargetButton.classList.toggle("is-active", activeView === "target");
+    viewTargetButton.setAttribute("aria-pressed", String(activeView === "target"));
+  }
+
+  if (indicatorEl) {
+    indicatorEl.innerHTML = "";
+    indicatorEl.classList.add("turn-passive");
+    const text = document.createElement("span");
+    if (isFinished) {
+      const winner = playerById(room, fullState.winnerId);
+      text.textContent = winner
+        ? `${getDisplayPlayerName(winner, "Winner")} won.`
+        : "Round complete.";
+    } else if (isViewerTurn) {
+      text.textContent = `${getDisplayPlayerName(viewer, "You")} to play`;
+    } else {
+      text.textContent = `Waiting for ${getDisplayPlayerName(playerById(room, fullState.nextPlayerId), "opponent")}`;
+    }
+    indicatorEl.appendChild(text);
+  }
+
+  const shipCells = new Set((gameState.ownBoard?.ships || []).flatMap((ship) => ship.cells || []));
+  const hitsReceived = new Set(gameState.ownBoard?.hitsReceived || []);
+  const missesReceived = new Set(gameState.ownBoard?.missesReceived || []);
+  const targetHits = new Set(gameState.targetBoard?.hits || []);
+  const targetMisses = new Set(gameState.targetBoard?.misses || []);
+  const targetKnown = new Set([...targetHits, ...targetMisses]);
+  const size = Number(gameState.boardSize) || 6;
+
+  ownCard.classList.toggle("hidden", activeView !== "own");
+  targetCard.classList.toggle("hidden", activeView !== "target");
+  ownCard.classList.remove("game-board-highlight", "is-active-view", "is-actionable", ...PLAYER_THEME_CLASS_NAMES);
+  targetCard.classList.remove("game-board-highlight", "is-active-view", "is-actionable", ...PLAYER_THEME_CLASS_NAMES);
+  ownCard.classList.add("game-board-highlight");
+  targetCard.classList.add("game-board-highlight");
+  if (viewer?.theme) ownCard.classList.add(`theme-${viewer.theme}`);
+  if (opponent?.theme) targetCard.classList.add(`theme-${opponent.theme}`);
+  ownCard.classList.toggle("is-active-view", activeView === "own");
+  targetCard.classList.toggle("is-active-view", activeView === "target");
+  ownCard.classList.toggle("is-actionable", canPlace);
+  targetCard.classList.toggle("is-actionable", canFirePhase);
+
+  ownBoardEl.innerHTML = "";
+  targetBoardEl.innerHTML = "";
+
+  for (let index = 0; index < size * size; index += 1) {
+    const ownCell = document.createElement("button");
+    ownCell.type = "button";
+    ownCell.className = "battleship-cell";
+    ownCell.disabled = true;
+    if (shipCells.has(index)) ownCell.classList.add("is-ship");
+    if (hitsReceived.has(index)) {
+      ownCell.classList.add("is-hit");
+      ownCell.textContent = "X";
+    } else if (missesReceived.has(index)) {
+      ownCell.classList.add("is-miss");
+      ownCell.textContent = "•";
+    } else if (shipCells.has(index)) {
+      ownCell.textContent = "■";
+    }
+
+    if (canPlace && !shipCells.has(index)) {
+      ownCell.disabled = false;
+      ownCell.classList.add("is-target");
+      ownCell.addEventListener("click", () => {
+        applyLocalMove({
+          action: "place_ship",
+          index,
+          orientation: state.localBattleshipOrientation
+        });
+      });
+    }
+    ownBoardEl.appendChild(ownCell);
+
+    const targetCell = document.createElement("button");
+    targetCell.type = "button";
+    targetCell.className = "battleship-cell";
+
+    if (targetHits.has(index)) {
+      targetCell.classList.add("is-hit");
+      targetCell.textContent = "X";
+    } else if (targetMisses.has(index)) {
+      targetCell.classList.add("is-miss");
+      targetCell.textContent = "•";
+    }
+
+    const canFire = canFirePhase && !targetKnown.has(index);
+    targetCell.disabled = !canFire;
+    if (canFire) {
+      targetCell.classList.add("is-target");
+      targetCell.addEventListener("click", () => {
+        applyLocalMove({
+          action: "fire",
+          index
+        });
+      });
+    }
+
+    targetBoardEl.appendChild(targetCell);
+  }
 }
 
 function renderPickScreen(room) {
@@ -1790,19 +2483,16 @@ function renderPickScreen(room) {
 }
 
 function renderWaitScreen(room) {
-  const emojiEl = document.getElementById("wait-emoji");
   const nameEl = document.getElementById("wait-name");
   const textEl = document.getElementById("wait-text");
   const picker = playerById(room, room.round?.firstPlayerId || room.round?.pickerId);
 
   if (!picker) {
-    if (emojiEl) emojiEl.textContent = "🎲";
     if (nameEl) nameEl.textContent = "Waiting";
     if (textEl) textEl.textContent = "for game choices to resolve.";
     return;
   }
 
-  if (emojiEl) emojiEl.textContent = displayEmoji(picker);
   if (nameEl) nameEl.textContent = getDisplayPlayerName(picker, "Picker");
   if (textEl) textEl.textContent = "starts this round.";
 }
@@ -1829,11 +2519,9 @@ function renderWinner(room, leaderId, previousLeader) {
   if (!winnerId && !isDraw) return;
   const winner = winnerId ? playerById(room, winnerId) : null;
 
-  const emojiEl = document.getElementById("winner-emoji");
   const titleEl = document.getElementById("winner-title");
   const columns = document.getElementById("winner-score-columns");
 
-  if (emojiEl) emojiEl.textContent = isDraw ? "🤝" : displayEmoji(winner);
   if (titleEl) {
     titleEl.textContent = isDraw && !winner
       ? "It's a draw"
@@ -1841,8 +2529,11 @@ function renderWinner(room, leaderId, previousLeader) {
   }
   if (columns) {
     columns.innerHTML = "";
-    columns.appendChild(buildScoreColumn(room.players.host, "Host", leaderId));
-    columns.appendChild(buildScoreColumn(room.players.guest, "Guest", leaderId));
+    columns.appendChild(
+      buildScoreDuelPanel(room.players.host, room.players.guest, leaderId, {
+        guestWaiting: !room.players.guest
+      })
+    );
   }
 }
 
@@ -1948,7 +2639,9 @@ function renderShuffleGrid(room) {
     return;
   }
 
-  const signature = `${state.honorific}:${players.map((player) => `${player.id}:${player.theme || "none"}`).join("|")}`;
+  const signature = players
+    .map((player) => `${player.id}:${player.theme || "none"}:${getPlayerHonorific(player, "mr")}`)
+    .join("|");
   if (grid.dataset.signature === signature) return;
   grid.dataset.signature = signature;
   grid.innerHTML = "";
@@ -1965,7 +2658,7 @@ function renderShuffleGrid(room) {
 
     const avatar = document.createElement("img");
     avatar.className = "shuffle-card-avatar";
-    avatar.src = getCurrentPlayerArtSrc();
+    avatar.src = getPlayerArtSrc(player);
     avatar.alt = "";
     avatar.setAttribute("aria-hidden", "true");
     card.appendChild(avatar);
@@ -2155,6 +2848,7 @@ function resolveScreen(room) {
   const finished = room.game?.state?.winnerId || room.game?.state?.draw;
   if (isLocalMode()) {
     if (finished) return "winner";
+    if (shouldShowLocalPassScreen(room, state.localPrivacy)) return "pass";
     if (room.round?.status === "shuffling") return "shuffle";
     if (room.game && !finished) return "game";
     if (room.round?.status === "waiting_game") return "lobby";
@@ -2183,6 +2877,39 @@ function setup() {
   const localResumeButton = document.getElementById("local-rejoin-room");
   const localClearButton = document.getElementById("local-clear-rejoin");
   const shareRoomLinkButton = document.getElementById("share-room-link");
+  const updateHostPicker = () => {
+    updateAvatarPicker(hostPicker, state.hostAvatar);
+    renderHostSetupCta();
+  };
+  const updateJoinPicker = () => updateAvatarPicker(joinPicker, state.joinAvatar);
+  const updateLocalPickers = () => renderLocalSetup();
+
+  document.getElementById("go-local").addEventListener("click", () => {
+    state.mode = "local";
+    state.localStep = "p1";
+    state.localAvatars = { one: null, two: null };
+    state.localHonorifics = { p1: "mr", p2: "mr" };
+    state.localHasSpun = false;
+    stopShuffleStripLoop();
+    state.localStrip = createInitialLocalStripState();
+    updateLocalPickers();
+    showScreen("local", { history: "push" });
+  });
+  document.getElementById("go-host").addEventListener("click", () => {
+    state.mode = "online";
+    state.hostHonorific = "mr";
+    syncHonorificToggleInputs();
+    refreshAvatarPickerLabels();
+    refreshStaticPlayerArt();
+    renderHostSetupCta();
+    showScreen("host", { history: "push" });
+  });
+  document.getElementById("go-join").addEventListener("click", () => {
+    state.mode = "online";
+    resetJoinFlow();
+    renderJoinSetup();
+    showScreen("join", { history: "push" });
+  });
 
   initModeToggle();
   initHonorificToggle();
@@ -2198,13 +2925,6 @@ function setup() {
   registerServiceWorker();
   initInstallPromptHandling();
   state.localRejoinSnapshot = loadLocalRejoinSnapshot();
-
-  const updateHostPicker = () => {
-    updateAvatarPicker(hostPicker, state.hostAvatar);
-    renderHostSetupCta();
-  };
-  const updateJoinPicker = () => updateAvatarPicker(joinPicker, state.joinAvatar);
-  const updateLocalPickers = () => renderLocalSetup();
 
   setupAvatarPicker(hostPicker, (avatarId) => {
     state.hostAvatar = avatarId;
@@ -2250,6 +2970,8 @@ function setup() {
   updateJoinPicker();
   updateLocalPickers();
   renderJoinSetup();
+  initTicTacToeBoardGestures();
+  initLandingSwipeGestures();
   setLandingMode("local", { animate: false });
 
   if (landingTabLocal) {
@@ -2259,27 +2981,6 @@ function setup() {
     landingTabOnline.addEventListener("click", () => setLandingMode("online"));
   }
 
-  document.getElementById("go-local").addEventListener("click", () => {
-    state.mode = "local";
-    state.localStep = "p1";
-    state.localAvatars = { one: null, two: null };
-    state.localHasSpun = false;
-    stopShuffleStripLoop();
-    state.localStrip = createInitialLocalStripState();
-    updateLocalPickers();
-    showScreen("local", { history: "push" });
-  });
-  document.getElementById("go-host").addEventListener("click", () => {
-    state.mode = "online";
-    renderHostSetupCta();
-    showScreen("host", { history: "push" });
-  });
-  document.getElementById("go-join").addEventListener("click", () => {
-    state.mode = "online";
-    resetJoinFlow();
-    renderJoinSetup();
-    showScreen("join", { history: "push" });
-  });
   document.getElementById("create-room").addEventListener("click", () => {
     state.mode = "online";
     const avatar = getAvatar(state.hostAvatar);
@@ -2291,6 +2992,7 @@ function setup() {
     send({
       type: "create_room",
       avatar: avatar.id,
+      honorific: state.hostHonorific,
       clientId: state.clientId
     });
   });
@@ -2314,6 +3016,7 @@ function setup() {
       type: "join_room",
       code: state.joinValidatedCode || code,
       avatar: avatar.id,
+      honorific: state.joinHonorific,
       clientId: state.clientId,
       seatToken: state.seatToken
     });
@@ -2424,6 +3127,37 @@ function setup() {
     spinButton.addEventListener("click", () => startWheelSpin());
   }
 
+  const battleshipOrientation = document.getElementById("battleship-orientation");
+  if (battleshipOrientation) {
+    battleshipOrientation.addEventListener("click", () => {
+      state.localBattleshipOrientation = state.localBattleshipOrientation === "h" ? "v" : "h";
+      renderRoom();
+    });
+  }
+
+  const battleshipViewOwn = document.getElementById("battleship-view-own");
+  if (battleshipViewOwn) {
+    battleshipViewOwn.addEventListener("click", () => {
+      state.localBattleshipView = "own";
+      renderRoom();
+    });
+  }
+
+  const battleshipViewTarget = document.getElementById("battleship-view-target");
+  if (battleshipViewTarget) {
+    battleshipViewTarget.addEventListener("click", () => {
+      state.localBattleshipView = "target";
+      renderRoom();
+    });
+  }
+
+  const passReadyButton = document.getElementById("pass-ready");
+  if (passReadyButton) {
+    passReadyButton.addEventListener("click", () => {
+      acknowledgeLocalPassHandoff();
+    });
+  }
+
   document.getElementById("clear-rejoin").addEventListener("click", () => {
     clearOnlineRejoinData();
     updateRejoinCard();
@@ -2456,6 +3190,7 @@ function setup() {
   updateHeroActions();
   updateHeroRoomCodeVisibility();
   connect();
+  window.__multipassLegacyReady = true;
 }
 
 export function initLegacyApp() {
@@ -2470,11 +3205,21 @@ function renderLocalSetup() {
   renderLocalSetupScreen({
     state,
     getAvatar,
-    formatAvatarLabel: (avatar) => formatHonorificName(avatar?.name || "", state.honorific),
+    formatAvatarLabel: (avatar) => formatHonorificName(
+      avatar?.name || "",
+      state.localHonorifics[currentLocalStepKey()]
+    ),
+    formatLockedAvatarLabel: (avatar) => formatHonorificName(
+      avatar?.name || "",
+      state.localHonorifics.p1
+    ),
     updateAvatarPicker,
     renderLocalSetupCta,
     updateHeroActions
   });
+  syncHonorificToggleInputs();
+  refreshAvatarPickerLabels();
+  refreshStaticPlayerArt();
 }
 
 function initSettingsModal() {
@@ -2579,12 +3324,184 @@ function updateLocalRejoinCard() {
   updateLandingRejoinIndicators();
 }
 
+function getLandingPanelWidthPx() {
+  if (!(landingTrack instanceof HTMLElement)) return 0;
+  const rect = landingTrack.getBoundingClientRect();
+  return rect.width > 0 ? rect.width / 2 : 0;
+}
+
+function getLandingTrackOffsetPx(mode, panelWidthPx) {
+  return mode === "online" ? -panelWidthPx : 0;
+}
+
+function clearLandingGestureTracking(options = {}) {
+  const preserveSuppression = Boolean(options.preserveSuppression);
+  state.landingGesture.activePointerId = null;
+  state.landingGesture.startX = 0;
+  state.landingGesture.startY = 0;
+  state.landingGesture.lastX = 0;
+  state.landingGesture.lastY = 0;
+  state.landingGesture.startedAt = 0;
+  state.landingGesture.startMode = state.landingMode;
+  state.landingGesture.startOffsetPx = 0;
+  state.landingGesture.panelWidthPx = 0;
+  state.landingGesture.isDragging = false;
+  if (!preserveSuppression) {
+    state.landingGesture.suppressClickUntil = 0;
+  }
+  if (landingTrack instanceof HTMLElement) {
+    landingTrack.classList.remove("is-dragging");
+    landingTrack.style.removeProperty("transform");
+  }
+}
+
+function handleLandingPointerDown(event) {
+  if (!(landingTrack instanceof HTMLElement)) return;
+  if (state.activeScreen !== "landing") return;
+  if (state.landingGesture.activePointerId !== null) return;
+  if (event.pointerType === "mouse" && event.button !== 0) return;
+
+  const panelWidthPx = getLandingPanelWidthPx();
+  if (!panelWidthPx) return;
+
+  state.landingGesture.activePointerId = event.pointerId;
+  state.landingGesture.startX = event.clientX;
+  state.landingGesture.startY = event.clientY;
+  state.landingGesture.lastX = event.clientX;
+  state.landingGesture.lastY = event.clientY;
+  state.landingGesture.startedAt = Date.now();
+  state.landingGesture.startMode = state.landingMode;
+  state.landingGesture.panelWidthPx = panelWidthPx;
+  state.landingGesture.startOffsetPx = getLandingTrackOffsetPx(state.landingMode, panelWidthPx);
+  state.landingGesture.isDragging = false;
+}
+
+function handleLandingPointerMove(event) {
+  if (!(landingTrack instanceof HTMLElement)) return;
+  if (state.landingGesture.activePointerId !== event.pointerId) return;
+
+  const deltaX = event.clientX - state.landingGesture.startX;
+  const deltaY = event.clientY - state.landingGesture.startY;
+  state.landingGesture.lastX = event.clientX;
+  state.landingGesture.lastY = event.clientY;
+
+  if (!state.landingGesture.isDragging) {
+    if (!hasMetDragActivation(deltaX, deltaY, LANDING_DRAG_ACTIVATION_PX)) return;
+    const axis = classifySwipeAxis(deltaX, deltaY);
+    if (axis !== "horizontal") {
+      clearLandingGestureTracking({ preserveSuppression: true });
+      return;
+    }
+    state.landingGesture.isDragging = true;
+    landingTrack.classList.add("is-dragging");
+    if (typeof landingTrack.setPointerCapture === "function") {
+      try {
+        landingTrack.setPointerCapture(event.pointerId);
+      } catch (error) {
+        // ignore pointer capture failures
+      }
+    }
+  }
+
+  const panelWidthPx = state.landingGesture.panelWidthPx || getLandingPanelWidthPx();
+  if (!panelWidthPx) return;
+  const nextOffset = clamp(
+    state.landingGesture.startOffsetPx + deltaX,
+    -panelWidthPx,
+    0
+  );
+  landingTrack.style.transform = `translateX(${nextOffset}px)`;
+
+  if (event.cancelable) {
+    event.preventDefault();
+  }
+}
+
+function handleLandingPointerUp(event) {
+  if (!(landingTrack instanceof HTMLElement)) return;
+  if (state.landingGesture.activePointerId !== event.pointerId) return;
+
+  if (state.landingGesture.isDragging) {
+    const deltaX = event.clientX - state.landingGesture.startX;
+    const elapsedMs = Date.now() - state.landingGesture.startedAt;
+    const velocityX = computeSwipeVelocityPxPerMs(deltaX, elapsedMs);
+    const panelWidthPx = state.landingGesture.panelWidthPx || getLandingPanelWidthPx();
+    const distanceThresholdPx = Math.max(
+      LANDING_SWIPE_MIN_DISTANCE_PX,
+      panelWidthPx * LANDING_SWIPE_DISTANCE_RATIO
+    );
+    const nextMode = resolveLandingSnapMode({
+      startMode: state.landingGesture.startMode,
+      deltaX,
+      velocityX,
+      distanceThresholdPx,
+      velocityThresholdPxPerMs: LANDING_SWIPE_VELOCITY_PX_PER_MS
+    });
+
+    if (typeof landingTrack.releasePointerCapture === "function") {
+      try {
+        if (landingTrack.hasPointerCapture(event.pointerId)) {
+          landingTrack.releasePointerCapture(event.pointerId);
+        }
+      } catch (error) {
+        // ignore release failures
+      }
+    }
+    state.landingGesture.suppressClickUntil = Date.now() + BOARD_CLICK_SUPPRESS_MS;
+    clearLandingGestureTracking({ preserveSuppression: true });
+    setLandingMode(nextMode);
+    if (event.cancelable) {
+      event.preventDefault();
+    }
+    return;
+  }
+
+  clearLandingGestureTracking({ preserveSuppression: true });
+}
+
+function handleLandingPointerCancel(event) {
+  if (!(landingTrack instanceof HTMLElement)) return;
+  if (state.landingGesture.activePointerId !== event.pointerId) return;
+
+  const fallbackMode = state.landingGesture.startMode || state.landingMode;
+  if (typeof landingTrack.releasePointerCapture === "function") {
+    try {
+      if (landingTrack.hasPointerCapture(event.pointerId)) {
+        landingTrack.releasePointerCapture(event.pointerId);
+      }
+    } catch (error) {
+      // ignore release failures
+    }
+  }
+  clearLandingGestureTracking({ preserveSuppression: true });
+  setLandingMode(fallbackMode, { animate: false });
+}
+
+function handleLandingClickCapture(event) {
+  if (!shouldSuppressClick(state.landingGesture.suppressClickUntil, Date.now(), 0)) return;
+  event.preventDefault();
+  event.stopPropagation();
+}
+
+function initLandingSwipeGestures() {
+  if (!(landingCarousel instanceof HTMLElement)) return;
+  if (landingCarousel.dataset.swipeInit === "true") return;
+  landingCarousel.dataset.swipeInit = "true";
+  landingCarousel.addEventListener("pointerdown", handleLandingPointerDown);
+  landingCarousel.addEventListener("pointermove", handleLandingPointerMove);
+  landingCarousel.addEventListener("pointerup", handleLandingPointerUp);
+  landingCarousel.addEventListener("pointercancel", handleLandingPointerCancel);
+  landingCarousel.addEventListener("click", handleLandingClickCapture, true);
+}
+
 function setLandingMode(mode, options = {}) {
   const nextMode = mode === "online" ? "online" : "local";
   const modeChanged = state.landingMode !== nextMode;
   const shouldAnimate = options.animate ?? modeChanged;
   state.landingMode = nextMode;
   if (landingTrack) {
+    landingTrack.classList.remove("is-dragging");
+    landingTrack.style.removeProperty("transform");
     landingTrack.dataset.mode = nextMode;
   }
   if (landingSegmented) {
@@ -2621,6 +3538,7 @@ function resetJoinFlow() {
   state.joinValidationSource = null;
   state.pendingDeepLinkJoinCode = null;
   state.joinAvatar = null;
+  state.joinHonorific = "mr";
 }
 
 function beginJoinValidation(rawCode, options = {}) {
@@ -2686,6 +3604,9 @@ function renderJoinSetup() {
       button.classList.remove("p1-locked");
       button.removeAttribute("aria-disabled");
     });
+    syncHonorificToggleInputs();
+    refreshAvatarPickerLabels();
+    refreshStaticPlayerArt();
     return;
   }
 
@@ -2701,6 +3622,9 @@ function renderJoinSetup() {
       button.setAttribute("aria-disabled", "true");
     }
   });
+  syncHonorificToggleInputs();
+  refreshAvatarPickerLabels();
+  refreshStaticPlayerArt();
 }
 
 function renderHostSetupCta() {
@@ -2738,11 +3662,20 @@ function startLocalRoomFromSetupSelections() {
     return false;
   }
   state.mode = "local";
-  state.room = createLocalRoom(avatarOne, avatarTwo);
+  state.room = createLocalRoom(
+    avatarOne,
+    avatarTwo,
+    state.localHonorifics.p1,
+    state.localHonorifics.p2
+  );
   state.you = { playerId: state.room.players.host.id, role: "local" };
   state.lastWinSignature = null;
   state.lastLeaderId = null;
   state.localHasSpun = false;
+  resetLocalPrivacy(state.room);
+  state.localBattleshipOrientation = "h";
+  state.localBattleshipView = "own";
+  state.localBattleshipLastPhase = null;
   stopShuffleStripLoop();
   state.localStrip = createInitialLocalStripState();
   state.localStep = "p1";

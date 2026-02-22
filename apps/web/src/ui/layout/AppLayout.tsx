@@ -19,12 +19,12 @@ export function AppLayout({ children, isDevBuild }: AppLayoutProps) {
         <div className="setting-row">
           <span>Day / Night mode</span>
           <div className="mode-toggle" aria-label="Toggle light and dark mode">
-            <span className="mode-icon" aria-hidden="true">☀️</span>
+            <span className="mode-icon" aria-hidden="true">Day</span>
             <label className="switch">
               <input id="mode-toggle" type="checkbox" />
               <span className="slider"></span>
             </label>
-            <span className="mode-icon" aria-hidden="true">🌙</span>
+            <span className="mode-icon" aria-hidden="true">Night</span>
           </div>
         </div>
         {isDevBuild ? (

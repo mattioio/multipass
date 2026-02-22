@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 
 test("local browser navigation: pick -> lobby -> local-or-landing", async ({ page }) => {
   await page.goto("/");
+  await page.waitForFunction(() => window.__multipassLegacyReady === true);
   await expect(page).toHaveURL(/\/$/);
 
   await page.getByRole("button", { name: "Start" }).click();
@@ -39,6 +40,7 @@ test("online browser back exits room flow from lobby to landing", async ({ brows
   const guestPage = await guestContext.newPage();
 
   await hostPage.goto("/");
+  await hostPage.waitForFunction(() => window.__multipassLegacyReady === true);
   await hostPage.getByRole("tab", { name: "Online" }).click();
   await hostPage.getByRole("button", { name: "Host a room" }).click();
   await expect(hostPage).toHaveURL(/#host$/);
@@ -51,6 +53,7 @@ test("online browser back exits room flow from lobby to landing", async ({ brows
 
   const roomCode = (await hostPage.locator("#room-code").textContent())?.trim() || "";
   await guestPage.goto("/");
+  await guestPage.waitForFunction(() => window.__multipassLegacyReady === true);
   await guestPage.getByRole("tab", { name: "Online" }).click();
   await guestPage.getByRole("button", { name: "Join a room" }).click();
   await guestPage.locator("#join-code").fill(roomCode);

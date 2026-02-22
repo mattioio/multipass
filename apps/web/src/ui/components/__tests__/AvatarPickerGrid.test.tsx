@@ -16,9 +16,9 @@ describe("AvatarPickerGrid", () => {
       />
     );
 
-    const yellow = screen.getByRole("button", { name: /mr yellow/i });
-    const green = screen.getByRole("button", { name: /mr green/i });
-    const red = screen.getByRole("button", { name: /mr red/i });
+    const yellow = screen.getByRole("button", { name: /yellow/i });
+    const green = screen.getByRole("button", { name: /green/i });
+    const red = screen.getByRole("button", { name: /red/i });
 
     expect(yellow).toHaveAttribute("aria-pressed", "true");
     expect(yellow.querySelector(".avatar-selected-badge")).toBeInTheDocument();
@@ -30,7 +30,7 @@ describe("AvatarPickerGrid", () => {
     const handleSelect = vi.fn();
     render(<AvatarPickerGrid id="test-avatar-grid" onSelect={handleSelect} />);
 
-    fireEvent.click(screen.getByRole("button", { name: /mr red/i }));
+    fireEvent.click(screen.getByRole("button", { name: /red/i }));
     expect(handleSelect).toHaveBeenCalledWith("red");
   });
 });

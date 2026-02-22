@@ -1,6 +1,6 @@
 import type { ScreenKey } from "../../types";
 
-const ROOM_REQUIRED_SCREENS = new Set<ScreenKey>(["lobby", "pick", "wait", "game", "shuffle", "winner"]);
+const ROOM_REQUIRED_SCREENS = new Set<ScreenKey>(["lobby", "pick", "wait", "game", "pass", "shuffle", "winner"]);
 
 export interface NormalizeScreenState {
   hasRoom: boolean;

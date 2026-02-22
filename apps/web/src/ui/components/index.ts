@@ -5,6 +5,7 @@ export { CardHeader } from "./CardHeader";
 export { Button } from "./Button";
 export type { ButtonProps, ButtonVariant } from "./Button";
 export { PlayerAvatar } from "./PlayerAvatar";
+export { PlayerCardShell } from "./PlayerCardShell";
 export { AvatarTile } from "./AvatarTile";
 export { AvatarPickerGrid } from "./AvatarPickerGrid";
 export { HonorificToggle } from "./HonorificToggle";

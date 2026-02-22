@@ -117,10 +117,10 @@ export function DevKitchenScreen() {
       <section className="devkit-section">
         <h3>Avatar Tiles</h3>
         <div className="devkit-grid devkit-grid-avatars">
-          <AvatarTile avatarId="yellow" label="Mr Yellow" themeClass="theme-yellow" selected={hasFlag("selected")} />
-          <AvatarTile avatarId="red" label="Mr Red" themeClass="theme-red" />
-          <AvatarTile avatarId="green" label="Mr Green" themeClass="theme-green" disabled={hasFlag("disabled") || hasFlag("locked")} />
-          <AvatarTile avatarId="blue" label="Mr Blue" themeClass="theme-blue" />
+          <AvatarTile avatarId="yellow" label="Yellow" themeClass="theme-yellow" selected={hasFlag("selected")} />
+          <AvatarTile avatarId="red" label="Red" themeClass="theme-red" />
+          <AvatarTile avatarId="green" label="Green" themeClass="theme-green" disabled={hasFlag("disabled") || hasFlag("locked")} />
+          <AvatarTile avatarId="blue" label="Blue" themeClass="theme-blue" />
         </div>
       </section>
 

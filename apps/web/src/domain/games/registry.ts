@@ -11,6 +11,8 @@ const unknownGameDefinition: GameDefinition = {
   isAvailable: false,
   comingSoon: true,
   surfaceType: "placeholder",
+  mode: "board",
+  visibility: "public",
   Component: UnavailableGameSurface
 };
 
@@ -32,6 +34,8 @@ export const gameRegistry: GameRegistry = Object.fromEntries(
       isAvailable: Boolean(catalogGame.isAvailable),
       comingSoon: Boolean(catalogGame.comingSoon),
       surfaceType: catalogGame.surfaceType || "placeholder",
+      mode: catalogGame.mode || "board",
+      visibility: catalogGame.visibility || "public",
       Component,
       localEngine: catalogGame.localEngine
     };

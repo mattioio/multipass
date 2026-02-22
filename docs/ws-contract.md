@@ -24,7 +24,7 @@ This document defines the current wire contract between `/Users/matthew/Projects
       "host": {
         "id": "player_x",
         "name": "Mr Yellow",
-        "emoji": "🍌",
+        "honorific": "mr",
         "theme": "yellow",
         "role": "host",
         "score": 0,
@@ -79,23 +79,13 @@ This document defines the current wire contract between `/Users/matthew/Projects
 
 ### `create_room`
 ```json
-{ "type": "create_room", "avatar": "yellow", "clientId": "optional" }
+{ "type": "create_room", "avatar": "yellow", "honorific": "mr", "clientId": "optional" }
 ```
 
 ### `join_room`
 ```json
-{ "type": "join_room", "code": "ABCD", "avatar": "green", "clientId": "optional" }
+{ "type": "join_room", "code": "ABCD", "avatar": "green", "honorific": "mrs", "clientId": "optional" }
 ```
-
-### Backward Compatibility
-
-During migration, the server still accepts legacy `fruit` values in `create_room` and `join_room`.
-
-Legacy -> new mappings:
-- `banana` -> `yellow`
-- `strawberry` -> `red`
-- `kiwi` -> `green`
-- `blueberry` -> `blue`
 
 ### `leave_room`
 ```json

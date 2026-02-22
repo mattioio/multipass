@@ -1,3 +1,5 @@
+import { createBattleshipsEngine } from "./engines/battleshipsEngine.js";
+
 const LINES = [
   [0, 1, 2],
   [3, 4, 5],
@@ -91,6 +93,8 @@ function createTicTacToeConfig({ id, name, bannerKey = "tic_tac_toe" }) {
     isAvailable: true,
     bannerKey,
     surfaceType: "tic_tac_toe",
+    mode: "board",
+    visibility: "public",
     localEngine: createTicTacToeEngine()
   };
 }
@@ -110,10 +114,13 @@ export const gameCatalog = {
     name: "Battleships",
     minPlayers: 2,
     maxPlayers: 2,
-    comingSoon: true,
+    comingSoon: false,
     isAvailable: false,
     bannerKey: "battleships",
-    surfaceType: "placeholder"
+    surfaceType: "placeholder",
+    mode: "board",
+    visibility: "hidden_pass_device",
+    localEngine: createBattleshipsEngine()
   },
   zombie_dice: {
     id: "zombie_dice",
@@ -123,7 +130,9 @@ export const gameCatalog = {
     comingSoon: true,
     isAvailable: false,
     bannerKey: "zombie_dice",
-    surfaceType: "placeholder"
+    surfaceType: "placeholder",
+    mode: "dice",
+    visibility: "public"
   }
 };
 

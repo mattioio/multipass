@@ -11,8 +11,11 @@ export const localGames = Object.fromEntries(
       comingSoon: Boolean(game.comingSoon),
       bannerKey: game.bannerKey || game.id,
       surfaceType: game.surfaceType || "placeholder",
+      mode: game.mode || "board",
+      visibility: game.visibility || "public",
       init: game.localEngine?.init,
-      applyMove: game.localEngine?.applyMove
+      applyMove: game.localEngine?.applyMove,
+      getVisibleState: game.localEngine?.getVisibleState
     }
   ])
 );
@@ -24,7 +27,9 @@ export function listLocalGames() {
     minPlayers: game.minPlayers,
     maxPlayers: game.maxPlayers,
     comingSoon: Boolean(game.comingSoon),
-    bannerKey: game.bannerKey || game.id
+    bannerKey: game.bannerKey || game.id,
+    mode: game.mode || "board",
+    visibility: game.visibility || "public"
   }));
 }
 

@@ -2,7 +2,7 @@
  * @typedef {Object} PlayerState
  * @property {string} id
  * @property {string} name
- * @property {string} [emoji]
+ * @property {"mr"|"mrs"} [honorific]
  * @property {string} [theme]
  * @property {"host"|"guest"|"local"} [role]
  * @property {number} [score]

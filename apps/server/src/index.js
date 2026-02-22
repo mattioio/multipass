@@ -12,16 +12,10 @@ const webRoot = path.resolve(__dirname, "../../web");
 const PORT = Number(process.env.PORT) || 3000;
 const ROOM_TTL_MS = 90 * 60 * 1000;
 const AVATARS = {
-  yellow: { id: "yellow", name: "Mr Yellow", emoji: "🍌", theme: "yellow" },
-  red: { id: "red", name: "Mr Red", emoji: "🍓", theme: "red" },
-  green: { id: "green", name: "Mr Green", emoji: "🥝", theme: "green" },
-  blue: { id: "blue", name: "Mr Blue", emoji: "🫐", theme: "blue" }
-};
-const LEGACY_FRUIT_TO_AVATAR = {
-  banana: "yellow",
-  strawberry: "red",
-  kiwi: "green",
-  blueberry: "blue"
+  yellow: { id: "yellow", name: "Yellow", theme: "yellow" },
+  red: { id: "red", name: "Red", theme: "red" },
+  green: { id: "green", name: "Green", theme: "green" },
+  blue: { id: "blue", name: "Blue", theme: "blue" }
 };
 const CODE_LENGTH = 4;
 
@@ -69,12 +63,13 @@ function getAvatarId(raw) {
     .toLowerCase();
 }
 
-function getRequestedAvatarId(message) {
-  const avatarId = getAvatarId(message.avatar);
-  if (avatarId) return avatarId;
-  const legacyFruitId = getAvatarId(message.fruit);
-  if (!legacyFruitId) return "";
-  return LEGACY_FRUIT_TO_AVATAR[legacyFruitId] || legacyFruitId;
+function normalizeHonorific(raw) {
+  return String(raw || "").trim().toLowerCase() === "mrs" ? "mrs" : "mr";
+}
+
+function formatDisplayName(baseName, honorific) {
+  const prefix = honorific === "mrs" ? "Mrs" : "Mr";
+  return `${prefix} ${baseName}`;
 }
 
 function getAvatar(avatarId) {
@@ -87,11 +82,11 @@ function isAvatarTaken(room, avatar) {
   return taken.includes(avatar.theme);
 }
 
-function buildPlayer({ name, emoji, role, clientId, theme }) {
+function buildPlayer({ name, honorific, role, clientId, theme }) {
   return {
     id: generateId("player"),
     name,
-    emoji,
+    honorific,
     theme,
     role,
     score: 0,
@@ -108,7 +103,7 @@ function publicPlayer(player) {
   return {
     id: player.id,
     name: player.name,
-    emoji: player.emoji,
+    honorific: player.honorific || "mr",
     theme: player.theme,
     role: player.role,
     score: player.score,
@@ -220,13 +215,14 @@ function attachClient(ws, room, player, role, clientId) {
   });
 }
 
-function createRoom({ avatarId, clientId }) {
+function createRoom({ avatarId, clientId, honorific = "mr" }) {
   const code = uniqueRoomCode();
   const avatar = getAvatar(avatarId);
   if (!avatar) return null;
+  const normalizedHonorific = normalizeHonorific(honorific);
   const host = buildPlayer({
-    name: avatar.name,
-    emoji: avatar.emoji,
+    name: formatDisplayName(avatar.name, normalizedHonorific),
+    honorific: normalizedHonorific,
     role: "host",
     clientId,
     theme: avatar.theme
@@ -407,7 +403,8 @@ wss.on("connection", (ws) => {
       .toLowerCase();
 
     if (type === "create_room") {
-      const avatarId = getRequestedAvatarId(message);
+      const avatarId = getAvatarId(message.avatar);
+      const honorific = normalizeHonorific(message.honorific);
       const clientId = message.clientId || generateId("client");
       const avatar = getAvatar(avatarId);
 
@@ -416,7 +413,7 @@ wss.on("connection", (ws) => {
         return;
       }
 
-      const room = createRoom({ avatarId, clientId });
+      const room = createRoom({ avatarId, clientId, honorific });
       if (!room) {
         send(ws, { type: "error", message: "Unable to create room." });
         return;
@@ -432,7 +429,8 @@ wss.on("connection", (ws) => {
       const code = String(message.code || "")
         .trim()
         .toUpperCase();
-      const avatarId = getRequestedAvatarId(message);
+      const avatarId = getAvatarId(message.avatar);
+      const honorific = normalizeHonorific(message.honorific);
       const clientId = message.clientId || generateId("client");
       const seatToken = String(message.seatToken || "").trim() || null;
 
@@ -465,8 +463,8 @@ wss.on("connection", (ws) => {
 
       if (!room.players.guest) {
         room.players.guest = buildPlayer({
-          name: avatar.name,
-          emoji: avatar.emoji,
+          name: formatDisplayName(avatar.name, honorific),
+          honorific,
           role: "guest",
           clientId,
           theme: avatar.theme

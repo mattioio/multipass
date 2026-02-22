@@ -663,6 +663,160 @@
   display: grid;
   grid-template-columns: repeat(3, minmax(64px, 1fr));
   gap: 10px;
+  padding: 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-2) 84%, var(--surface-3));
+  transition:
+    border-color var(--motion-fast) var(--ease-out),
+    box-shadow var(--motion-fast) var(--ease-out);
+  touch-action: none;
+}
+
+.ttt-board.game-board-highlight {
+  border-color: color-mix(in srgb, var(--theme-mid, var(--border)) 64%, #ffffff24);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--theme-strong, var(--cta)) 26%, transparent),
+    0 14px 24px color-mix(in srgb, var(--theme-strong, var(--cta)) 16%, transparent);
+}
+
+.ttt-board.game-board-passive {
+  border-color: var(--border);
+  box-shadow: none;
+}
+
+.game-subtext {
+  margin-bottom: 6px;
+}
+
+.battleship-layout {
+  display: grid;
+  gap: 16px;
+}
+
+.battleship-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.battleship-control-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.battleship-view-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.battleship-view-toggle {
+  min-width: 116px;
+}
+
+.battleship-view-toggle.is-active {
+  border-color: color-mix(in srgb, var(--theme-mid, var(--border)) 60%, #ffffff34);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--theme-strong, var(--cta)) 24%, transparent),
+    0 8px 16px color-mix(in srgb, var(--theme-strong, var(--cta)) 12%, transparent);
+}
+
+.battleship-phase-label {
+  font-weight: 600;
+}
+
+.battleship-boards {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.battleship-board-card {
+  background:
+    linear-gradient(
+      165deg,
+      color-mix(in srgb, var(--surface) 74%, var(--surface-2)) 0%,
+      color-mix(in srgb, var(--surface-2) 84%, var(--surface-3)) 100%
+    );
+  border: 1px solid color-mix(in srgb, var(--theme-mid, var(--border)) 32%, var(--border));
+  border-radius: var(--radius-md);
+  padding: 12px;
+  transition:
+    border-color var(--motion-fast) var(--ease-out),
+    box-shadow var(--motion-fast) var(--ease-out),
+    transform var(--motion-fast) var(--ease-out);
+}
+
+.battleship-board-card.game-board-highlight {
+  border-color: color-mix(in srgb, var(--theme-mid, var(--border)) 66%, #ffffff22);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, #ffffff 12%, transparent),
+    0 12px 22px color-mix(in srgb, var(--theme-strong, var(--cta)) 16%, transparent);
+}
+
+.battleship-board-card.is-active-view {
+  border-color: color-mix(in srgb, var(--theme-strong, var(--cta)) 70%, #ffffff2a);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--theme-strong, var(--cta)) 34%, transparent),
+    0 16px 28px color-mix(in srgb, var(--theme-strong, var(--cta)) 24%, transparent);
+}
+
+.battleship-board-card.is-actionable {
+  transform: translateY(-1px);
+}
+
+.battleship-board-card h3 {
+  margin: 0 0 10px;
+  font-size: 1rem;
+}
+
+.battleship-board {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(36px, 1fr));
+  gap: 6px;
+}
+
+.battleship-cell {
+  aspect-ratio: 1 / 1;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface-2) 78%, var(--surface-3));
+  color: var(--text);
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.battleship-cell.is-ship {
+  background: color-mix(in srgb, var(--blue-3) 78%, var(--surface-2));
+  border-color: color-mix(in srgb, var(--blue-1) 55%, var(--border));
+}
+
+.battleship-cell.is-hit {
+  color: color-mix(in srgb, var(--red-1) 80%, var(--text));
+}
+
+.battleship-cell.is-miss {
+  color: color-mix(in srgb, var(--muted) 84%, var(--text));
+}
+
+.battleship-cell.is-target {
+  cursor: pointer;
+}
+
+.battleship-cell.is-target:hover {
+  border-color: color-mix(in srgb, var(--theme-mid, var(--cta)) 58%, var(--border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--theme-strong, var(--cta)) 24%, transparent);
+}
+
+.battleship-cell:disabled {
+  cursor: default;
 }
 
 @media (min-width: 721px) {
@@ -699,9 +853,28 @@
   border-color: color-mix(in srgb, var(--cta) 38%, var(--border));
 }
 
+.ttt-cell.is-preview {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--theme-mid, var(--cta)) 66%, #ffffff2e);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, #ffffff 50%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--theme-strong, var(--cta)) 32%, transparent),
+    0 10px 18px color-mix(in srgb, var(--theme-strong, var(--cta)) 18%, transparent);
+}
+
+.ttt-cell.is-pressing {
+  transform: translateY(0);
+}
+
 .ttt-cell:disabled {
   opacity: 1;
   cursor: default;
+}
+
+.pass-panel {
+  max-width: 560px;
+  margin-inline: auto;
+  text-align: center;
 }
 
 .ttt-mark {
@@ -960,9 +1133,85 @@
 }
 
 @media (max-width: 720px) {
-  .score-emoji {
-    width: 80px;
-    height: 80px;
+  .player-card-shell--score {
+    width: clamp(80px, 24vw, 110px);
+    height: clamp(80px, 24vw, 110px);
+  }
+
+  .score-duel-panel {
+    padding: 10px 8px;
+  }
+
+  .score-duel-sides {
+    grid-template-columns: minmax(0, 1fr) 1px minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .score-duel-side {
+    gap: 9px;
+    padding: 4px 2px;
+  }
+
+  .score-duel-top {
+    gap: 8px;
+  }
+
+  .score-name {
+    font-size: clamp(1.02rem, 4.2vw, 1.22rem);
+  }
+
+  .score-duel-scorebar-wrap {
+    margin-top: 8px;
+    padding-inline: 2px;
+  }
+
+  .score-broadcast-row {
+    min-height: 46px;
+  }
+
+  .score-broadcast-team {
+    font-size: 0.58rem;
+    letter-spacing: 0.07em;
+    padding: 7px 7px;
+  }
+
+  .score-broadcast-score {
+    min-width: 34px;
+    font-size: clamp(0.96rem, 3.8vw, 1.2rem);
+    padding: 6px 6px;
+  }
+
+  .score-broadcast-seam {
+    flex-basis: 5px;
+  }
+
+  .battleship-controls {
+    align-items: stretch;
+    justify-content: flex-start;
+  }
+
+  .battleship-control-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .battleship-view-controls {
+    width: 100%;
+  }
+
+  .battleship-view-toggle {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .battleship-board {
+    grid-template-columns: repeat(6, minmax(30px, 1fr));
+    gap: 5px;
+  }
+
+  .battleship-cell {
+    border-radius: 8px;
+    font-size: 0.82rem;
   }
 
   #app {
