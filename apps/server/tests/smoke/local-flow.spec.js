@@ -4,6 +4,15 @@ test("local happy path: setup -> lobby -> pick -> shuffle -> game", async ({ pag
   await page.goto("/");
   await page.waitForFunction(() => window.__multipassLegacyReady === true);
 
+  const landingStartCta = page.getByRole("button", { name: "Start" });
+  const landingCtaBg = await landingStartCta.evaluate((node) => getComputedStyle(node).backgroundColor);
+  const landingDevTagStyles = await page.evaluate(() => {
+    const tag = document.getElementById("dev-build-tag");
+    if (!(tag instanceof HTMLElement)) return null;
+    const styles = getComputedStyle(tag);
+    return { color: styles.color, backgroundColor: styles.backgroundColor };
+  });
+
   await page.getByRole("button", { name: "Start" }).click();
   await expect(page.locator("#screen-local.active")).toBeVisible();
 
@@ -20,6 +29,19 @@ test("local happy path: setup -> lobby -> pick -> shuffle -> game", async ({ pag
   await page.getByRole("button", { name: "Continue" }).click();
 
   await expect(page.locator("#screen-lobby.active")).toBeVisible();
+  await expect.poll(async () => page.evaluate(() => document.body.getAttribute("data-theme"))).toBeNull();
+  const lobbyPickGameCta = page.getByRole("button", { name: "Pick a game" });
+  const lobbyCtaBg = await lobbyPickGameCta.evaluate((node) => getComputedStyle(node).backgroundColor);
+  expect(lobbyCtaBg).toBe(landingCtaBg);
+  const lobbyDevTagStyles = await page.evaluate(() => {
+    const tag = document.getElementById("dev-build-tag");
+    if (!(tag instanceof HTMLElement)) return null;
+    const styles = getComputedStyle(tag);
+    return { color: styles.color, backgroundColor: styles.backgroundColor };
+  });
+  if (landingDevTagStyles && lobbyDevTagStyles) {
+    expect(lobbyDevTagStyles).toEqual(landingDevTagStyles);
+  }
   await expect(page.locator("#score-columns .score-duel-panel")).toHaveCount(1);
   await expect(page.locator("#score-columns .score-duel-side")).toHaveCount(2);
   await expect(page.locator("#score-columns .score-duel-scorebar-wrap")).toHaveCount(1);
@@ -270,6 +292,43 @@ test("local honorific picker is per-player", async ({ page }) => {
 
   await expect(page.locator("#local-step-title")).toHaveText("Player 2 choice");
   await expect(page.locator("#local-honorific-toggle")).not.toBeChecked();
+  const lockedYellowTile = page.locator('#local-avatar-grid .avatar-option.p1-locked[data-avatar="yellow"]');
+  const redTileArt = page.locator('#local-avatar-grid .avatar-option[data-avatar="red"] .player-art img');
+  await expect(lockedYellowTile).toBeVisible();
+  await expect(lockedYellowTile.locator(".avatar-name")).toHaveText("Mrs Yellow");
+  await expect(page.locator('#local-avatar-grid .avatar-option[data-avatar="red"] .avatar-name')).toHaveText("Mr Red");
+  const lockedTransform = await lockedYellowTile.locator(".player-art img").evaluate((node) => getComputedStyle(node).transform);
+  const redTransform = await redTileArt.evaluate((node) => getComputedStyle(node).transform);
+  const isMirrored = (value) => typeof value === "string" && value.includes("-1");
+  expect(isMirrored(lockedTransform)).toBe(false);
+  expect(isMirrored(redTransform)).toBe(true);
+
+  const lockedSrc = await lockedYellowTile.locator(".player-art img").getAttribute("src");
+  const redMrSrc = await redTileArt.getAttribute("src");
+  expect(lockedSrc).toBeTruthy();
+  expect(redMrSrc).toBeTruthy();
+  expect(lockedSrc).not.toBe(redMrSrc);
+
+  await page.locator("#local-honorific-toolbar .switch").click();
+  await expect(page.locator("#local-honorific-toggle")).toBeChecked();
+  await expect(page.locator('#local-avatar-grid .avatar-option[data-avatar="red"] .avatar-name')).toHaveText("Mrs Red");
+  await expect(lockedYellowTile.locator(".avatar-name")).toHaveText("Mrs Yellow");
+  const redMrsSrc = await redTileArt.getAttribute("src");
+  const lockedSrcWhileP2Mrs = await lockedYellowTile.locator(".player-art img").getAttribute("src");
+  expect(redMrsSrc).toBeTruthy();
+  expect(lockedSrcWhileP2Mrs).toBe(lockedSrc);
+  expect(redMrsSrc).toBe(lockedSrc);
+
+  await page.locator("#local-honorific-toolbar .switch").click();
+  await expect(page.locator("#local-honorific-toggle")).not.toBeChecked();
+  await expect(page.locator('#local-avatar-grid .avatar-option[data-avatar="red"] .avatar-name')).toHaveText("Mr Red");
+  await expect(lockedYellowTile.locator(".avatar-name")).toHaveText("Mrs Yellow");
+  const redMrSrcAgain = await redTileArt.getAttribute("src");
+  const lockedSrcAfterToggleBack = await lockedYellowTile.locator(".player-art img").getAttribute("src");
+  expect(redMrSrcAgain).toBe(redMrSrc);
+  expect(lockedSrcAfterToggleBack).toBe(lockedSrc);
+  expect(lockedSrcAfterToggleBack).not.toBe(redMrSrcAgain);
+
   await page.locator('#local-avatar-grid .avatar-option[data-avatar="green"]').click();
   await page.getByRole("button", { name: "Continue" }).click();
 
@@ -278,7 +337,7 @@ test("local honorific picker is per-player", async ({ page }) => {
   await expect(page.locator("#score-columns")).toContainText("Mr Green");
 });
 
-test("battleships uses single board view with toggle", async ({ page }) => {
+test("battleships uses a single board with tap-then-confirm fire", async ({ page }) => {
   await page.goto("/");
   await page.waitForFunction(() => window.__multipassLegacyReady === true);
 
@@ -298,16 +357,47 @@ test("battleships uses single board view with toggle", async ({ page }) => {
   await expect(page.locator("#screen-game.active")).toBeVisible();
 
   await expect(page.locator("#battleship-layout")).not.toHaveClass(/hidden/);
-  await expect(page.locator("#battleship-own-card")).not.toHaveClass(/hidden/);
-  await expect(page.locator("#battleship-target-card")).toHaveClass(/hidden/);
-  await expect(page.locator("#battleship-view-own")).toHaveClass(/is-active/);
+  await expect(page.locator("#battleship-own-board .battleship-cell")).toHaveCount(36);
+  await expect(page.locator("#battleship-target-board")).toHaveCount(0);
+  await expect(page.locator("#battleship-view-own")).toHaveCount(0);
+  await expect(page.locator("#battleship-view-target")).toHaveCount(0);
   await expect(page.locator("#battleship-own-card")).toHaveClass(/game-board-highlight/);
+  await expect(page.locator("#battleship-action-row")).toHaveClass(/hidden/);
 
-  await page.getByRole("button", { name: "Target grid" }).click();
-  await expect(page.locator("#battleship-own-card")).toHaveClass(/hidden/);
-  await expect(page.locator("#battleship-target-card")).not.toHaveClass(/hidden/);
-  await expect(page.locator("#battleship-view-target")).toHaveClass(/is-active/);
-  await expect(page.locator("#battleship-target-card")).toHaveClass(/game-board-highlight/);
+  const placeShipAndPass = async (index) => {
+    await page.locator(`#battleship-own-board .battleship-cell[data-index="${index}"]`).click();
+    await expect(page.locator("#screen-pass.active")).toBeVisible();
+    await page.locator("#pass-ready").click();
+    await expect(page.locator("#screen-game.active")).toBeVisible();
+  };
+
+  await placeShipAndPass(0);
+  await placeShipAndPass(12);
+  await placeShipAndPass(6);
+  await placeShipAndPass(18);
+
+  await expect(page.locator("#battleship-action-row")).not.toHaveClass(/hidden/);
+  const historyBefore = await page.evaluate(() => window.__multipassStore.getState().room.game.state.shotHistory.length);
+
+  await page.locator('#battleship-own-board .battleship-cell[data-index="5"]').click();
+  await expect(page.locator('#battleship-own-board .battleship-cell[data-index="5"]')).toHaveClass(/is-pending-target/);
+  await expect(page.locator("#battleship-fire-target")).toHaveText(/Fire at [A-F][1-6]/);
+  await expect(page.locator("#screen-game.active")).toBeVisible();
+  const historyAfterStage = await page.evaluate(() => window.__multipassStore.getState().room.game.state.shotHistory.length);
+  expect(historyAfterStage).toBe(historyBefore);
+
+  await page.locator("#battleship-clear-target").click();
+  await expect(page.locator('#battleship-own-board .battleship-cell[data-index="5"]')).not.toHaveClass(/is-pending-target/);
+  await expect(page.locator("#battleship-fire-target")).toHaveText("Fire");
+  const historyAfterClear = await page.evaluate(() => window.__multipassStore.getState().room.game.state.shotHistory.length);
+  expect(historyAfterClear).toBe(historyBefore);
+
+  await page.locator('#battleship-own-board .battleship-cell[data-index="7"]').click();
+  await expect(page.locator('#battleship-own-board .battleship-cell[data-index="7"]')).toHaveClass(/is-pending-target/);
+  await page.locator("#battleship-fire-target").click();
+  await expect(page.locator("#screen-pass.active")).toBeVisible();
+  const historyAfterFire = await page.evaluate(() => window.__multipassStore.getState().room.game.state.shotHistory.length);
+  expect(historyAfterFire).toBe(historyBefore + 1);
 });
 
 test("local lobby duel sides remain side-by-side on mobile", async ({ page }) => {

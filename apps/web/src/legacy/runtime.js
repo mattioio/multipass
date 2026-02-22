@@ -72,6 +72,17 @@ const LANDING_DRAG_ACTIVATION_PX = 14;
 const LANDING_SWIPE_DISTANCE_RATIO = 0.18;
 const LANDING_SWIPE_MIN_DISTANCE_PX = 32;
 const LANDING_SWIPE_VELOCITY_PX_PER_MS = 0.36;
+const JOIN_CODE_LENGTH = 4;
+const JOIN_CODE_DISALLOWED_CHARS_REGEX = /[IO]/g;
+const FIXED_FOOTER_SCREEN_SLOT_MAP = Object.freeze({
+  landing: "app-fixed-footer-mode",
+  local: "local-continue",
+  host: "create-room",
+  join: "join-room",
+  lobby: "ready-cta",
+  winner: "winner-play-again"
+});
+const HERO_ACTION_BUTTON_IDS = ["hero-left-action", "hero-left-action-2", "hero-left-action-3"];
 
 function createInitialLocalStripState() {
   return {
@@ -141,6 +152,7 @@ function createInitialState() {
     joinValidatedCode: null,
     joinPreview: null,
     joinValidating: false,
+    joinCodeStatusMessage: "",
     pendingDeepLinkJoinCode: null,
     joinValidationSource: null,
     localRejoinSnapshot: null,
@@ -153,7 +165,7 @@ function createInitialState() {
     localHasSpun: false,
     localPrivacy: createInitialLocalPrivacyState(),
     localBattleshipOrientation: "h",
-    localBattleshipView: "own",
+    localBattleshipPendingTargetIndex: null,
     localBattleshipLastPhase: null,
     hostHonorific: "mr",
     joinHonorific: "mr",
@@ -303,6 +315,187 @@ function formatHonorificName(name, honorific = "mr") {
   return `${normalizeHonorific(honorific) === "mrs" ? "Mrs" : "Mr"} ${base}`;
 }
 
+function sanitizeJoinCode(rawCode) {
+  return normalizeRoomCode(rawCode)
+    .replace(JOIN_CODE_DISALLOWED_CHARS_REGEX, "")
+    .slice(0, JOIN_CODE_LENGTH);
+}
+
+function getJoinCodeSlotInputs() {
+  const slots = [];
+  for (let index = 0; index < JOIN_CODE_LENGTH; index += 1) {
+    const slot = document.getElementById(`join-code-slot-${index}`);
+    if (slot instanceof HTMLInputElement) {
+      slots.push(slot);
+    }
+  }
+  return slots;
+}
+
+function setJoinCodeSlotStates(slots = getJoinCodeSlotInputs()) {
+  slots.forEach((slot) => {
+    slot.classList.toggle("is-filled", Boolean(slot.value));
+  });
+}
+
+function readJoinCodeFromSlots(slots = getJoinCodeSlotInputs()) {
+  return sanitizeJoinCode(slots.map((slot) => slot.value || "").join(""));
+}
+
+function focusJoinCodeSlot(index) {
+  const slots = getJoinCodeSlotInputs();
+  const slot = slots[index];
+  if (!slot) return;
+  slot.focus();
+  slot.select();
+}
+
+function setJoinCodeSlots(code, options = {}) {
+  const slots = getJoinCodeSlotInputs();
+  if (slots.length !== JOIN_CODE_LENGTH) return;
+  const normalized = sanitizeJoinCode(code);
+  for (let index = 0; index < JOIN_CODE_LENGTH; index += 1) {
+    slots[index].value = normalized[index] || "";
+  }
+  setJoinCodeSlotStates(slots);
+  const focusIndex = Number.isInteger(options.focusIndex) ? options.focusIndex : null;
+  if (focusIndex !== null) {
+    focusJoinCodeSlot(Math.max(0, Math.min(JOIN_CODE_LENGTH - 1, focusIndex)));
+  }
+}
+
+function syncCanonicalJoinCodeFromSlots() {
+  const joinCodeInput = document.getElementById("join-code");
+  const code = readJoinCodeFromSlots();
+  if (joinCodeInput instanceof HTMLInputElement) {
+    joinCodeInput.value = code;
+  }
+  return code;
+}
+
+function syncJoinCodeSlotsFromCanonical(options = {}) {
+  const joinCodeInput = document.getElementById("join-code");
+  if (!(joinCodeInput instanceof HTMLInputElement)) return "";
+  const code = sanitizeJoinCode(joinCodeInput.value);
+  if (joinCodeInput.value !== code) {
+    joinCodeInput.value = code;
+  }
+  setJoinCodeSlots(code, options);
+  return code;
+}
+
+function clearJoinCodeStatusMessage() {
+  state.joinCodeStatusMessage = "";
+  const joinHint = document.getElementById("join-step-hint");
+  if (!(joinHint instanceof HTMLElement)) return;
+  if (state.joinStep !== "code" || state.joinValidating) return;
+  joinHint.textContent = "Enter 4-letter code";
+}
+
+function getJoinCodeErrorStatusMessage(rawMessage) {
+  if (rawMessage === "Room not found.") return "Room not found";
+  if (rawMessage === "Room is full.") return "Room is full";
+  return "Couldn't verify room";
+}
+
+function writeJoinCodeIntoSlots(rawCode, startIndex = 0) {
+  const slots = getJoinCodeSlotInputs();
+  if (slots.length !== JOIN_CODE_LENGTH) return "";
+  const chars = sanitizeJoinCode(rawCode).split("");
+  const offset = Math.max(0, Math.min(startIndex, JOIN_CODE_LENGTH - 1));
+  for (let index = offset; index < JOIN_CODE_LENGTH; index += 1) {
+    slots[index].value = "";
+  }
+  for (let index = 0; index < chars.length && offset + index < JOIN_CODE_LENGTH; index += 1) {
+    slots[offset + index].value = chars[index];
+  }
+  setJoinCodeSlotStates(slots);
+  return syncCanonicalJoinCodeFromSlots();
+}
+
+function setJoinCodeClusterDisabled(disabled) {
+  getJoinCodeSlotInputs().forEach((slot) => {
+    slot.disabled = disabled;
+  });
+}
+
+function autoValidateJoinCodeIfReady(code) {
+  if (state.joinStep !== "code" || state.joinValidating) return false;
+  if (code.length !== JOIN_CODE_LENGTH) return false;
+  beginJoinValidation(code, { source: "manual" });
+  return true;
+}
+
+function initJoinCodeCluster() {
+  const slots = getJoinCodeSlotInputs();
+  if (slots.length !== JOIN_CODE_LENGTH) return;
+  if (slots[0].dataset.joinCodeInit === "true") return;
+  slots.forEach((slot) => {
+    slot.dataset.joinCodeInit = "true";
+  });
+
+  slots.forEach((slot, index) => {
+    slot.addEventListener("focus", () => {
+      slot.classList.add("is-active");
+    });
+    slot.addEventListener("blur", () => {
+      slot.classList.remove("is-active");
+    });
+    slot.addEventListener("keydown", (event) => {
+      if (event.key === "Backspace" && !slot.value) {
+        if (index > 0) {
+          event.preventDefault();
+          const previous = slots[index - 1];
+          previous.value = "";
+          setJoinCodeSlotStates(slots);
+          syncCanonicalJoinCodeFromSlots();
+          clearJoinCodeStatusMessage();
+          focusJoinCodeSlot(index - 1);
+        }
+        return;
+      }
+      if (event.key.length !== 1) return;
+      const upper = event.key.toUpperCase();
+      const isLetter = upper >= "A" && upper <= "Z";
+      const isDisallowed = upper === "I" || upper === "O";
+      if (!isLetter || isDisallowed) {
+        event.preventDefault();
+      }
+    });
+    slot.addEventListener("paste", (event) => {
+      event.preventDefault();
+      const clipboardText = event.clipboardData?.getData("text") || "";
+      const code = writeJoinCodeIntoSlots(clipboardText, index);
+      clearJoinCodeStatusMessage();
+      if (code.length < JOIN_CODE_LENGTH) {
+        focusJoinCodeSlot(Math.min(index + code.length, JOIN_CODE_LENGTH - 1));
+        return;
+      }
+      autoValidateJoinCodeIfReady(code);
+    });
+    slot.addEventListener("input", () => {
+      clearJoinCodeStatusMessage();
+      const sanitizedValue = sanitizeJoinCode(slot.value);
+      if (sanitizedValue.length > 1) {
+        const code = writeJoinCodeIntoSlots(sanitizedValue, index);
+        if (code.length === JOIN_CODE_LENGTH) {
+          autoValidateJoinCodeIfReady(code);
+          return;
+        }
+        focusJoinCodeSlot(Math.min(index + sanitizedValue.length, JOIN_CODE_LENGTH - 1));
+        return;
+      }
+      slot.value = sanitizedValue.slice(-1);
+      setJoinCodeSlotStates(slots);
+      const code = syncCanonicalJoinCodeFromSlots();
+      if (slot.value && index < JOIN_CODE_LENGTH - 1) {
+        focusJoinCodeSlot(index + 1);
+      }
+      autoValidateJoinCodeIfReady(code);
+    });
+  });
+}
+
 function currentLocalStepKey() {
   return state.localStep === "p2" ? "p2" : "p1";
 }
@@ -349,13 +542,36 @@ function syncHonorificToggleInputs() {
   }
 }
 
-function updateAvatarLabelsInContainer(containerId, honorific) {
+function resolvePickerHonorific(containerId, button, fallbackHonorific = "mr") {
+  const normalizedFallback = normalizeHonorific(fallbackHonorific);
+  if (!(button instanceof HTMLElement)) return normalizedFallback;
+  const isLocked = button.classList.contains("p1-locked");
+  if (containerId === "host-avatar-picker") {
+    return normalizeHonorific(state.hostHonorific);
+  }
+  if (containerId === "join-avatar-picker") {
+    if (isLocked) {
+      return getPlayerHonorific(state.joinPreview?.host, "mr");
+    }
+    return normalizeHonorific(state.joinHonorific);
+  }
+  if (containerId === "local-avatar-grid") {
+    if (isLocked) {
+      return normalizeHonorific(state.localHonorifics.p1);
+    }
+    return normalizeHonorific(state.localHonorifics[currentLocalStepKey()]);
+  }
+  return normalizedFallback;
+}
+
+function updateAvatarLabelsInContainer(containerId, fallbackHonorific = "mr") {
   const container = document.getElementById(containerId);
   if (!(container instanceof HTMLElement)) return;
   container.querySelectorAll(".avatar-option").forEach((button) => {
     if (!(button instanceof HTMLElement)) return;
     const avatarId = button.dataset.avatar || "";
     const avatar = getAvatar(avatarId);
+    const honorific = resolvePickerHonorific(containerId, button, fallbackHonorific);
     const displayName = avatar ? formatHonorificName(avatar.name, honorific) : "";
     if (!displayName) return;
 
@@ -364,7 +580,7 @@ function updateAvatarLabelsInContainer(containerId, honorific) {
       labelEl.textContent = displayName;
     }
     const lockedByPlayerOne = button.classList.contains("p1-locked");
-    button.setAttribute("aria-label", lockedByPlayerOne ? `${displayName}, selected by Player 1` : displayName);
+    button.setAttribute("aria-label", lockedByPlayerOne ? `${displayName}, already selected` : displayName);
   });
 }
 
@@ -374,11 +590,14 @@ function refreshAvatarPickerLabels() {
   updateAvatarLabelsInContainer("local-avatar-grid", state.localHonorifics[currentLocalStepKey()]);
 }
 
-function updateAvatarArtInContainer(containerId, honorific) {
+function updateAvatarArtInContainer(containerId, fallbackHonorific = "mr") {
   const container = document.getElementById(containerId);
   if (!(container instanceof HTMLElement)) return;
-  const src = getArtSrcForHonorific(honorific);
-  container.querySelectorAll(".player-art img").forEach((node) => {
+  container.querySelectorAll(".avatar-option").forEach((button) => {
+    if (!(button instanceof HTMLElement)) return;
+    const honorific = resolvePickerHonorific(containerId, button, fallbackHonorific);
+    const src = getArtSrcForHonorific(honorific);
+    const node = button.querySelector(".player-art img");
     if (!(node instanceof HTMLImageElement)) return;
     node.src = src;
   });
@@ -496,9 +715,11 @@ function handleBrowserNavigation(targetScreen, options = {}) {
   if (normalizedTarget === "join") {
     const joinCodeInput = document.getElementById("join-code");
     if (joinCodeInput && joinCode) {
+      const normalizedJoinCode = sanitizeJoinCode(joinCode);
       resetJoinFlow();
-      joinCodeInput.value = joinCode;
-      beginJoinValidation(joinCode, { source: "deep_link" });
+      joinCodeInput.value = normalizedJoinCode;
+      setJoinCodeSlots(normalizedJoinCode);
+      beginJoinValidation(normalizedJoinCode, { source: "deep_link" });
     } else {
       state.pendingDeepLinkJoinCode = null;
       state.joinValidationSource = null;
@@ -542,11 +763,35 @@ function showScreen(key, options = {}) {
     historyState,
     allowSameHashPush
   });
+  updateFixedFooter();
   updateHeroActions();
   updateHeroRoomCodeVisibility();
 }
 
-function getHeroActionConfig() {
+function updateFixedFooter() {
+  const footer = document.getElementById("app-fixed-footer");
+  if (!(footer instanceof HTMLElement)) return;
+
+  const activeSlotId = FIXED_FOOTER_SCREEN_SLOT_MAP[state.activeScreen] || null;
+  footer.querySelectorAll(".app-fixed-footer-slot").forEach((slot) => {
+    slot.classList.add("hidden");
+  });
+
+  if (!activeSlotId) {
+    document.body.removeAttribute("data-fixed-footer-active");
+    footer.classList.add("hidden");
+    return;
+  }
+
+  const activeSlot = document.getElementById(activeSlotId);
+  if (activeSlot instanceof HTMLElement) {
+    activeSlot.classList.remove("hidden");
+  }
+  document.body.setAttribute("data-fixed-footer-active", "true");
+  footer.classList.remove("hidden");
+}
+
+function getPrimaryHeroActionConfig() {
   if (state.activeScreen === "landing") {
     const installAction = getInstallActionConfig();
     return installAction;
@@ -610,18 +855,69 @@ function getHeroActionConfig() {
   return null;
 }
 
+function getLobbyEndGameActionConfig() {
+  if (state.activeScreen !== "lobby") return null;
+  if (isLocalMode()) return null;
+  if (!state.room?.game) return null;
+  if (state.room.game.state?.winnerId || state.room.game.state?.draw) return null;
+  return {
+    label: "End game",
+    disabled: Boolean(state.room.endRequest),
+    action: () => {
+      if (!state.room || !state.room.game) return;
+      send({ type: "end_game_request" });
+    }
+  };
+}
+
+function getWinnerHomeActionConfig() {
+  if (state.activeScreen !== "winner" || !state.room) return null;
+  return {
+    label: "Home",
+    action: () => {
+      state.keepPickOpen = false;
+      if (!isLocalMode() && state.room?.code) {
+        setPreferredRoomScreen(state.room.code, "lobby");
+        setDismissedWinnerSignature(state.room.code, getEndSignature(state.room));
+      }
+      showScreen("lobby", { history: "push" });
+    }
+  };
+}
+
+function getHeroActionConfigs() {
+  const configs = [];
+  const primary = getPrimaryHeroActionConfig();
+  if (primary) configs.push(primary);
+
+  const lobbySecondary = getLobbyEndGameActionConfig();
+  if (lobbySecondary) configs.push(lobbySecondary);
+
+  const winnerSecondary = getWinnerHomeActionConfig();
+  if (winnerSecondary) configs.push(winnerSecondary);
+
+  return configs.slice(0, HERO_ACTION_BUTTON_IDS.length);
+}
+
 function updateHeroActions() {
-  const button = document.getElementById("hero-left-action");
-  if (!button) return;
-  const config = getHeroActionConfig();
-  if (!config) {
-    button.classList.add("hidden");
-    button.onclick = null;
-    return;
-  }
-  button.classList.remove("hidden");
-  button.textContent = config.label;
-  button.onclick = config.action;
+  const buttons = HERO_ACTION_BUTTON_IDS.map((id) => document.getElementById(id)).filter(Boolean);
+  if (!buttons.length) return;
+
+  const configs = getHeroActionConfigs();
+  buttons.forEach((button, index) => {
+    const element = button;
+    const config = configs[index];
+    if (!config) {
+      element.classList.add("hidden");
+      element.disabled = false;
+      element.onclick = null;
+      return;
+    }
+    element.classList.remove("hidden");
+    element.textContent = config.label;
+    element.disabled = Boolean(config.disabled);
+    element.onclick = config.action;
+  });
 }
 
 function isiOSBrowser() {
@@ -839,6 +1135,7 @@ function connect() {
     if (message.type === "room_preview") {
       state.joinValidating = false;
       state.joinValidationSource = null;
+      state.joinCodeStatusMessage = "";
       state.joinPreview = message.room || null;
       state.joinValidatedCode = message.room?.code || null;
       const canRejoin = Boolean(message.room?.canRejoin);
@@ -865,6 +1162,9 @@ function connect() {
       const joinValidationSource = state.joinValidationSource;
       if (state.joinValidating) {
         state.joinValidating = false;
+        state.joinCodeStatusMessage = joinValidationSource === "manual"
+          ? getJoinCodeErrorStatusMessage(message.message)
+          : "";
         state.joinValidationSource = null;
         renderJoinSetup();
       }
@@ -893,8 +1193,10 @@ function connect() {
         if (message.message === "Pick an avatar.") {
           dispatch(actions.autoJoinCodeSet(null));
           const joinCodeInput = document.getElementById("join-code");
-          if (joinCodeInput && state.lastRoomCode) {
-            joinCodeInput.value = state.lastRoomCode;
+          if (joinCodeInput instanceof HTMLInputElement && state.lastRoomCode) {
+            const normalizedJoinCode = sanitizeJoinCode(state.lastRoomCode);
+            joinCodeInput.value = normalizedJoinCode;
+            setJoinCodeSlots(normalizedJoinCode);
           }
           showToast("Pick an avatar to rejoin.");
           showScreen("join", { history: "replace" });
@@ -1150,7 +1452,9 @@ function saveLocalRejoinSnapshot(room, meta = {}) {
       prompt: String(state.localPrivacy.prompt || "")
     },
     localBattleshipOrientation: state.localBattleshipOrientation === "v" ? "v" : "h",
-    localBattleshipView: state.localBattleshipView === "target" ? "target" : "own",
+    localBattleshipPendingTargetIndex: Number.isInteger(state.localBattleshipPendingTargetIndex)
+      ? state.localBattleshipPendingTargetIndex
+      : null,
     room
   };
   try {
@@ -1206,7 +1510,9 @@ function hydrateLocalFromSnapshot(snapshot) {
   };
   state.localPrivacy.stage = state.localPrivacy.stage === "handoff" ? "handoff" : "visible";
   state.localBattleshipOrientation = snapshot.localBattleshipOrientation === "v" ? "v" : "h";
-  state.localBattleshipView = snapshot.localBattleshipView === "target" ? "target" : "own";
+  state.localBattleshipPendingTargetIndex = Number.isInteger(snapshot.localBattleshipPendingTargetIndex)
+    ? snapshot.localBattleshipPendingTargetIndex
+    : null;
   state.localBattleshipLastPhase = snapshot.room?.game?.state?.phase || null;
   stopShuffleStripLoop();
   state.localStrip = {
@@ -1301,6 +1607,8 @@ function advanceLocalRoundByAlternation() {
   state.localStrip.winnerId = next;
   state.room.game = null;
   resetLocalPrivacy(state.room);
+  state.localBattleshipPendingTargetIndex = null;
+  state.localBattleshipLastPhase = null;
   state.room.updatedAt = Date.now();
   handleLocalUpdate();
 }
@@ -1346,7 +1654,7 @@ function startLocalGame(gameId) {
     state.localPrivacy = createInitialLocalPrivacyState(getDefaultLocalViewerId(state.room));
   }
   state.localBattleshipOrientation = "h";
-  state.localBattleshipView = "own";
+  state.localBattleshipPendingTargetIndex = null;
   state.localBattleshipLastPhase = null;
   if (state.room.round) {
     state.room.round.hostGameId = game.id;
@@ -1383,7 +1691,7 @@ function startLocalRoundFromChoice(gameId) {
   state.room.round.guestGameId = gameId;
   state.room.round.resolvedGameId = gameId;
   state.localPrivacy = createInitialLocalPrivacyState(getDefaultLocalViewerId(state.room));
-  state.localBattleshipView = "own";
+  state.localBattleshipPendingTargetIndex = null;
   state.localBattleshipLastPhase = null;
 
   if (!state.localHasSpun) {
@@ -1416,6 +1724,9 @@ function applyLocalMove(move) {
     return;
   }
   state.room.game.state = result.state;
+  if (state.room.game.id === "battleships") {
+    state.localBattleshipPendingTargetIndex = null;
+  }
   if (!previousWinner && result.state.winnerId) {
     const winner = playerById(state.room, result.state.winnerId);
     if (winner) {
@@ -1445,6 +1756,7 @@ function applyLocalMove(move) {
 function acknowledgeLocalPassHandoff() {
   if (!state.room || state.localPrivacy.stage !== "handoff") return;
   state.localPrivacy = confirmLocalHandoff(state.localPrivacy);
+  state.localBattleshipPendingTargetIndex = null;
   state.room.updatedAt = Date.now();
   handleLocalUpdate();
 }
@@ -1492,7 +1804,7 @@ function leaveLocalMatch({ saveForRejoin, history = "push" } = {}) {
   state.localHasSpun = false;
   state.localPrivacy = createInitialLocalPrivacyState();
   state.localBattleshipOrientation = "h";
-  state.localBattleshipView = "own";
+  state.localBattleshipPendingTargetIndex = null;
   state.localBattleshipLastPhase = null;
   stopShuffleStripLoop();
   state.localStrip = createInitialLocalStripState();
@@ -1504,13 +1816,6 @@ function leaveLocalMatch({ saveForRejoin, history = "push" } = {}) {
 function renderRoom() {
   const room = state.room;
   if (!room) return;
-
-  const me = playerById(room, state.you?.playerId);
-  if (me?.theme) {
-    document.body.dataset.theme = me.theme;
-  } else {
-    document.body.removeAttribute("data-theme");
-  }
 
   const heroRoom = document.getElementById("hero-room");
   if (heroRoom) {
@@ -1536,18 +1841,17 @@ function renderRoom() {
   renderEndRequest(room);
 
   state.lastLeaderId = leaderId;
+  updateHeroActions();
 }
 
 function renderLobby(room) {
   const cta = document.getElementById("ready-cta");
-  const endGameButton = document.getElementById("end-game");
   if (!cta) return;
   if (!room.players.guest) {
     cta.disabled = true;
     cta.textContent = "Waiting for second player";
     cta.classList.add("is-waiting-copy");
     cta.dataset.action = "none";
-    if (endGameButton) endGameButton.classList.add("hidden");
     return;
   }
   cta.classList.remove("is-waiting-copy");
@@ -1555,7 +1859,6 @@ function renderLobby(room) {
   const gameActive = Boolean(room.game && !room.game.state?.winnerId && !room.game.state?.draw);
 
   if (isLocalMode()) {
-    if (endGameButton) endGameButton.classList.add("hidden");
     if (gameActive) {
       cta.disabled = true;
       cta.textContent = "Finish current game";
@@ -1568,15 +1871,6 @@ function renderLobby(room) {
     cta.classList.remove("is-waiting-copy");
     cta.dataset.action = "pick";
     return;
-  }
-
-  if (endGameButton) {
-    if (!isLocalMode() && gameActive) {
-      endGameButton.classList.remove("hidden");
-      endGameButton.disabled = Boolean(room.endRequest);
-    } else {
-      endGameButton.classList.add("hidden");
-    }
   }
 
   if (state.you?.role !== "host" && state.you?.role !== "guest") {
@@ -1657,35 +1951,20 @@ function buildScoreDuelSide(player, label, leaderId, options = {}) {
 
   const top = document.createElement("div");
   top.className = "score-duel-top";
+  const displayName = isWaiting
+    ? "Waiting"
+    : getDisplayPlayerName(player, label);
 
   const card = createPlayerCardElement({
     id: player?.id || "",
-    name: player ? getDisplayPlayerName(player, label) : "",
-    roleLabel: label,
+    name: displayName,
     theme,
     artSrc: getPlayerArtSrc(player),
     isWaiting,
     isLeader: showLeaderCrown
   }, { variant: PLAYER_CARD_VARIANTS.score });
 
-  const info = document.createElement("div");
-  info.className = "score-duel-meta";
-  const name = document.createElement("div");
-  name.className = "score-name player-card-name player-card-name--score";
-  if (isWaiting) {
-    name.classList.add("score-skeleton-name");
-    name.setAttribute("aria-label", `${label} waiting`);
-    const nameSkeleton = document.createElement("span");
-    nameSkeleton.className = "skeleton-name-bar";
-    nameSkeleton.setAttribute("aria-hidden", "true");
-    name.appendChild(nameSkeleton);
-  } else {
-    name.textContent = player ? getDisplayPlayerName(player, label) : `${label} (waiting)`;
-  }
-  info.appendChild(name);
-
   top.appendChild(card);
-  top.appendChild(info);
   side.appendChild(top);
 
   return side;
@@ -1727,17 +2006,9 @@ function buildSharedScoreBroadcastRow(options = {}) {
   row.setAttribute("role", "group");
   row.setAttribute("aria-label", `${hostName} ${hostScoreValue}, ${guestName} ${guestScoreValue}`);
 
-  const leftTeam = document.createElement("div");
-  leftTeam.className = "score-broadcast-team score-broadcast-team-left";
-  leftTeam.textContent = hostName;
-
   const leftScore = document.createElement("div");
   leftScore.className = "score-broadcast-score score-broadcast-score-left";
   leftScore.textContent = hostScoreValue;
-
-  const seam = document.createElement("div");
-  seam.className = "score-broadcast-seam";
-  seam.setAttribute("aria-hidden", "true");
 
   const rightScore = document.createElement("div");
   rightScore.className = "score-broadcast-score score-broadcast-score-right";
@@ -1750,15 +2021,8 @@ function buildSharedScoreBroadcastRow(options = {}) {
     rightScore.textContent = guestScoreValue;
   }
 
-  const rightTeam = document.createElement("div");
-  rightTeam.className = "score-broadcast-team score-broadcast-team-right";
-  rightTeam.textContent = guestName;
-
-  row.appendChild(leftTeam);
   row.appendChild(leftScore);
-  row.appendChild(seam);
   row.appendChild(rightScore);
-  row.appendChild(rightTeam);
   return row;
 }
 
@@ -2287,6 +2551,23 @@ function renderPassScreen(room) {
   passMessage.textContent = state.localPrivacy.prompt || "Hand over to the next player, then continue.";
 }
 
+function toBattleshipCoordinate(index, boardSize) {
+  const normalizedSize = Number(boardSize) || 6;
+  if (!Number.isInteger(index) || index < 0 || index >= normalizedSize * normalizedSize) {
+    return "--";
+  }
+  const col = String.fromCharCode(65 + (index % normalizedSize));
+  const row = Math.floor(index / normalizedSize) + 1;
+  return `${col}${row}`;
+}
+
+function createBattleshipMarker(text, className) {
+  const marker = document.createElement("span");
+  marker.className = className;
+  marker.textContent = text;
+  return marker;
+}
+
 function renderBattleships(room) {
   const activeGameId = room.game?.id || null;
   const isBattleships = activeGameId === "battleships";
@@ -2295,24 +2576,26 @@ function renderBattleships(room) {
   const subtext = document.getElementById("game-subtext");
   const indicatorEl = document.getElementById("turn-indicator");
   const ownBoardEl = document.getElementById("battleship-own-board");
-  const targetBoardEl = document.getElementById("battleship-target-board");
   const ownCard = document.getElementById("battleship-own-card");
-  const targetCard = document.getElementById("battleship-target-card");
   const ownTitle = document.getElementById("battleship-own-title");
-  const targetTitle = document.getElementById("battleship-target-title");
   const phaseLabel = document.getElementById("battleship-phase-label");
   const orientationButton = document.getElementById("battleship-orientation");
-  const viewOwnButton = document.getElementById("battleship-view-own");
-  const viewTargetButton = document.getElementById("battleship-view-target");
+  const actionRow = document.getElementById("battleship-action-row");
+  const clearTargetButton = document.getElementById("battleship-clear-target");
+  const fireTargetButton = document.getElementById("battleship-fire-target");
 
-  if (!battleshipLayout || !ownBoardEl || !targetBoardEl || !ownCard || !targetCard) return;
+  if (!battleshipLayout || !ownBoardEl || !ownCard) return;
 
   if (!room.game || !isBattleships) {
     battleshipLayout.classList.add("hidden");
     ownBoardEl.innerHTML = "";
-    targetBoardEl.innerHTML = "";
-    ownCard.classList.remove("hidden");
-    targetCard.classList.remove("hidden");
+    state.localBattleshipPendingTargetIndex = null;
+    if (actionRow) actionRow.classList.add("hidden");
+    if (clearTargetButton instanceof HTMLButtonElement) clearTargetButton.disabled = true;
+    if (fireTargetButton instanceof HTMLButtonElement) {
+      fireTargetButton.disabled = true;
+      fireTargetButton.textContent = "Fire";
+    }
     return;
   }
 
@@ -2324,37 +2607,22 @@ function renderBattleships(room) {
   const fullState = room.game.state;
   const viewerPlayerId = ensureLocalViewer(room);
   const viewer = playerById(room, viewerPlayerId);
-  const opponent = fullState.playerOrder
-    .map((id) => playerById(room, id))
-    .find((player) => player?.id && player.id !== viewerPlayerId) || null;
   const isViewerTurn = Boolean(fullState.nextPlayerId && fullState.nextPlayerId === viewerPlayerId);
   const isFinished = Boolean(fullState.winnerId || fullState.draw || fullState.phase === "finished");
   const canInteract = isLocalMode() && state.localPrivacy.stage !== "handoff" && !isFinished && isViewerTurn;
   const phase = fullState.phase || gameState.phase || "placement";
 
   if (state.localBattleshipLastPhase !== phase) {
-    if (phase === "placement") {
-      state.localBattleshipView = "own";
-    } else if (phase === "battle") {
-      state.localBattleshipView = "target";
-    } else {
-      state.localBattleshipView = "target";
-    }
+    state.localBattleshipPendingTargetIndex = null;
     state.localBattleshipLastPhase = phase;
   }
-  if (state.localBattleshipView !== "own" && state.localBattleshipView !== "target") {
-    state.localBattleshipView = phase === "placement" ? "own" : "target";
-  }
-  const activeView = state.localBattleshipView;
-
-  if (ownTitle) ownTitle.textContent = `${getDisplayPlayerName(viewer, "You")} waters`;
-  if (targetTitle) targetTitle.textContent = `${getDisplayPlayerName(opponent, "Opponent")} grid`;
+  if (ownTitle) ownTitle.textContent = `${getDisplayPlayerName(viewer, "You")} board`;
 
   if (phaseLabel) {
     if (gameState.phase === "placement") {
-      phaseLabel.textContent = `Placement phase: place ${fullState.shipLength}-cell ships (${fullState.shipsPerPlayer} total).`;
+      phaseLabel.textContent = `Placement: place ${fullState.shipsPerPlayer} ships of length ${fullState.shipLength}.`;
     } else if (gameState.phase === "battle") {
-      phaseLabel.textContent = "Battle phase: fire at the target grid.";
+      phaseLabel.textContent = "Battle: tap a cell to stage a shot, then confirm Fire.";
     } else {
       phaseLabel.textContent = "Round complete.";
     }
@@ -2362,17 +2630,12 @@ function renderBattleships(room) {
 
   const canPlace = gameState.phase === "placement" && canInteract;
   const canFirePhase = gameState.phase === "battle" && canInteract;
+  if (!canFirePhase) {
+    state.localBattleshipPendingTargetIndex = null;
+  }
   if (orientationButton instanceof HTMLButtonElement) {
     orientationButton.disabled = !canPlace;
     orientationButton.textContent = `Orientation: ${state.localBattleshipOrientation === "v" ? "Vertical" : "Horizontal"}`;
-  }
-  if (viewOwnButton instanceof HTMLButtonElement) {
-    viewOwnButton.classList.toggle("is-active", activeView === "own");
-    viewOwnButton.setAttribute("aria-pressed", String(activeView === "own"));
-  }
-  if (viewTargetButton instanceof HTMLButtonElement) {
-    viewTargetButton.classList.toggle("is-active", activeView === "target");
-    viewTargetButton.setAttribute("aria-pressed", String(activeView === "target"));
   }
 
   if (indicatorEl) {
@@ -2392,84 +2655,94 @@ function renderBattleships(room) {
     indicatorEl.appendChild(text);
   }
 
-  const shipCells = new Set((gameState.ownBoard?.ships || []).flatMap((ship) => ship.cells || []));
-  const hitsReceived = new Set(gameState.ownBoard?.hitsReceived || []);
-  const missesReceived = new Set(gameState.ownBoard?.missesReceived || []);
-  const targetHits = new Set(gameState.targetBoard?.hits || []);
-  const targetMisses = new Set(gameState.targetBoard?.misses || []);
-  const targetKnown = new Set([...targetHits, ...targetMisses]);
+  const board = gameState.board || {};
+  const shipCells = new Set((board.ships || []).flatMap((ship) => ship.cells || []));
+  const incomingHits = new Set(board.incomingHits || []);
+  const incomingMisses = new Set(board.incomingMisses || []);
+  const outgoingHits = new Set(board.outgoingHits || []);
+  const outgoingMisses = new Set(board.outgoingMisses || []);
+  const outgoingKnown = new Set([...outgoingHits, ...outgoingMisses]);
   const size = Number(gameState.boardSize) || 6;
 
-  ownCard.classList.toggle("hidden", activeView !== "own");
-  targetCard.classList.toggle("hidden", activeView !== "target");
-  ownCard.classList.remove("game-board-highlight", "is-active-view", "is-actionable", ...PLAYER_THEME_CLASS_NAMES);
-  targetCard.classList.remove("game-board-highlight", "is-active-view", "is-actionable", ...PLAYER_THEME_CLASS_NAMES);
+  if (!Number.isInteger(state.localBattleshipPendingTargetIndex)) {
+    state.localBattleshipPendingTargetIndex = null;
+  }
+  if (Number.isInteger(state.localBattleshipPendingTargetIndex) && outgoingKnown.has(state.localBattleshipPendingTargetIndex)) {
+    state.localBattleshipPendingTargetIndex = null;
+  }
+
+  ownCard.classList.remove("game-board-highlight", "is-actionable", ...PLAYER_THEME_CLASS_NAMES);
   ownCard.classList.add("game-board-highlight");
-  targetCard.classList.add("game-board-highlight");
   if (viewer?.theme) ownCard.classList.add(`theme-${viewer.theme}`);
-  if (opponent?.theme) targetCard.classList.add(`theme-${opponent.theme}`);
-  ownCard.classList.toggle("is-active-view", activeView === "own");
-  targetCard.classList.toggle("is-active-view", activeView === "target");
-  ownCard.classList.toggle("is-actionable", canPlace);
-  targetCard.classList.toggle("is-actionable", canFirePhase);
+  ownCard.classList.toggle("is-actionable", canPlace || canFirePhase);
 
   ownBoardEl.innerHTML = "";
-  targetBoardEl.innerHTML = "";
-
   for (let index = 0; index < size * size; index += 1) {
-    const ownCell = document.createElement("button");
-    ownCell.type = "button";
-    ownCell.className = "battleship-cell";
-    ownCell.disabled = true;
-    if (shipCells.has(index)) ownCell.classList.add("is-ship");
-    if (hitsReceived.has(index)) {
-      ownCell.classList.add("is-hit");
-      ownCell.textContent = "X";
-    } else if (missesReceived.has(index)) {
-      ownCell.classList.add("is-miss");
-      ownCell.textContent = "•";
-    } else if (shipCells.has(index)) {
-      ownCell.textContent = "■";
+    const cell = document.createElement("button");
+    cell.type = "button";
+    cell.className = "battleship-cell";
+    cell.dataset.index = String(index);
+    cell.disabled = true;
+
+    const hasShip = shipCells.has(index);
+    const hasIncomingHit = incomingHits.has(index);
+    const hasIncomingMiss = incomingMisses.has(index);
+    const hasOutgoingHit = outgoingHits.has(index);
+    const hasOutgoingMiss = outgoingMisses.has(index);
+    const hasOutgoingMark = hasOutgoingHit || hasOutgoingMiss;
+    const isPendingTarget = state.localBattleshipPendingTargetIndex === index;
+
+    if (hasShip) cell.classList.add("is-ship");
+    if (hasIncomingHit) {
+      cell.classList.add("is-incoming-hit");
+      cell.appendChild(createBattleshipMarker("X", "battleship-marker battleship-marker-incoming battleship-marker-hit"));
+    } else if (hasIncomingMiss) {
+      cell.classList.add("is-incoming-miss");
+      cell.appendChild(createBattleshipMarker("•", "battleship-marker battleship-marker-incoming battleship-marker-miss"));
+    }
+    if (hasOutgoingHit) {
+      cell.classList.add("has-outgoing-hit");
+      cell.appendChild(createBattleshipMarker("X", "battleship-marker battleship-marker-outgoing battleship-marker-hit"));
+    } else if (hasOutgoingMiss) {
+      cell.classList.add("has-outgoing-miss");
+      cell.appendChild(createBattleshipMarker("•", "battleship-marker battleship-marker-outgoing battleship-marker-miss"));
+    }
+    if (isPendingTarget) {
+      cell.classList.add("is-pending-target");
     }
 
-    if (canPlace && !shipCells.has(index)) {
-      ownCell.disabled = false;
-      ownCell.classList.add("is-target");
-      ownCell.addEventListener("click", () => {
+    if (canPlace && !hasShip) {
+      cell.disabled = false;
+      cell.classList.add("is-target");
+      cell.addEventListener("click", () => {
         applyLocalMove({
           action: "place_ship",
           index,
           orientation: state.localBattleshipOrientation
         });
       });
-    }
-    ownBoardEl.appendChild(ownCell);
-
-    const targetCell = document.createElement("button");
-    targetCell.type = "button";
-    targetCell.className = "battleship-cell";
-
-    if (targetHits.has(index)) {
-      targetCell.classList.add("is-hit");
-      targetCell.textContent = "X";
-    } else if (targetMisses.has(index)) {
-      targetCell.classList.add("is-miss");
-      targetCell.textContent = "•";
-    }
-
-    const canFire = canFirePhase && !targetKnown.has(index);
-    targetCell.disabled = !canFire;
-    if (canFire) {
-      targetCell.classList.add("is-target");
-      targetCell.addEventListener("click", () => {
-        applyLocalMove({
-          action: "fire",
-          index
-        });
+    } else if (canFirePhase && !hasOutgoingMark) {
+      cell.disabled = false;
+      cell.classList.add("is-target");
+      cell.addEventListener("click", () => {
+        state.localBattleshipPendingTargetIndex = index;
+        renderRoom();
       });
     }
+    ownBoardEl.appendChild(cell);
+  }
 
-    targetBoardEl.appendChild(targetCell);
+  if (actionRow) {
+    actionRow.classList.toggle("hidden", gameState.phase !== "battle");
+  }
+  const pendingIndex = state.localBattleshipPendingTargetIndex;
+  const pendingCoordinate = Number.isInteger(pendingIndex) ? toBattleshipCoordinate(pendingIndex, size) : null;
+  if (clearTargetButton instanceof HTMLButtonElement) {
+    clearTargetButton.disabled = !canFirePhase || !pendingCoordinate;
+  }
+  if (fireTargetButton instanceof HTMLButtonElement) {
+    fireTargetButton.disabled = !canFirePhase || !pendingCoordinate;
+    fireTargetButton.textContent = pendingCoordinate ? `Fire at ${pendingCoordinate}` : "Fire";
   }
 }
 
@@ -2889,6 +3162,8 @@ function setup() {
     state.localStep = "p1";
     state.localAvatars = { one: null, two: null };
     state.localHonorifics = { p1: "mr", p2: "mr" };
+    state.localBattleshipPendingTargetIndex = null;
+    state.localBattleshipLastPhase = null;
     state.localHasSpun = false;
     stopShuffleStripLoop();
     state.localStrip = createInitialLocalStripState();
@@ -2969,6 +3244,7 @@ function setup() {
   updateHostPicker();
   updateJoinPicker();
   updateLocalPickers();
+  initJoinCodeCluster();
   renderJoinSetup();
   initTicTacToeBoardGestures();
   initLandingSwipeGestures();
@@ -3030,7 +3306,13 @@ function setup() {
 
   if (joinCodeInput) {
     joinCodeInput.addEventListener("input", (event) => {
-      event.target.value = event.target.value.toUpperCase();
+      const input = event.target;
+      if (!(input instanceof HTMLInputElement)) return;
+      const code = sanitizeJoinCode(input.value);
+      input.value = code;
+      setJoinCodeSlots(code);
+      clearJoinCodeStatusMessage();
+      autoValidateJoinCodeIfReady(code);
     });
   }
 
@@ -3041,18 +3323,6 @@ function setup() {
     }
     send({ type: "new_round" });
   });
-
-  const endGameButton = document.getElementById("end-game");
-  if (endGameButton) {
-    endGameButton.addEventListener("click", () => {
-      if (!state.room || !state.room.game) return;
-      if (isLocalMode()) {
-        advanceLocalRoundByAlternation();
-        return;
-      }
-      send({ type: "end_game_request" });
-    });
-  }
 
   const endGameGame = document.getElementById("end-game-game");
   if (endGameGame) {
@@ -3080,18 +3350,6 @@ function setup() {
         clearDismissedWinnerSignature(state.room.code);
       }
       send({ type: "new_round" });
-    });
-  }
-
-  const winnerHome = document.getElementById("winner-home");
-  if (winnerHome) {
-    winnerHome.addEventListener("click", () => {
-      state.keepPickOpen = false;
-      if (!isLocalMode() && state.room?.code) {
-        setPreferredRoomScreen(state.room.code, "lobby");
-        setDismissedWinnerSignature(state.room.code, getEndSignature(state.room));
-      }
-      showScreen("lobby", { history: "push" });
     });
   }
 
@@ -3135,19 +3393,23 @@ function setup() {
     });
   }
 
-  const battleshipViewOwn = document.getElementById("battleship-view-own");
-  if (battleshipViewOwn) {
-    battleshipViewOwn.addEventListener("click", () => {
-      state.localBattleshipView = "own";
+  const battleshipClearTarget = document.getElementById("battleship-clear-target");
+  if (battleshipClearTarget) {
+    battleshipClearTarget.addEventListener("click", () => {
+      if (!Number.isInteger(state.localBattleshipPendingTargetIndex)) return;
+      state.localBattleshipPendingTargetIndex = null;
       renderRoom();
     });
   }
 
-  const battleshipViewTarget = document.getElementById("battleship-view-target");
-  if (battleshipViewTarget) {
-    battleshipViewTarget.addEventListener("click", () => {
-      state.localBattleshipView = "target";
-      renderRoom();
+  const battleshipFireTarget = document.getElementById("battleship-fire-target");
+  if (battleshipFireTarget) {
+    battleshipFireTarget.addEventListener("click", () => {
+      if (!Number.isInteger(state.localBattleshipPendingTargetIndex)) return;
+      applyLocalMove({
+        action: "fire",
+        index: state.localBattleshipPendingTargetIndex
+      });
     });
   }
 
@@ -3325,6 +3587,12 @@ function updateLocalRejoinCard() {
 }
 
 function getLandingPanelWidthPx() {
+  if (landingPanelLocal instanceof HTMLElement && landingPanelOnline instanceof HTMLElement) {
+    const localRect = landingPanelLocal.getBoundingClientRect();
+    const onlineRect = landingPanelOnline.getBoundingClientRect();
+    const step = Math.abs(onlineRect.left - localRect.left);
+    if (step > 0) return step;
+  }
   if (!(landingTrack instanceof HTMLElement)) return 0;
   const rect = landingTrack.getBoundingClientRect();
   return rect.width > 0 ? rect.width / 2 : 0;
@@ -3535,16 +3803,29 @@ function resetJoinFlow() {
   state.joinValidatedCode = null;
   state.joinPreview = null;
   state.joinValidating = false;
+  state.joinCodeStatusMessage = "";
   state.joinValidationSource = null;
   state.pendingDeepLinkJoinCode = null;
   state.joinAvatar = null;
   state.joinHonorific = "mr";
+  const joinCodeInput = document.getElementById("join-code");
+  if (joinCodeInput instanceof HTMLInputElement) {
+    joinCodeInput.value = "";
+  }
+  setJoinCodeSlots("");
 }
 
 function beginJoinValidation(rawCode, options = {}) {
   const source = options.source || "manual";
-  const code = normalizeRoomCode(rawCode);
-  if (code.length !== 4) {
+  const code = sanitizeJoinCode(rawCode);
+  if (code.length !== JOIN_CODE_LENGTH) {
+    state.joinCodeStatusMessage = "Enter 4-letter code";
+    const joinCodeInput = document.getElementById("join-code");
+    if (joinCodeInput instanceof HTMLInputElement) {
+      joinCodeInput.value = code;
+    }
+    setJoinCodeSlots(code);
+    renderJoinSetup();
     if (source === "manual") {
       showToast("Enter a 4-letter room code.");
     }
@@ -3552,12 +3833,14 @@ function beginJoinValidation(rawCode, options = {}) {
   }
 
   const joinCodeInput = document.getElementById("join-code");
-  if (joinCodeInput) {
+  if (joinCodeInput instanceof HTMLInputElement) {
     joinCodeInput.value = code;
   }
+  setJoinCodeSlots(code);
 
   state.joinValidating = true;
   state.joinValidatedCode = code;
+  state.joinCodeStatusMessage = "Checking room...";
   state.joinValidationSource = source;
   renderJoinSetup();
 
@@ -3586,20 +3869,23 @@ function renderJoinSetup() {
   const joinHint = document.getElementById("join-step-hint");
   const joinPicker = document.getElementById("join-avatar-picker");
   const joinHonorificToolbar = document.getElementById("join-honorific-toolbar");
-  if (!joinCode || !joinButton || !joinHint || !joinPicker) return;
+  if (!(joinCode instanceof HTMLInputElement) || !joinButton || !joinHint || !joinPicker) return;
 
   const isCodeStep = state.joinStep === "code";
-  joinCode.disabled = state.joinValidating;
-  joinCode.placeholder = "ABCD";
+  const code = syncJoinCodeSlotsFromCanonical();
+  joinCode.disabled = state.joinValidating || !isCodeStep;
+  setJoinCodeClusterDisabled(state.joinValidating || !isCodeStep);
   joinPicker.classList.toggle("hidden", isCodeStep);
   if (joinHonorificToolbar) {
     joinHonorificToolbar.classList.toggle("hidden", isCodeStep);
   }
   joinButton.textContent = isCodeStep ? (state.joinValidating ? "Checking..." : "Continue") : "Join room";
-  joinButton.disabled = state.joinValidating;
+  joinButton.disabled = state.joinValidating || (isCodeStep && code.length !== JOIN_CODE_LENGTH);
 
   if (isCodeStep) {
-    joinHint.textContent = "Enter your room code to continue.";
+    joinHint.textContent = state.joinValidating
+      ? "Checking room..."
+      : (state.joinCodeStatusMessage || "Enter 4-letter code");
     joinPicker.querySelectorAll(".avatar-option").forEach((button) => {
       button.classList.remove("p1-locked");
       button.removeAttribute("aria-disabled");
@@ -3611,7 +3897,7 @@ function renderJoinSetup() {
   }
 
   const hostTheme = state.joinPreview?.host?.theme || null;
-  joinHint.textContent = "Pick your player avatar.";
+  joinHint.textContent = "Pick your player";
   updateAvatarPicker(joinPicker, state.joinAvatar, hostTheme ? [hostTheme] : []);
   joinPicker.querySelectorAll(".avatar-option").forEach((button) => {
     const avatarId = button.dataset.avatar || "";
@@ -3674,7 +3960,7 @@ function startLocalRoomFromSetupSelections() {
   state.localHasSpun = false;
   resetLocalPrivacy(state.room);
   state.localBattleshipOrientation = "h";
-  state.localBattleshipView = "own";
+  state.localBattleshipPendingTargetIndex = null;
   state.localBattleshipLastPhase = null;
   stopShuffleStripLoop();
   state.localStrip = createInitialLocalStripState();

@@ -1,5 +1,17 @@
 import { expect, test } from "@playwright/test";
 
+async function fillJoinCodeSlots(page, rawCode) {
+  const code = String(rawCode || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z]/g, "")
+    .replace(/[IO]/g, "")
+    .slice(0, 4);
+  for (let index = 0; index < 4; index += 1) {
+    await page.locator(`#join-code-slot-${index}`).fill(code[index] || "");
+  }
+}
+
 test("local browser navigation: pick -> lobby -> local-or-landing", async ({ page }) => {
   await page.goto("/");
   await page.waitForFunction(() => window.__multipassLegacyReady === true);
@@ -56,8 +68,8 @@ test("online browser back exits room flow from lobby to landing", async ({ brows
   await guestPage.waitForFunction(() => window.__multipassLegacyReady === true);
   await guestPage.getByRole("tab", { name: "Online" }).click();
   await guestPage.getByRole("button", { name: "Join a room" }).click();
-  await guestPage.locator("#join-code").fill(roomCode);
-  await guestPage.getByRole("button", { name: "Continue" }).click();
+  await fillJoinCodeSlots(guestPage, roomCode);
+  await expect(guestPage.locator("#join-avatar-picker:not(.hidden)")).toBeVisible();
   await guestPage.locator('#join-avatar-picker .avatar-option[data-avatar="green"]').click();
   await guestPage.getByRole("button", { name: "Join room" }).click();
   await expect(guestPage.locator("#screen-lobby.active")).toBeVisible();

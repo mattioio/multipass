@@ -22,11 +22,6 @@ function appendLockBadge(root, classes) {
   const badge = document.createElement("span");
   badge.className = classes.lockBadge;
   badge.setAttribute("aria-hidden", "true");
-
-  const text = document.createElement("span");
-  text.textContent = "Player 1";
-  badge.appendChild(text);
-
   root.appendChild(badge);
 }
 
@@ -61,7 +56,7 @@ export function createPlayerCardElement(inputModel, options = {}) {
   }
   inner.appendChild(art);
 
-  const showLowerThird = variant !== PLAYER_CARD_VARIANTS.score && Boolean(model.name || model.roleLabel);
+  const showLowerThird = Boolean(model.name || model.roleLabel);
   if (showLowerThird) {
     const lowerThird = document.createElement("span");
     lowerThird.className = classes.lowerThird;

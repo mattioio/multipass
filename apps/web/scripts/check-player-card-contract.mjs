@@ -79,9 +79,7 @@ async function main() {
     "score-duel-side",
     "score-duel-scorebar-wrap",
     "score-broadcast-row",
-    "score-broadcast-team",
-    "score-broadcast-score",
-    "score-broadcast-seam"
+    "score-broadcast-score"
   ];
   requiredRuntimeTokens.forEach((token) => {
     if (!runtimeContent.includes(token)) {
@@ -106,9 +104,7 @@ async function main() {
     ".score-duel-scorebar-wrap",
     ".score-duel-divider",
     ".score-broadcast-row",
-    ".score-broadcast-team",
-    ".score-broadcast-score",
-    ".score-broadcast-seam"
+    ".score-broadcast-score"
   ];
   requiredStyleTokens.forEach((token) => {
     if (!componentStyles.includes(token)) {

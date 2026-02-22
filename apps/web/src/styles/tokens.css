@@ -104,10 +104,10 @@
   --pattern-speed-default: calc(var(--bg-texture-speed) / 2);
   --pattern-size-default-avatar: var(--pattern-size-default);
   --pattern-opacity-default-avatar: var(--pattern-opacity-default);
-  --pattern-speed-default-avatar: var(--pattern-speed-default);
+  --pattern-speed-default-avatar: calc(var(--pattern-speed-default) / 4);
   --pattern-size-default-score: var(--pattern-size-default);
   --pattern-opacity-default-score: var(--pattern-opacity-default);
-  --pattern-speed-default-score: var(--pattern-speed-default);
+  --pattern-speed-default-score: calc(var(--pattern-speed-default) / 4);
   --pattern-size-default-turn: var(--pattern-size-default);
   --pattern-opacity-default-turn: var(--pattern-opacity-default);
   --pattern-speed-default-turn: var(--pattern-speed-default);
@@ -181,26 +181,6 @@ body[data-mode="dark"] {
   --shadow-lg: 0 30px 56px rgba(0, 0, 0, 0.48);
   --cta: #f14666;
   --cta-text: #ffffff;
-}
-
-body[data-theme="red"] {
-  --cta: var(--red-1);
-  --cta-text: #fffaf2;
-}
-
-body[data-theme="yellow"] {
-  --cta: var(--yellow-1);
-  --cta-text: #3a2c00;
-}
-
-body[data-theme="green"] {
-  --cta: var(--green-1);
-  --cta-text: #f7fff5;
-}
-
-body[data-theme="blue"] {
-  --cta: var(--blue-1);
-  --cta-text: #f4f7ff;
 }
 
 @media (prefers-color-scheme: dark) {

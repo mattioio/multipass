@@ -151,12 +151,22 @@ body::after {
 }
 
 #app {
+  --app-edge-padding: 24px;
+  --app-footer-height: 84px;
+  --app-content-max-width: calc(1180px - (var(--app-edge-padding) * 2));
   position: relative;
   z-index: 2;
   isolation: isolate;
   max-width: 1180px;
   margin: 0 auto;
-  padding: var(--space-6) 24px 92px;
+  padding:
+    var(--space-6)
+    var(--app-edge-padding)
+    var(--space-6);
+}
+
+body[data-fixed-footer-active="true"] #app {
+  padding-bottom: calc(var(--app-footer-height) + env(safe-area-inset-bottom) + 14px);
 }
 
 #app::after {
@@ -178,7 +188,7 @@ body::after {
 
 .hero-top {
   display: grid;
-  grid-template-columns: minmax(88px, 124px) 1fr minmax(88px, 124px);
+  grid-template-columns: minmax(88px, 320px) 1fr minmax(88px, 124px);
   align-items: center;
   gap: 12px;
 }
@@ -242,10 +252,15 @@ body:not([data-screen="landing"]) {
   justify-content: center;
 }
 
-.hero-top .hero-action.hidden {
+.hero-left-actions {
   display: inline-flex;
-  visibility: hidden;
-  pointer-events: none;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.hero-left-actions .hero-action.hidden {
+  display: none;
 }
 
 #open-settings {
@@ -301,6 +316,27 @@ body:not([data-screen="landing"]) {
 main {
   display: grid;
   gap: var(--space-5);
+}
+
+.app-fixed-footer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 0 0 env(safe-area-inset-bottom);
+  z-index: 70;
+  pointer-events: none;
+}
+
+.app-fixed-footer-main {
+  display: grid;
+  width: min(var(--app-content-max-width), calc(100vw - (var(--app-edge-padding) * 2)));
+  margin: 0 auto;
+  pointer-events: auto;
+}
+
+.app-fixed-footer-slot {
+  width: 100%;
 }
 
 .screen {

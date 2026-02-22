@@ -1,6 +1,7 @@
 import type { PropsWithChildren } from "react";
 import multipassLogo from "../../assets/multipass-logo.svg";
 import { RoomCodeShareRow } from "../patterns/RoomCodeShareRow";
+import { Button } from "./Button";
 
 export interface AppShellProps extends PropsWithChildren {}
 
@@ -12,9 +13,17 @@ export function AppShell({ children }: AppShellProps) {
       {isDevBuild ? <div id="dev-build-tag">dev build</div> : null}
       <header className="hero">
         <div className="hero-top">
-          <button id="hero-left-action" className="ghost hero-action hidden" type="button">
-            Back
-          </button>
+          <div className="hero-left-actions">
+            <button id="hero-left-action" className="ghost hero-action hidden" type="button">
+              Back
+            </button>
+            <button id="hero-left-action-2" className="ghost hero-action hidden" type="button">
+              Action
+            </button>
+            <button id="hero-left-action-3" className="ghost hero-action hidden" type="button">
+              Action
+            </button>
+          </div>
           <div className="logo">
             <img className="logo-image" src={multipassLogo} alt="Multipass" />
           </div>
@@ -29,6 +38,51 @@ export function AppShell({ children }: AppShellProps) {
         </div>
       </header>
       <main>{children}</main>
+
+      <footer id="app-fixed-footer" className="app-fixed-footer hidden" aria-label="Primary actions">
+        <div id="app-fixed-footer-main" className="app-fixed-footer-main">
+          <div id="app-fixed-footer-mode" className="app-fixed-footer-slot hidden">
+            <div className="landing-segmented" role="tablist" aria-label="Choose play mode">
+              <button
+                id="landing-tab-local"
+                className="landing-segment active"
+                role="tab"
+                type="button"
+                aria-selected="true"
+                aria-controls="landing-panel-local"
+              >
+                Local
+              </button>
+              <button
+                id="landing-tab-online"
+                className="landing-segment"
+                role="tab"
+                type="button"
+                aria-selected="false"
+                aria-controls="landing-panel-online"
+              >
+                Online
+              </button>
+            </div>
+          </div>
+
+          <Button id="local-continue" className="cta-main app-fixed-footer-slot hidden" disabled>
+            Pick a player
+          </Button>
+          <Button id="create-room" className="cta-main app-fixed-footer-slot hidden" disabled>
+            Pick a player
+          </Button>
+          <Button id="join-room" className="cta-main app-fixed-footer-slot hidden">
+            Continue
+          </Button>
+          <Button id="ready-cta" className="cta-main app-fixed-footer-slot hidden">
+            Pick a game
+          </Button>
+          <Button id="winner-play-again" className="cta-main app-fixed-footer-slot hidden">
+            Next game
+          </Button>
+        </div>
+      </footer>
     </div>
   );
 }

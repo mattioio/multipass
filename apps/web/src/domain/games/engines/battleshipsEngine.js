@@ -203,8 +203,13 @@ export function createBattleshipsEngine() {
           nextPlayerId: state.nextPlayerId,
           winnerId: state.winnerId,
           draw: state.draw,
-          ownBoard: { ships: [], hitsReceived: [], missesReceived: [] },
-          targetBoard: { hits: [], misses: [] }
+          board: {
+            ships: [],
+            incomingHits: [],
+            incomingMisses: [],
+            outgoingHits: [],
+            outgoingMisses: []
+          }
         };
       }
 
@@ -230,14 +235,12 @@ export function createBattleshipsEngine() {
         nextPlayerId: state.nextPlayerId,
         winnerId: state.winnerId,
         draw: state.draw,
-        ownBoard: {
+        board: {
           ships: viewerShips.map((ship) => ({ id: ship.id, cells: [...ship.cells] })),
-          hitsReceived,
-          missesReceived
-        },
-        targetBoard: {
-          hits: targetHits,
-          misses: targetMisses
+          incomingHits: hitsReceived,
+          incomingMisses: missesReceived,
+          outgoingHits: targetHits,
+          outgoingMisses: targetMisses
         }
       };
     }

@@ -37,7 +37,7 @@ export function PlayerCardShell({
     isSelected: selected
   });
   const classes = getPlayerCardClassNames(variant, model);
-  const showLowerThird = variant !== PLAYER_CARD_VARIANTS.score && Boolean(name || roleLabel);
+  const showLowerThird = Boolean(name || roleLabel);
   const showLockSlot = variant === PLAYER_CARD_VARIANTS.picker;
 
   const RootTag = interactive ? "button" : "span";
@@ -67,11 +67,7 @@ export function PlayerCardShell({
       ) : null}
       {leader ? <span className={classes.leaderBadge}>Leader</span> : null}
       {waiting ? <span className={classes.spinner} aria-hidden="true" /> : null}
-      {showLockSlot ? (
-        <span className={classes.lockBadge} aria-hidden="true">
-          <span>Player 1</span>
-        </span>
-      ) : null}
+      {showLockSlot ? <span className={classes.lockBadge} aria-hidden="true" /> : null}
     </RootTag>
   );
 }

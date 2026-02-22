@@ -55,7 +55,7 @@ export function renderLocalSetupScreen({
       button.classList.add("p1-locked");
       button.setAttribute("aria-disabled", "true");
       if (avatar) {
-        button.setAttribute("aria-label", `${formatLockedAvatarLabel(avatar)}, selected by Player 1`);
+        button.setAttribute("aria-label", `${formatLockedAvatarLabel(avatar)}, already selected`);
       }
     }
   });

@@ -12,7 +12,6 @@ import {
   GameActionRow,
   GameSurfaceShell,
   JoinCodeForm,
-  LobbyActions,
   PlayerStatusStrip,
   ResultBanner,
   ScreenGuardBoundary,
@@ -27,30 +26,6 @@ export function AppScreens({ isDevBuild }: AppScreensProps) {
   return (
     <>
       <Screen id="screen-landing" active>
-        <div className="landing-segmented-wrap">
-          <div className="landing-segmented" role="tablist" aria-label="Choose play mode">
-            <button
-              id="landing-tab-local"
-              className="landing-segment active"
-              role="tab"
-              type="button"
-              aria-selected="true"
-              aria-controls="landing-panel-local"
-            >
-              Local
-            </button>
-            <button
-              id="landing-tab-online"
-              className="landing-segment"
-              role="tab"
-              type="button"
-              aria-selected="false"
-              aria-controls="landing-panel-online"
-            >
-              Online
-            </button>
-          </div>
-        </div>
         <div className="landing-carousel">
           <div id="landing-track" className="landing-track" data-mode="local">
             <section id="landing-panel-local" className="landing-panel" role="tabpanel" aria-labelledby="landing-tab-local">
@@ -116,9 +91,6 @@ export function AppScreens({ isDevBuild }: AppScreensProps) {
               <div>
                 <AvatarPickerGrid id="local-avatar-grid" />
               </div>
-              <div className="button-row local-setup-cta-row">
-                <Button id="local-continue" disabled>Pick a player</Button>
-              </div>
             </div>
           </div>
         </Card>
@@ -136,9 +108,6 @@ export function AppScreens({ isDevBuild }: AppScreensProps) {
             </div>
             <AvatarPickerGrid id="host-avatar-picker" />
           </div>
-          <div className="button-row host-setup-cta-row">
-            <Button id="create-room" disabled>Pick a player</Button>
-          </div>
         </Card>
       </Screen>
 
@@ -155,7 +124,6 @@ export function AppScreens({ isDevBuild }: AppScreensProps) {
       <Screen id="screen-lobby">
         <div className="panel lobby-panel">
           <ScoreColumns id="score-columns" />
-          <LobbyActions />
         </div>
       </Screen>
 
@@ -224,14 +192,6 @@ export function AppScreens({ isDevBuild }: AppScreensProps) {
             <div className="battleship-controls">
               <p id="battleship-phase-label" className="subtext battleship-phase-label"></p>
               <div className="battleship-control-actions">
-                <div className="battleship-view-controls" role="tablist" aria-label="Battleship board view">
-                  <Button id="battleship-view-own" variant="ghost" className="compact-action battleship-view-toggle">
-                    Your waters
-                  </Button>
-                  <Button id="battleship-view-target" variant="ghost" className="compact-action battleship-view-toggle">
-                    Target grid
-                  </Button>
-                </div>
                 <Button id="battleship-orientation" variant="ghost" className="compact-action">
                   Orientation: Horizontal
                 </Button>
@@ -242,10 +202,10 @@ export function AppScreens({ isDevBuild }: AppScreensProps) {
                 <h3 id="battleship-own-title">Your waters</h3>
                 <div id="battleship-own-board" className="battleship-board"></div>
               </section>
-              <section id="battleship-target-card" className="battleship-board-card">
-                <h3 id="battleship-target-title">Target grid</h3>
-                <div id="battleship-target-board" className="battleship-board"></div>
-              </section>
+            </div>
+            <div id="battleship-action-row" className="battleship-action-row hidden">
+              <Button id="battleship-clear-target" variant="ghost" className="compact-action">Clear</Button>
+              <Button id="battleship-fire-target" className="compact-action">Fire</Button>
             </div>
           </div>
         </GameSurfaceShell>
@@ -265,10 +225,6 @@ export function AppScreens({ isDevBuild }: AppScreensProps) {
         <div className="panel winner-panel">
           <ResultBanner title="Winner" />
           <ScoreColumns id="winner-score-columns" className="score-columns winner-columns" />
-          <div className="button-row winner-actions">
-            <Button id="winner-play-again">Next game</Button>
-            <Button id="winner-home" variant="ghost">Home</Button>
-          </div>
         </div>
       </Screen>
 

@@ -82,11 +82,25 @@ describe("battleships engine", () => {
     const visible = engine.getVisibleState(state, "p1");
 
     expect(visible).not.toHaveProperty("placements");
-    expect(visible.ownBoard.ships).toEqual([
+    expect(visible.board.ships).toEqual([
       { id: "ship_p1_1", cells: [0, 1] },
       { id: "ship_p1_2", cells: [6, 7] }
     ]);
-    expect(visible.targetBoard.hits).toEqual([]);
-    expect(visible.targetBoard.misses).toEqual([]);
+    expect(visible.board.outgoingHits).toEqual([]);
+    expect(visible.board.outgoingMisses).toEqual([]);
+    expect(visible.board.incomingHits).toEqual([]);
+    expect(visible.board.incomingMisses).toEqual([]);
+  });
+
+  it("maps incoming and outgoing markers to the unified board projection", () => {
+    const { engine, state } = setupBattleState();
+    const s1 = engine.applyMove(state, { action: "fire", index: 12 }, "p1").state;
+    const s2 = engine.applyMove(s1, { action: "fire", index: 0 }, "p2").state;
+    const visible = engine.getVisibleState(s2, "p1");
+
+    expect(visible.board.outgoingHits).toEqual([12]);
+    expect(visible.board.outgoingMisses).toEqual([]);
+    expect(visible.board.incomingHits).toEqual([0]);
+    expect(visible.board.incomingMisses).toEqual([]);
   });
 });
