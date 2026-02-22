@@ -8,6 +8,5 @@ export type ScreenKey =
   | "wait"
   | "game"
   | "pass"
-  | "shuffle"
   | "winner"
   | "devkit";

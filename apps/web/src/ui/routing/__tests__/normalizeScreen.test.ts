@@ -4,7 +4,6 @@ describe("normalizeTargetScreen", () => {
   const baseState = {
     hasRoom: true,
     hasGame: true,
-    isShuffling: false,
     hasEndedGame: false,
     resolvedScreen: "lobby" as const
   };

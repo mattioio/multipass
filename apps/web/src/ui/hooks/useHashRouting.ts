@@ -12,7 +12,6 @@ const HASH_TO_SCREEN: Record<string, ScreenKey> = {
   "#wait": "wait",
   "#game": "game",
   "#pass": "pass",
-  "#shuffle": "shuffle",
   "#winner": "winner",
   "#devkit": "devkit"
 };

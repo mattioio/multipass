@@ -1263,23 +1263,14 @@
 
   #app {
     --app-edge-padding: 14px;
-    --app-footer-height: 78px;
     padding:
       var(--space-5)
       var(--app-edge-padding)
       var(--space-5);
   }
 
-  body[data-fixed-footer-active="true"] #app {
-    padding-bottom: calc(var(--app-footer-height) + env(safe-area-inset-bottom) + 12px);
-  }
-
-  .app-fixed-footer {
-    padding: 0 0 env(safe-area-inset-bottom);
-  }
-
   .hero-top {
-    grid-template-columns: minmax(72px, 236px) 1fr minmax(44px, 72px);
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     gap: 8px;
   }
 
