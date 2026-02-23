@@ -123,13 +123,13 @@ test("local happy path: setup -> lobby -> pick -> game", async ({ page }) => {
   await page.locator("#ttt-board .ttt-cell").nth(2).click();
 
   await expect(page.locator("#screen-game.active")).toBeVisible();
-  await expect(page.locator("#game-result-panel:not(.hidden)")).toBeVisible();
-  await expect(page.locator("#winner-score-columns .score-duel-panel")).toHaveCount(1);
-  await expect(page.locator("#winner-score-columns .score-duel-side")).toHaveCount(2);
-  await expect(page.locator("#winner-score-columns .score-duel-scorebar-wrap")).toHaveCount(1);
+  await expect(page.locator("#game-result-panel")).toHaveClass(/hidden/);
+  await expect(page.locator("#ttt-board .ttt-cell.is-win-reason")).toHaveCount(3);
+  await expect(page.locator("#game-result-panel:not(.hidden)")).toBeVisible({ timeout: 6000 });
+  await expect(page.locator("#winner-hero .player-card-shell--score")).toHaveCount(1);
   await expect(page.locator("#winner-score-columns .score-broadcast-row")).toHaveCount(1);
-  await expect(page.locator("#winner-score-columns .score-role")).toHaveCount(0);
-  await expect(page.locator("#winner-score-columns .score-column")).toHaveCount(0);
+  await expect(page.locator("#winner-score-columns .score-duel-panel")).toHaveCount(0);
+  await expect(page.locator("#ttt-board .ttt-cell.is-win-reason")).toHaveCount(0);
   await expect(page.locator("#ttt-board .ttt-cell.is-winning")).toHaveCount(3);
 
   await page.locator("#winner-play-again").click();

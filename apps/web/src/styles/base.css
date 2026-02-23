@@ -148,6 +148,19 @@ body::after {
   .logo-image {
     animation: none;
   }
+
+  .ttt-cell.is-win-reason,
+  .battleship-cell.is-win-reason-shot,
+  .battleship-cell.is-win-reason-shot::before {
+    animation: none;
+  }
+
+  .turn-indicator.turn-reveal-morph,
+  .turn-indicator.turn-reveal-morph .turn-player,
+  .turn-indicator.turn-reveal-morph .turn-player > *,
+  .game-result-panel {
+    transition: none;
+  }
 }
 
 #app {

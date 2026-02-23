@@ -190,6 +190,7 @@
 }
 
 .game-surface-shell {
+  position: relative;
   display: grid;
   gap: 14px;
   border-width: 4px;
@@ -359,10 +360,23 @@
   overflow: hidden;
   border: 0;
   box-shadow: none;
+  transition: grid-template-columns var(--motion-slow) var(--ease-out);
 }
 
 .turn-indicator::before {
   display: none;
+}
+
+.turn-indicator.turn-reveal-morph {
+  overflow: hidden;
+}
+
+.turn-indicator.turn-reveal-morph.turn-reveal-winner-host {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0fr);
+}
+
+.turn-indicator.turn-reveal-morph.turn-reveal-winner-guest {
+  grid-template-columns: minmax(0, 0fr) minmax(0, 1fr);
 }
 
 .turn-player {
@@ -386,7 +400,9 @@
   transition:
     opacity var(--motion-fast) var(--ease-out),
     filter var(--motion-fast) var(--ease-out),
-    box-shadow var(--motion-fast) var(--ease-out);
+    box-shadow var(--motion-fast) var(--ease-out),
+    transform var(--motion-fast) var(--ease-out),
+    padding var(--motion-fast) var(--ease-out);
 }
 
 .turn-player::before {
@@ -433,6 +449,9 @@
 .turn-player > * {
   position: relative;
   z-index: 2;
+  transition:
+    opacity var(--motion-fast) var(--ease-out),
+    transform var(--motion-fast) var(--ease-out);
 }
 
 .turn-player-host {
@@ -544,6 +563,31 @@
   color: color-mix(in srgb, #ffffff 72%, #111111 28%);
 }
 
+.turn-indicator.turn-reveal-morph .turn-player {
+  min-width: 0;
+}
+
+.turn-indicator.turn-reveal-morph.turn-reveal-winner-host .turn-player-guest,
+.turn-indicator.turn-reveal-morph.turn-reveal-winner-guest .turn-player-host {
+  opacity: 0.08;
+  filter: saturate(0.4) grayscale(0.24) brightness(0.66);
+  padding-right: 0;
+  gap: 0;
+  pointer-events: none;
+}
+
+.turn-indicator.turn-reveal-morph.turn-reveal-winner-host .turn-player-guest > *,
+.turn-indicator.turn-reveal-morph.turn-reveal-winner-guest .turn-player-host > * {
+  opacity: 0;
+  transform: translateX(12px);
+}
+
+.turn-indicator.turn-reveal-morph.turn-reveal-winner-host .turn-player-host,
+.turn-indicator.turn-reveal-morph.turn-reveal-winner-guest .turn-player-guest {
+  opacity: 1;
+  filter: saturate(1.22) contrast(1.12) brightness(1.04);
+}
+
 .winner-panel {
   max-width: 920px;
   margin: 0 auto;
@@ -568,14 +612,85 @@
 }
 
 .game-result-panel {
-  max-width: 920px;
-  margin: 10px auto 0;
-  text-align: center;
-  gap: 16px;
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  display: grid;
+  align-items: center;
+  justify-items: center;
+  padding: 18px;
+  pointer-events: none;
 }
 
-.game-result-columns {
-  margin-top: 4px;
+.game-result-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 50% 28%, color-mix(in srgb, #ffffff16 42%, transparent) 0%, transparent 54%),
+    linear-gradient(180deg, color-mix(in srgb, #060611 50%, transparent) 0%, color-mix(in srgb, #05040f 70%, transparent) 100%);
+  backdrop-filter: blur(3px);
+}
+
+.game-result-sheet {
+  position: relative;
+  z-index: 1;
+  width: min(560px, 100%);
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border-radius: var(--radius-lg);
+  border: 1px solid color-mix(in srgb, var(--shell-border) 84%, #ffffff2e);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--surface-2) 78%, #ffffff10) 0%,
+      color-mix(in srgb, var(--surface-3) 84%, #0b0819 16%) 100%
+    );
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, #ffffff1f 46%, transparent),
+    0 18px 32px color-mix(in srgb, #090616 52%, transparent);
+  text-align: center;
+  pointer-events: auto;
+}
+
+.game-result-panel .result-banner {
+  gap: 8px;
+}
+
+.game-result-panel .winner-title {
+  font-size: clamp(1.5rem, 2.6vw, 2rem);
+}
+
+.game-result-hero {
+  display: flex;
+  justify-content: center;
+}
+
+.game-result-hero-card {
+  width: min(280px, 74vw);
+  height: auto;
+  aspect-ratio: 1 / 1;
+}
+
+.game-result-score-row {
+  display: grid;
+  gap: 0;
+}
+
+.game-result-score-row .score-broadcast-row {
+  min-height: 46px;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.game-result-score-row .score-broadcast-score {
+  font-size: clamp(1.02rem, 2.05vw, 1.3rem);
+  padding: 9px 8px;
+}
+
+.game-result-panel.is-draw .game-result-sheet {
+  border-color: color-mix(in srgb, #a7abd0 52%, var(--shell-border) 48%);
 }
 
 .game-result-actions {
@@ -720,6 +835,36 @@
   gap: 6px;
 }
 
+@keyframes battleship-win-impact-cell {
+  0% {
+    transform: scale(0.96);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--red-1) 44%, transparent);
+  }
+  40% {
+    transform: scale(1.03);
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--red-1) 70%, #ffffff1f),
+      0 0 24px color-mix(in srgb, var(--red-1) 38%, transparent);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--red-1) 38%, transparent),
+      0 0 14px color-mix(in srgb, var(--red-1) 24%, transparent);
+  }
+}
+
+@keyframes battleship-win-impact-ring {
+  0% {
+    opacity: 0.78;
+    transform: scale(0.2);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.55);
+  }
+}
+
 .battleship-cell {
   position: relative;
   aspect-ratio: 1 / 1;
@@ -824,6 +969,21 @@
   cursor: default;
 }
 
+.battleship-cell.is-win-reason-shot {
+  border-color: color-mix(in srgb, var(--red-1) 76%, #ffffff28);
+  animation: battleship-win-impact-cell var(--win-reason-cell-ms, 700ms) var(--ease-out) 1 both;
+}
+
+.battleship-cell.is-win-reason-shot::before {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: 12px;
+  border: 2px solid color-mix(in srgb, var(--red-1) 78%, #ffffff28);
+  pointer-events: none;
+  animation: battleship-win-impact-ring var(--win-reason-cell-ms, 700ms) var(--ease-out) 1 both;
+}
+
 @media (min-width: 721px) {
   .ttt-board {
     width: 100%;
@@ -880,6 +1040,40 @@
   filter:
     drop-shadow(0 2px 4px rgba(8, 12, 22, 0.34))
     drop-shadow(0 0 10px color-mix(in srgb, var(--theme-strong, var(--cta)) 38%, transparent));
+}
+
+@keyframes ttt-win-reason-pulse {
+  0% {
+    transform: scale(0.94);
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, #ffffff 58%, transparent),
+      0 0 0 0 color-mix(in srgb, var(--theme-strong, var(--cta)) 60%, transparent);
+  }
+  42% {
+    transform: scale(1.03);
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, #ffffff 58%, transparent),
+      0 0 0 2px color-mix(in srgb, var(--theme-strong, var(--cta)) 62%, transparent),
+      0 0 24px color-mix(in srgb, var(--theme-strong, var(--cta)) 42%, transparent);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, #ffffff 58%, transparent),
+      0 0 0 1px color-mix(in srgb, var(--theme-strong, var(--cta)) 34%, transparent),
+      0 0 14px color-mix(in srgb, var(--theme-strong, var(--cta)) 24%, transparent);
+  }
+}
+
+.ttt-cell.is-win-reason {
+  border-color: color-mix(in srgb, var(--theme-strong, var(--cta)) 86%, #ffffff2a);
+  animation: ttt-win-reason-pulse var(--win-reason-cell-ms, 700ms) var(--ease-out) 1 both;
+}
+
+.ttt-cell.is-win-reason .ttt-mark {
+  filter:
+    drop-shadow(0 2px 4px rgba(8, 12, 22, 0.34))
+    drop-shadow(0 0 12px color-mix(in srgb, var(--theme-strong, var(--cta)) 46%, transparent));
 }
 
 .ttt-cell.is-preview {
@@ -1202,6 +1396,28 @@
     min-width: 0;
     font-size: clamp(1.02rem, 4.1vw, 1.22rem);
     padding: 8px 4px;
+  }
+
+  .game-result-panel {
+    padding: 12px;
+  }
+
+  .game-result-sheet {
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .game-result-hero-card {
+    width: min(220px, 70vw);
+  }
+
+  .game-result-score-row .score-broadcast-row {
+    min-height: 40px;
+  }
+
+  .game-result-score-row .score-broadcast-score {
+    font-size: clamp(0.92rem, 3.8vw, 1.08rem);
+    padding: 8px 6px;
   }
 
   .battleship-controls {

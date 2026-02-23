@@ -230,16 +230,19 @@ export function AppScreens({ isDevBuild }: AppScreensProps) {
               <Button id="battleship-fire-target" className="compact-action">Fire</Button>
             </div>
           </div>
-          <div id="game-result-panel" className="panel game-result-panel hidden" aria-live="polite">
-            <ResultBanner emojiId="game-result-emoji" titleId="winner-title" title="Winner" />
-            <ScoreColumns
-              id="winner-score-columns"
-              className="score-columns winner-columns game-result-columns"
-            />
-            <div className="button-row winner-actions game-result-actions">
-              <Button id="winner-play-again" className="cta-main">
-                Next game
-              </Button>
+          <div id="game-result-panel" className="game-result-panel game-result-overlay hidden" aria-live="polite">
+            <div className="game-result-sheet">
+              <ResultBanner emojiId="game-result-emoji" titleId="winner-title" title="Winner" />
+              <div id="winner-hero" className="game-result-hero hidden"></div>
+              <ScoreColumns
+                id="winner-score-columns"
+                className="score-columns game-result-score-row"
+              />
+              <div className="button-row winner-actions game-result-actions">
+                <Button id="winner-play-again" className="cta-main">
+                  Next game
+                </Button>
+              </div>
             </div>
           </div>
         </GameSurfaceShell>

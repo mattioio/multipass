@@ -67,6 +67,10 @@ const LANDING_DRAG_ACTIVATION_PX = 14;
 const LANDING_SWIPE_DISTANCE_RATIO = 0.18;
 const LANDING_SWIPE_MIN_DISTANCE_PX = 32;
 const LANDING_SWIPE_VELOCITY_PX_PER_MS = 0.36;
+const WIN_REASON_ANIM_MS = 700;
+const WIN_REASON_PAUSE_MS = 1000;
+const WIN_MORPH_ANIM_MS = 500;
+const WIN_MORPH_PAUSE_MS = 1000;
 const JOIN_CODE_LENGTH = 4;
 const JOIN_CODE_DISALLOWED_CHARS_REGEX = /[IO]/g;
 const FIXED_FOOTER_SCREEN_SLOT_MAP = Object.freeze({
@@ -152,6 +156,12 @@ function createInitialState() {
     localHonorifics: { p1: "mr", p2: "mr" },
     landingMode: "local",
     landingModeProgress: 0,
+    winRevealPhase: "idle",
+    winRevealSignature: null,
+    winRevealReason: null,
+    winRevealTimerId: null,
+    winRevealTimerId2: null,
+    winRevealShouldMorph: false,
     devkitReturnScreen: "landing",
     boardGesture: createInitialBoardGestureState(),
     landingGesture: createInitialLandingGestureState()
@@ -1064,6 +1074,8 @@ function connect() {
       ) {
         clearRecentLeaveGuard();
       }
+      const previousRoomCode = state.room?.code || null;
+      const previousEndSignature = getEndSignature(state.room);
       dispatch(actions.wsRoomStateReceived(message.room, message.you));
       dispatch(actions.autoJoinCodeSet(null));
       if (state.room?.code) {
@@ -1071,6 +1083,8 @@ function connect() {
         setOnlineRejoinData(state.room.code, state.room.createdAt || Date.now());
       }
       const currentEndSignature = getEndSignature(state.room);
+      const sameRoomContext = Boolean(previousRoomCode && state.room?.code && previousRoomCode === state.room.code);
+      const shouldAnimateEndReveal = !previousEndSignature && Boolean(currentEndSignature) && sameRoomContext;
       if (!currentEndSignature) {
         clearDismissedWinnerSignature(state.room?.code);
       } else {
@@ -1081,7 +1095,7 @@ function connect() {
       }
       updateRejoinCard();
       const nextScreen = resolveScreen(state.room);
-      renderRoom();
+      renderRoom({ shouldAnimateEndReveal });
       const endSignature = getEndSignature(state.room);
       state.lastWinSignature = endSignature || null;
       showScreen(nextScreen, { history: "replace" });
@@ -1535,6 +1549,7 @@ function advanceLocalRoundByAlternation() {
     hasPickedStarter: Boolean(next)
   };
   state.room.game = null;
+  resetWinReveal();
   resetLocalPrivacy(state.room);
   state.localBattleshipPendingTargetIndex = null;
   state.localBattleshipLastPhase = null;
@@ -1542,10 +1557,10 @@ function advanceLocalRoundByAlternation() {
   handleLocalUpdate();
 }
 
-function handleLocalUpdate() {
+function handleLocalUpdate(options = {}) {
   saveLocalRejoinSnapshot(state.room);
   updateLocalRejoinCard();
-  renderRoom();
+  renderRoom({ shouldAnimateEndReveal: Boolean(options.shouldAnimateEndReveal) });
   const endSignature = getEndSignature(state.room);
   state.lastWinSignature = endSignature || null;
   showScreen(resolveScreen(state.room), { history: "replace" });
@@ -1634,6 +1649,7 @@ function applyLocalMove(move) {
   if (!game) return;
   const actingPlayerId = state.room.game.state.nextPlayerId;
   if (!actingPlayerId) return;
+  const previousEnded = Boolean(state.room.game.state.winnerId || state.room.game.state.draw);
   const previousWinner = state.room.game.state.winnerId;
   const result = game.applyMove(state.room.game.state, move, actingPlayerId);
   if (result?.error) {
@@ -1667,7 +1683,7 @@ function applyLocalMove(move) {
     }
   }
   state.room.updatedAt = Date.now();
-  handleLocalUpdate();
+  handleLocalUpdate({ shouldAnimateEndReveal: !previousEnded && hasEnded });
 }
 
 function acknowledgeLocalPassHandoff() {
@@ -1684,6 +1700,7 @@ function leaveRoom(options = {}) {
     leaveLocalMatch({ saveForRejoin: false, history: historyMode });
     return;
   }
+  resetWinReveal();
 
   if (state.room?.code) {
     armRecentLeaveGuard(state.room.code);
@@ -1709,6 +1726,7 @@ function leaveLocalMatch({ saveForRejoin, history = "push" } = {}) {
     showScreen("landing", { history });
     return;
   }
+  resetWinReveal();
   if (saveForRejoin) {
     saveLocalRejoinSnapshot(state.room);
   }
@@ -1726,9 +1744,10 @@ function leaveLocalMatch({ saveForRejoin, history = "push" } = {}) {
   showScreen("landing", { history });
 }
 
-function renderRoom() {
+function renderRoom(options = {}) {
   const room = state.room;
   if (!room) return;
+  const shouldAnimateEndReveal = Boolean(options.shouldAnimateEndReveal);
 
   const heroRoom = document.getElementById("hero-room");
   if (heroRoom) {
@@ -1737,12 +1756,12 @@ function renderRoom() {
   const codeEl = document.getElementById("room-code");
   if (codeEl) codeEl.textContent = room.code;
 
-  const previousLeader = state.lastLeaderId;
   const leaderId = getLeaderId([room.players.host, room.players.guest]);
+  syncWinReveal(room, { shouldAnimate: shouldAnimateEndReveal });
 
   renderLobby(room);
   renderScoreboard(room, leaderId);
-  renderWinner(room, leaderId, previousLeader);
+  renderWinner(room, leaderId);
   renderPickScreen(room);
   renderWaitScreen(room);
   renderGame(room);
@@ -2299,13 +2318,177 @@ function initTicTacToeBoardGestures() {
   boardEl.addEventListener("click", handleTicTacToeBoardClick);
 }
 
-function renderTurnIndicatorSplit(indicatorEl, room, activePlayerId = null, mode = "turn") {
+function prefersReducedMotion() {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+    return false;
+  }
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function clearWinRevealTimers() {
+  if (state.winRevealTimerId !== null) {
+    clearTimeout(state.winRevealTimerId);
+    state.winRevealTimerId = null;
+  }
+  if (state.winRevealTimerId2 !== null) {
+    clearTimeout(state.winRevealTimerId2);
+    state.winRevealTimerId2 = null;
+  }
+}
+
+function resetWinReveal() {
+  clearWinRevealTimers();
+  state.winRevealPhase = "idle";
+  state.winRevealSignature = null;
+  state.winRevealReason = null;
+  state.winRevealShouldMorph = false;
+}
+
+function normalizeWinRevealReason(reason) {
+  if (!reason || typeof reason !== "object") return null;
+  const boardId = reason.boardId === "ttt" || reason.boardId === "battleships"
+    ? reason.boardId
+    : null;
+  if (!boardId) return null;
+  const indices = Array.isArray(reason.indices)
+    ? reason.indices.map((value) => Number(value)).filter((value) => Number.isInteger(value))
+    : [];
+  if (!indices.length) return null;
+  const effect = reason.effect === "line" ? "line" : "impact";
+  return {
+    boardId,
+    effect,
+    indices: [...new Set(indices)]
+  };
+}
+
+function getWinRevealReason(room) {
+  const gameId = room?.game?.id || null;
+  if (!gameId) return null;
+  const reasonBuilder = localGames[gameId]?.getWinRevealReason;
+  if (typeof reasonBuilder !== "function") return null;
+  return normalizeWinRevealReason(reasonBuilder(room.game.state, {
+    room,
+    players: room.players
+  }));
+}
+
+function getWinnerSide(room, winnerId) {
+  if (!winnerId) return null;
+  if (room?.players?.host?.id === winnerId) return "host";
+  if (room?.players?.guest?.id === winnerId) return "guest";
+  return null;
+}
+
+function getWinRevealSnapshot(room) {
+  const signature = getEndSignature(room);
+  if (!signature || state.winRevealSignature !== signature) {
+    return {
+      phase: "idle",
+      signature: null,
+      reason: null,
+      winnerSide: null,
+      shouldMorph: false
+    };
+  }
+  const winnerId = room?.game?.state?.winnerId || null;
+  return {
+    phase: state.winRevealPhase,
+    signature,
+    reason: state.winRevealReason,
+    winnerSide: getWinnerSide(room, winnerId),
+    shouldMorph: state.winRevealShouldMorph
+  };
+}
+
+function advanceWinReveal(signature, phase) {
+  if (!signature || state.winRevealSignature !== signature) return;
+  const nextPhase = phase === "morph" && !state.winRevealShouldMorph ? "overlay" : phase;
+  if (state.winRevealPhase === nextPhase) return;
+  state.winRevealPhase = nextPhase;
+  if (nextPhase === "overlay") {
+    clearWinRevealTimers();
+  }
+  if (state.room) {
+    renderRoom();
+  }
+}
+
+function startWinReveal(room, options = {}) {
+  const signature = getEndSignature(room);
+  if (!signature) {
+    resetWinReveal();
+    return;
+  }
+  const shouldAnimate = Boolean(options.shouldAnimate) && !prefersReducedMotion();
+  const shouldMorph = Boolean(room?.game?.state?.winnerId && !room?.game?.state?.draw);
+  const reason = getWinRevealReason(room);
+
+  clearWinRevealTimers();
+  state.winRevealSignature = signature;
+  state.winRevealReason = reason;
+  state.winRevealShouldMorph = shouldMorph;
+
+  if (!shouldAnimate) {
+    state.winRevealPhase = "overlay";
+    return;
+  }
+
+  const reasonStepTotalMs = WIN_REASON_ANIM_MS + WIN_REASON_PAUSE_MS;
+  state.winRevealPhase = "reason";
+  if (!shouldMorph) {
+    state.winRevealTimerId = setTimeout(() => {
+      advanceWinReveal(signature, "overlay");
+    }, reasonStepTotalMs);
+    return;
+  }
+
+  state.winRevealTimerId = setTimeout(() => {
+    advanceWinReveal(signature, "morph");
+  }, reasonStepTotalMs);
+  state.winRevealTimerId2 = setTimeout(() => {
+    advanceWinReveal(signature, "overlay");
+  }, reasonStepTotalMs + WIN_MORPH_ANIM_MS + WIN_MORPH_PAUSE_MS);
+}
+
+function syncWinReveal(room, options = {}) {
+  const signature = getEndSignature(room);
+  if (!signature) {
+    if (state.winRevealPhase !== "idle" || state.winRevealSignature || state.winRevealReason) {
+      resetWinReveal();
+    }
+    return;
+  }
+
+  if (state.winRevealSignature !== signature) {
+    startWinReveal(room, { shouldAnimate: Boolean(options.shouldAnimate) });
+    return;
+  }
+
+  if (!state.winRevealReason) {
+    state.winRevealReason = getWinRevealReason(room);
+  }
+  state.winRevealShouldMorph = Boolean(room?.game?.state?.winnerId && !room?.game?.state?.draw);
+  if (!options.shouldAnimate && state.winRevealPhase !== "overlay" && !state.winRevealTimerId && !state.winRevealTimerId2) {
+    state.winRevealPhase = "overlay";
+  }
+}
+
+function renderTurnIndicatorSplit(indicatorEl, room, activePlayerId = null, mode = "turn", reveal = null) {
   if (!(indicatorEl instanceof HTMLElement)) return;
 
   indicatorEl.innerHTML = "";
-  indicatorEl.classList.remove("turn-passive");
+  indicatorEl.classList.remove(
+    "turn-passive",
+    "turn-reveal-morph",
+    "turn-reveal-winner-host",
+    "turn-reveal-winner-guest"
+  );
   if (!activePlayerId) {
     indicatorEl.classList.add("turn-passive");
+  }
+  if (reveal?.phase === "morph" && reveal?.winnerSide) {
+    indicatorEl.classList.add("turn-reveal-morph", `turn-reveal-winner-${reveal.winnerSide}`);
   }
 
   const host = room?.players?.host || null;
@@ -2377,7 +2560,7 @@ function renderTicTacToe(room) {
       gameSurfaceShell.classList.remove("game-shell-highlight");
       PLAYER_THEME_CLASS_NAMES.forEach((className) => gameSurfaceShell.classList.remove(className));
     }
-    renderTurnIndicatorSplit(indicatorEl, room, null, "idle");
+    renderTurnIndicatorSplit(indicatorEl, room, null, "idle", null);
     return;
   }
 
@@ -2395,13 +2578,17 @@ function renderTicTacToe(room) {
       symbolOwners.set(symbol, owner);
     }
   });
+  const reveal = getWinRevealSnapshot(room);
+  const reasonIndices = reveal.phase === "reason" && reveal.reason?.boardId === "ttt"
+    ? new Set(reveal.reason.indices)
+    : null;
 
   if (winner) {
-    renderTurnIndicatorSplit(indicatorEl, room, winner.id, "winner");
+    renderTurnIndicatorSplit(indicatorEl, room, winner.id, "winner", reveal);
   } else if (stateGame.draw) {
-    renderTurnIndicatorSplit(indicatorEl, room, null, "draw");
+    renderTurnIndicatorSplit(indicatorEl, room, null, "draw", reveal);
   } else {
-    renderTurnIndicatorSplit(indicatorEl, room, stateGame.nextPlayerId || null, "turn");
+    renderTurnIndicatorSplit(indicatorEl, room, stateGame.nextPlayerId || null, "turn", reveal);
   }
 
   const host = room.players?.host || null;
@@ -2440,6 +2627,9 @@ function renderTicTacToe(room) {
       if (winner?.theme) {
         button.classList.add(`theme-${winner.theme}`);
       }
+    }
+    if (reasonIndices && reasonIndices.has(index)) {
+      button.classList.add("is-win-reason");
     }
     if (cell) {
       const owner = symbolOwners.get(cell);
@@ -2537,6 +2727,10 @@ function renderBattleships(room) {
   const isFinished = Boolean(fullState.winnerId || fullState.draw || fullState.phase === "finished");
   const canInteract = isLocalMode() && state.localPrivacy.stage !== "handoff" && !isFinished && isViewerTurn;
   const phase = fullState.phase || gameState.phase || "placement";
+  const reveal = getWinRevealSnapshot(room);
+  const reasonIndices = reveal.phase === "reason" && reveal.reason?.boardId === "battleships"
+    ? new Set(reveal.reason.indices)
+    : null;
 
   if (state.localBattleshipLastPhase !== phase) {
     state.localBattleshipPendingTargetIndex = null;
@@ -2568,12 +2762,12 @@ function renderBattleships(room) {
     if (isFinished) {
       const winner = playerById(room, fullState.winnerId);
       if (winner) {
-        renderTurnIndicatorSplit(indicatorEl, room, winner.id, "winner");
+        renderTurnIndicatorSplit(indicatorEl, room, winner.id, "winner", reveal);
       } else {
-        renderTurnIndicatorSplit(indicatorEl, room, null, "draw");
+        renderTurnIndicatorSplit(indicatorEl, room, null, "draw", reveal);
       }
     } else {
-      renderTurnIndicatorSplit(indicatorEl, room, fullState.nextPlayerId || null, "turn");
+      renderTurnIndicatorSplit(indicatorEl, room, fullState.nextPlayerId || null, "turn", reveal);
     }
   }
 
@@ -2631,6 +2825,9 @@ function renderBattleships(room) {
     }
     if (isPendingTarget) {
       cell.classList.add("is-pending-target");
+    }
+    if (reasonIndices && reasonIndices.has(index)) {
+      cell.classList.add("is-win-reason-shot");
     }
 
     if (canPlace && !hasShip) {
@@ -2708,7 +2905,7 @@ function renderGame(room) {
   }
 }
 
-function renderWinner(room, leaderId, previousLeader) {
+function renderWinner(room, leaderId) {
   const panel = document.getElementById("game-result-panel");
   const winnerId = room.game?.state?.winnerId;
   const isDraw = Boolean(room.game?.state?.draw);
@@ -2716,13 +2913,22 @@ function renderWinner(room, leaderId, previousLeader) {
   const winner = winnerId ? playerById(room, winnerId) : null;
 
   const titleEl = document.getElementById("winner-title");
+  const heroEl = document.getElementById("winner-hero");
   const columns = document.getElementById("winner-score-columns");
   const hasEnded = Boolean(winnerId || isDraw);
+  const reveal = getWinRevealSnapshot(room);
+  const showOverlay = hasEnded && reveal.phase === "overlay";
 
-  panel.classList.toggle("hidden", !hasEnded);
+  panel.classList.toggle("hidden", !showOverlay);
+  panel.classList.toggle("is-draw", Boolean(isDraw || !winner));
+  panel.classList.toggle("is-win", Boolean(winner && !isDraw));
   if (!hasEnded) {
     if (titleEl) {
       titleEl.textContent = "Winner";
+    }
+    if (heroEl instanceof HTMLElement) {
+      heroEl.classList.add("hidden");
+      heroEl.innerHTML = "";
     }
     if (columns) {
       columns.innerHTML = "";
@@ -2735,13 +2941,33 @@ function renderWinner(room, leaderId, previousLeader) {
       ? "It's a draw"
       : `${getDisplayPlayerName(winner, "Someone")} is the winner`;
   }
+  if (heroEl instanceof HTMLElement) {
+    heroEl.innerHTML = "";
+    if (winner && !isDraw) {
+      const showLeaderCrown = Boolean(
+        winner && leaderId && winner.id === leaderId && (winner.gamesWon ?? 0) > 0
+      );
+      const heroCard = createPlayerCardElement({
+        id: winner.id,
+        name: getDisplayPlayerName(winner, "Winner"),
+        theme: winner.theme || "red",
+        artSrc: getPlayerArtSrc(winner),
+        isLeader: showLeaderCrown
+      }, { variant: PLAYER_CARD_VARIANTS.score });
+      heroCard.classList.add("game-result-hero-card");
+      heroEl.appendChild(heroCard);
+      heroEl.classList.remove("hidden");
+    } else {
+      heroEl.classList.add("hidden");
+    }
+  }
   if (columns) {
     columns.innerHTML = "";
-    columns.appendChild(
-      buildScoreDuelPanel(room.players.host, room.players.guest, leaderId, {
-        guestWaiting: !room.players.guest
-      })
-    );
+    columns.appendChild(buildSharedScoreBroadcastRow({
+      host: room.players.host,
+      guest: room.players.guest,
+      isWaiting: !room.players.guest
+    }));
   }
 }
 

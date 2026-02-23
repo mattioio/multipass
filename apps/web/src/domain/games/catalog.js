@@ -105,6 +105,28 @@ function createTicTacToeConfig({ id, name, bannerKey = "tic_tac_toe" }) {
     surfaceType: "tic_tac_toe",
     mode: "board",
     visibility: "public",
+    getWinRevealReason(state) {
+      const line = Array.isArray(state?.winningLine)
+        ? state.winningLine.map((index) => Number(index)).filter((index) => Number.isInteger(index))
+        : [];
+      if (line.length) {
+        return {
+          boardId: "ttt",
+          effect: "line",
+          indices: line
+        };
+      }
+      const history = Array.isArray(state?.history) ? state.history : [];
+      const lastMove = history.length ? Number(history[history.length - 1]?.index) : null;
+      if (Number.isInteger(lastMove)) {
+        return {
+          boardId: "ttt",
+          effect: "impact",
+          indices: [lastMove]
+        };
+      }
+      return null;
+    },
     localEngine: createTicTacToeEngine()
   };
 }
@@ -125,6 +147,17 @@ export const gameCatalog = {
     surfaceType: "placeholder",
     mode: "board",
     visibility: "hidden_pass_device",
+    getWinRevealReason(state) {
+      const shots = Array.isArray(state?.shotHistory) ? state.shotHistory : [];
+      const lastShot = shots.length ? shots[shots.length - 1] : null;
+      const index = Number(lastShot?.index);
+      if (!Number.isInteger(index)) return null;
+      return {
+        boardId: "battleships",
+        effect: "impact",
+        indices: [index]
+      };
+    },
     localEngine: createBattleshipsEngine()
   }
 };

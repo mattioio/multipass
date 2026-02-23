@@ -13,6 +13,7 @@ export const localGames = Object.fromEntries(
       surfaceType: game.surfaceType || "placeholder",
       mode: game.mode || "board",
       visibility: game.visibility || "public",
+      getWinRevealReason: game.getWinRevealReason,
       init: game.localEngine?.init,
       applyMove: game.localEngine?.applyMove,
       getVisibleState: game.localEngine?.getVisibleState
