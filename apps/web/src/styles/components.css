@@ -896,6 +896,15 @@ button:disabled {
   transform: scaleX(-1);
 }
 
+#local-stage[data-local-step="p2"] .avatar-option:not(.p1-locked) .avatar-lower-third,
+#local-stage[data-local-step="p2"] .avatar-option:not(.p1-locked) .player-card-lower-third {
+  left: auto;
+  right: 0;
+  justify-content: flex-end;
+  text-align: right;
+  border-radius: 8px 0 0 0;
+}
+
 .avatar-lower-third,
 .player-card-lower-third {
   position: absolute;
@@ -928,6 +937,7 @@ button:disabled {
 .player-card-name {
   font-family: var(--title-font);
   font-size: clamp(1.32rem, 1.85vw, 1.72rem);
+  font-weight: 700;
   line-height: 0.98;
   letter-spacing: 0.01em;
   color: #ffffff;
@@ -1439,6 +1449,14 @@ button:disabled {
 
 .score-duel-side-guest .player-card-art img {
   transform: scaleX(-1);
+}
+
+.score-duel-side-guest .player-card-lower-third--score {
+  left: auto;
+  right: 0;
+  justify-content: flex-end;
+  text-align: right;
+  border-radius: 14px 0 0 0;
 }
 
 .player-card-art-placeholder {

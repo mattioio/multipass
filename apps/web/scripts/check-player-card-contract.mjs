@@ -111,6 +111,21 @@ async function main() {
       failures.push(`${componentsStylePath}: missing required duel scoreboard class \"${token}\"`);
     }
   });
+  const playerCardNameBlockMatch = componentStyles.match(/\.player-card-name(?!-)[^{]*\{([\s\S]*?)\}/m);
+  if (!playerCardNameBlockMatch) {
+    failures.push(`${componentsStylePath}: missing shared \".player-card-name\" style block`);
+  } else if (!/font-weight\s*:/.test(playerCardNameBlockMatch[1])) {
+    failures.push(`${componentsStylePath}: \".player-card-name\" must define explicit \"font-weight\"`);
+  }
+  const requiredMirrorTokens = [
+    "#local-stage[data-local-step=\"p2\"] .avatar-option:not(.p1-locked) .avatar-lower-third",
+    ".score-duel-side-guest .player-card-lower-third--score"
+  ];
+  requiredMirrorTokens.forEach((token) => {
+    if (!componentStyles.includes(token)) {
+      failures.push(`${componentsStylePath}: missing mirrored lower-third selector \"${token}\"`);
+    }
+  });
   if (legacyWinPillPattern.test(componentStyles)) {
     failures.push(`${componentsStylePath}: contains deprecated score style token \"score-win-pill*\"`);
   }

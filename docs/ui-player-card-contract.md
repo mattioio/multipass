@@ -18,6 +18,8 @@ Use one player-card primitive for picker, lobby scoreboard, and winner scoreboar
 3. Use `createPlayerCardElement(...)` in legacy runtime code.
 4. Use class names from `getPlayerCardClassNames(...)` only.
 5. Do not reintroduce legacy `score-emoji*` selectors.
+6. Shared player-card text styles must own typography (including `font-weight`) and must not inherit weight from parent host elements (`button`, `span`, etc.).
+7. Any context that mirrors player art for Player 2 must also mirror the lower-third badge side/corner treatment in that same context.
 
 ## Variants
 

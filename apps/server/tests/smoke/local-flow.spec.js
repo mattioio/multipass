@@ -15,6 +15,9 @@ test("local happy path: setup -> lobby -> pick -> game", async ({ page }) => {
 
   await page.getByRole("button", { name: "Start" }).click();
   await expect(page.locator("#screen-local.active")).toBeVisible();
+  const pickerAvatarNameWeight = await page.locator('#local-avatar-grid .avatar-option[data-avatar="yellow"] .avatar-name').evaluate((node) => {
+    return getComputedStyle(node).fontWeight;
+  });
 
   const localContinue = page.getByRole("button", { name: "Pick a player" });
   await expect(localContinue).toBeDisabled();
@@ -23,6 +26,32 @@ test("local happy path: setup -> lobby -> pick -> game", async ({ page }) => {
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.locator("#screen-local.active")).toBeVisible();
   await expect(page.locator("#local-step-title")).toHaveText("Player 2 choice");
+  const mirroredP2LowerThirdStyle = await page.locator('#local-avatar-grid .avatar-option[data-avatar="green"] .avatar-lower-third').evaluate((node) => {
+    const styles = getComputedStyle(node);
+    return {
+      right: styles.right,
+      borderTopLeftRadius: styles.borderTopLeftRadius,
+      borderTopRightRadius: styles.borderTopRightRadius,
+      textAlign: styles.textAlign
+    };
+  });
+  expect(mirroredP2LowerThirdStyle.right).toBe("0px");
+  expect(mirroredP2LowerThirdStyle.borderTopLeftRadius).toBe("8px");
+  expect(mirroredP2LowerThirdStyle.borderTopRightRadius).toBe("0px");
+  expect(mirroredP2LowerThirdStyle.textAlign).toBe("right");
+  const lockedP1LowerThirdStyle = await page.locator('#local-avatar-grid .avatar-option[data-avatar="yellow"] .avatar-lower-third').evaluate((node) => {
+    const styles = getComputedStyle(node);
+    return {
+      left: styles.left,
+      borderTopLeftRadius: styles.borderTopLeftRadius,
+      borderTopRightRadius: styles.borderTopRightRadius,
+      textAlign: styles.textAlign
+    };
+  });
+  expect(lockedP1LowerThirdStyle.left).toBe("0px");
+  expect(lockedP1LowerThirdStyle.borderTopLeftRadius).toBe("0px");
+  expect(lockedP1LowerThirdStyle.borderTopRightRadius).toBe("8px");
+  expect(lockedP1LowerThirdStyle.textAlign).toBe("left");
   await expect(localContinue).toBeDisabled();
   await page.locator('#local-avatar-grid .avatar-option[data-avatar="green"]').click();
   await expect(page.getByRole("button", { name: "Continue" })).toBeEnabled();
@@ -48,6 +77,23 @@ test("local happy path: setup -> lobby -> pick -> game", async ({ page }) => {
   await expect(page.locator("#score-columns .score-broadcast-row")).toHaveCount(1);
   await expect(page.locator("#score-columns .score-role")).toHaveCount(0);
   await expect(page.locator("#score-columns .score-column")).toHaveCount(0);
+  const guestScoreLowerThirdStyle = await page.locator("#score-columns .score-duel-side-guest .player-card-lower-third--score").first().evaluate((node) => {
+    const styles = getComputedStyle(node);
+    return {
+      right: styles.right,
+      borderTopLeftRadius: styles.borderTopLeftRadius,
+      borderTopRightRadius: styles.borderTopRightRadius,
+      textAlign: styles.textAlign
+    };
+  });
+  expect(guestScoreLowerThirdStyle.right).toBe("0px");
+  expect(guestScoreLowerThirdStyle.borderTopLeftRadius).toBe("14px");
+  expect(guestScoreLowerThirdStyle.borderTopRightRadius).toBe("0px");
+  expect(guestScoreLowerThirdStyle.textAlign).toBe("right");
+  const lobbyScoreNameWeight = await page.locator("#score-columns .player-card-name--score").first().evaluate((node) => {
+    return getComputedStyle(node).fontWeight;
+  });
+  expect(lobbyScoreNameWeight).toBe(pickerAvatarNameWeight);
   await page.getByRole("button", { name: "Pick a game" }).click();
 
   await expect(page.locator("#screen-pick.active")).toBeVisible();
