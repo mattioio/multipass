@@ -319,31 +319,6 @@ test("landing supports swipe between local and online modes", async ({ page }) =
   await expect(page.locator("#landing-tab-local")).toHaveAttribute("aria-selected", "true");
 });
 
-test("local non-default registry game: pick -> game", async ({ page }) => {
-  await page.goto("/");
-  await page.waitForFunction(() => window.__multipassLegacyReady === true);
-
-  await page.getByRole("button", { name: "Start" }).click();
-  await expect(page.locator("#screen-local.active")).toBeVisible();
-
-  await expect(page.getByRole("button", { name: "Pick a player" })).toBeDisabled();
-  await page.locator('#local-avatar-grid .avatar-option[data-avatar="yellow"]').click();
-  await expect(page.getByRole("button", { name: "Continue" })).toBeEnabled();
-  await page.getByRole("button", { name: "Continue" }).click();
-  await expect(page.getByRole("button", { name: "Pick a player" })).toBeDisabled();
-  await page.locator('#local-avatar-grid .avatar-option[data-avatar="green"]').click();
-  await expect(page.getByRole("button", { name: "Continue" })).toBeEnabled();
-  await page.getByRole("button", { name: "Continue" }).click();
-  await expect(page.locator("#screen-lobby.active")).toBeVisible();
-
-  await page.getByRole("button", { name: "Pick a game" }).click();
-  await expect(page.locator("#screen-pick.active")).toBeVisible();
-  await page.getByRole("button", { name: "Play Tic Tac Toe Blitz" }).click();
-
-  await expect(page.locator("#screen-game.active")).toBeVisible();
-  await expect(page.locator("#ttt-board .ttt-cell")).toHaveCount(9);
-});
-
 test("local honorific picker is per-player", async ({ page }) => {
   await page.goto("/");
   await page.waitForFunction(() => window.__multipassLegacyReady === true);

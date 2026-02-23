@@ -7,9 +7,7 @@ describe("registry-driven game modules", () => {
 
     expect(screen.getByRole("heading", { name: "Game Modules" })).toBeInTheDocument();
     expect(screen.getAllByText("Tic Tac Toe").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Tic Tac Toe Blitz").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Battleships").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Zombie Dice").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Unknown game").length).toBeGreaterThan(0);
   });
 });

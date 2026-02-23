@@ -80,16 +80,8 @@
   --game-banner-gradient: linear-gradient(135deg, #4f6ce6 0%, #2f3ea8 50%, #1d274f 100%);
 }
 
-.game-banner-tic-tac-toe-blitz {
-  --game-banner-gradient: linear-gradient(135deg, #708cff 0%, #4457c6 52%, #252f7a 100%);
-}
-
 .game-banner-battleships {
   --game-banner-gradient: linear-gradient(135deg, #2c9db0 0%, #2667b8 55%, #14336a 100%);
-}
-
-.game-banner-zombie-dice {
-  --game-banner-gradient: linear-gradient(135deg, #657a3f 0%, #2f6a4c 55%, #1b2d2d 100%);
 }
 
 .game-meta {

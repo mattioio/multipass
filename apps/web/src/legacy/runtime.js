@@ -1204,8 +1204,6 @@ function getGameName(room, gameId) {
 function getGameBannerClass(game) {
   const key = game?.bannerKey || game?.id || "";
   if (key === "battleships") return "game-banner-battleships";
-  if (key === "zombie_dice") return "game-banner-zombie-dice";
-  if (key === "tic_tac_toe_blitz") return "game-banner-tic-tac-toe-blitz";
   return "game-banner-tic-tac-toe";
 }
 

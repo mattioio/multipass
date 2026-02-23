@@ -114,11 +114,6 @@ export const gameCatalog = {
     id: "tic_tac_toe",
     name: "Tic Tac Toe"
   }),
-  tic_tac_toe_blitz: createTicTacToeConfig({
-    id: "tic_tac_toe_blitz",
-    name: "Tic Tac Toe Blitz",
-    bannerKey: "tic_tac_toe_blitz"
-  }),
   battleships: {
     id: "battleships",
     name: "Battleships",
@@ -131,18 +126,6 @@ export const gameCatalog = {
     mode: "board",
     visibility: "hidden_pass_device",
     localEngine: createBattleshipsEngine()
-  },
-  zombie_dice: {
-    id: "zombie_dice",
-    name: "Zombie Dice",
-    minPlayers: 2,
-    maxPlayers: 2,
-    comingSoon: true,
-    isAvailable: false,
-    bannerKey: "zombie_dice",
-    surfaceType: "placeholder",
-    mode: "dice",
-    visibility: "public"
   }
 };
 
