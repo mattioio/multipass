@@ -209,7 +209,6 @@ export function AppScreens({ isDevBuild }: AppScreensProps) {
           )}
         >
           <TurnStatusBar />
-          <p id="game-subtext" className="subtext game-subtext hidden"></p>
           <div id="ttt-board" className="ttt-board"></div>
           <div id="battleship-layout" className="battleship-layout hidden">
             <div className="battleship-controls">

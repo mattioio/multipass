@@ -2362,7 +2362,7 @@ function renderTurnIndicatorSplit(indicatorEl, room, activePlayerId = null, mode
 function renderTicTacToe(room) {
   const boardEl = document.getElementById("ttt-board");
   const indicatorEl = document.getElementById("turn-indicator");
-  const gameSubtext = document.getElementById("game-subtext");
+  const gameSurfaceShell = document.querySelector("#screen-game .game-surface-shell");
   if (!boardEl || !indicatorEl) return;
 
   const stateGame = getTicTacToeState(room);
@@ -2373,16 +2373,15 @@ function renderTicTacToe(room) {
     boardEl.classList.remove("game-board-highlight", "game-board-passive", "has-winning-line", "is-finished");
     PLAYER_THEME_CLASS_NAMES.forEach((className) => boardEl.classList.remove(className));
     boardEl.innerHTML = "";
-    if (gameSubtext) gameSubtext.classList.add("hidden");
+    if (gameSurfaceShell instanceof HTMLElement) {
+      gameSurfaceShell.classList.remove("game-shell-highlight");
+      PLAYER_THEME_CLASS_NAMES.forEach((className) => gameSurfaceShell.classList.remove(className));
+    }
     renderTurnIndicatorSplit(indicatorEl, room, null, "idle");
     return;
   }
 
   boardEl.classList.remove("hidden");
-  if (gameSubtext) {
-    gameSubtext.classList.remove("hidden");
-    gameSubtext.textContent = "Classic 3x3 tactical duel. First to line up three marks wins.";
-  }
 
   const winner = stateGame.winnerId ? playerById(room, stateGame.winnerId) : null;
   const winningLine = Array.isArray(stateGame.winningLine) ? stateGame.winningLine : [];
@@ -2419,6 +2418,13 @@ function renderTicTacToe(room) {
     boardEl.classList.add(`theme-${boardThemePlayer.theme}`);
   } else {
     boardEl.classList.add("game-board-passive");
+  }
+  if (gameSurfaceShell instanceof HTMLElement) {
+    gameSurfaceShell.classList.add("game-shell-highlight");
+    PLAYER_THEME_CLASS_NAMES.forEach((className) => gameSurfaceShell.classList.remove(className));
+    if (boardThemePlayer?.theme) {
+      gameSurfaceShell.classList.add(`theme-${boardThemePlayer.theme}`);
+    }
   }
   boardEl.classList.toggle("has-winning-line", Boolean(winningIndices && winningIndices.size === 3));
   boardEl.classList.toggle("is-finished", Boolean(winner || stateGame.draw));
@@ -2495,7 +2501,6 @@ function renderBattleships(room) {
   const isBattleships = activeGameId === "battleships";
   const battleshipLayout = document.getElementById("battleship-layout");
   const tttBoard = document.getElementById("ttt-board");
-  const subtext = document.getElementById("game-subtext");
   const indicatorEl = document.getElementById("turn-indicator");
   const ownBoardEl = document.getElementById("battleship-own-board");
   const ownCard = document.getElementById("battleship-own-card");
@@ -2523,7 +2528,6 @@ function renderBattleships(room) {
 
   battleshipLayout.classList.remove("hidden");
   if (tttBoard) tttBoard.classList.add("hidden");
-  if (subtext) subtext.classList.add("hidden");
 
   const gameState = getDisplayStateForRoomGame(room) || room.game.state;
   const fullState = room.game.state;
