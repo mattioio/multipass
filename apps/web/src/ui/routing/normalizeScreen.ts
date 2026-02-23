@@ -18,7 +18,7 @@ export function normalizeTargetScreen(target: ScreenKey | null | undefined, stat
   }
 
   if (target === "winner") {
-    return state.hasEndedGame ? "winner" : (state.hasRoom ? state.resolvedScreen : "landing");
+    return state.hasEndedGame ? "game" : (state.hasRoom ? state.resolvedScreen : "landing");
   }
 
   return target;

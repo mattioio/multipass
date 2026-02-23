@@ -11,16 +11,24 @@ const LINES = [
   [2, 4, 6]
 ];
 
-function getWinnerId(board, symbols) {
+function getWinner(board, symbols) {
   for (const [a, b, c] of LINES) {
     const val = board[a];
     if (!val) continue;
     if (val === board[b] && val === board[c]) {
       const entry = Object.entries(symbols).find(([, symbol]) => symbol === val);
-      if (entry) return entry[0];
+      if (entry) {
+        return {
+          winnerId: entry[0],
+          winningLine: [a, b, c]
+        };
+      }
     }
   }
-  return null;
+  return {
+    winnerId: null,
+    winningLine: null
+  };
 }
 
 function createTicTacToeEngine() {
@@ -38,6 +46,7 @@ function createTicTacToeEngine() {
         symbols,
         nextPlayerId: p1.id,
         winnerId: null,
+        winningLine: null,
         draw: false,
         history: []
       };
@@ -63,7 +72,7 @@ function createTicTacToeEngine() {
       const board = state.board.slice();
       board[index] = state.symbols[playerId];
 
-      const winnerId = getWinnerId(board, state.symbols);
+      const { winnerId, winningLine } = getWinner(board, state.symbols);
       const draw = !winnerId && board.every((cell) => cell !== null);
       const nextPlayerId = winnerId || draw
         ? null
@@ -74,6 +83,7 @@ function createTicTacToeEngine() {
           ...state,
           board,
           winnerId,
+          winningLine,
           draw,
           nextPlayerId,
           history: [...state.history, { playerId, index }]

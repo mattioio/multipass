@@ -27,12 +27,12 @@ describe("normalizeTargetScreen", () => {
     ).toBe("lobby");
   });
 
-  it("keeps winner when game ended", () => {
+  it("normalizes winner route to game when game ended", () => {
     expect(
       normalizeTargetScreen("winner", {
         ...baseState,
         hasEndedGame: true
       })
-    ).toBe("winner");
+    ).toBe("game");
   });
 });

@@ -662,7 +662,7 @@ function normalizeTargetScreen(screen) {
   if (screen === "winner") {
     const gameState = state.room?.game?.state;
     const ended = Boolean(gameState?.winnerId || gameState?.draw);
-    return ended ? "winner" : (state.room ? resolveScreen(state.room) : "landing");
+    return ended ? "game" : (state.room ? resolveScreen(state.room) : "landing");
   }
   return screen;
 }
@@ -1083,14 +1083,7 @@ function connect() {
       const nextScreen = resolveScreen(state.room);
       renderRoom();
       const endSignature = getEndSignature(state.room);
-      if (endSignature && endSignature !== state.lastWinSignature) {
-        state.lastWinSignature = endSignature;
-        const dismissedSignature = getDismissedWinnerSignature(state.room?.code);
-        if (dismissedSignature !== endSignature) {
-          showScreen("winner", { history: "replace" });
-          return;
-        }
-      }
+      state.lastWinSignature = endSignature || null;
       showScreen(nextScreen, { history: "replace" });
       return;
     }
@@ -1556,11 +1549,7 @@ function handleLocalUpdate() {
   updateLocalRejoinCard();
   renderRoom();
   const endSignature = getEndSignature(state.room);
-  if (endSignature && endSignature !== state.lastWinSignature) {
-    state.lastWinSignature = endSignature;
-    showScreen("winner", { history: "replace" });
-    return;
-  }
+  state.lastWinSignature = endSignature || null;
   showScreen(resolveScreen(state.room), { history: "replace" });
 }
 
@@ -2383,7 +2372,7 @@ function renderTicTacToe(room) {
   if (!stateGame) {
     clearBoardGestureTracking(boardEl, { preserveSuppression: true });
     boardEl.classList.add("hidden");
-    boardEl.classList.remove("game-board-highlight", "game-board-passive");
+    boardEl.classList.remove("game-board-highlight", "game-board-passive", "has-winning-line", "is-finished");
     PLAYER_THEME_CLASS_NAMES.forEach((className) => boardEl.classList.remove(className));
     boardEl.innerHTML = "";
     if (gameSubtext) gameSubtext.classList.add("hidden");
@@ -2398,6 +2387,10 @@ function renderTicTacToe(room) {
   }
 
   const winner = stateGame.winnerId ? playerById(room, stateGame.winnerId) : null;
+  const winningLine = Array.isArray(stateGame.winningLine) ? stateGame.winningLine : [];
+  const winningIndices = winner && winningLine.length === 3
+    ? new Set(winningLine.map((index) => Number(index)).filter((index) => Number.isInteger(index)))
+    : null;
   const symbolOwners = new Map();
   Object.entries(stateGame.symbols || {}).forEach(([playerId, symbol]) => {
     const owner = playerById(room, playerId);
@@ -2429,6 +2422,8 @@ function renderTicTacToe(room) {
   } else {
     boardEl.classList.add("game-board-passive");
   }
+  boardEl.classList.toggle("has-winning-line", Boolean(winningIndices && winningIndices.size === 3));
+  boardEl.classList.toggle("is-finished", Boolean(winner || stateGame.draw));
 
   boardEl.innerHTML = "";
   stateGame.board.forEach((cell, index) => {
@@ -2436,6 +2431,12 @@ function renderTicTacToe(room) {
     button.type = "button";
     button.className = "ttt-cell";
     button.dataset.index = String(index);
+    if (winningIndices && winningIndices.has(index)) {
+      button.classList.add("is-winning");
+      if (winner?.theme) {
+        button.classList.add(`theme-${winner.theme}`);
+      }
+    }
     if (cell) {
       const owner = symbolOwners.get(cell);
       const mark = document.createElement("span");
@@ -2706,13 +2707,26 @@ function renderGame(room) {
 }
 
 function renderWinner(room, leaderId, previousLeader) {
+  const panel = document.getElementById("game-result-panel");
   const winnerId = room.game?.state?.winnerId;
   const isDraw = Boolean(room.game?.state?.draw);
-  if (!winnerId && !isDraw) return;
+  if (!(panel instanceof HTMLElement)) return;
   const winner = winnerId ? playerById(room, winnerId) : null;
 
   const titleEl = document.getElementById("winner-title");
   const columns = document.getElementById("winner-score-columns");
+  const hasEnded = Boolean(winnerId || isDraw);
+
+  panel.classList.toggle("hidden", !hasEnded);
+  if (!hasEnded) {
+    if (titleEl) {
+      titleEl.textContent = "Winner";
+    }
+    if (columns) {
+      columns.innerHTML = "";
+    }
+    return;
+  }
 
   if (titleEl) {
     titleEl.textContent = isDraw && !winner
@@ -2765,22 +2779,14 @@ function renderEndRequest(room) {
 function resolveScreen(room) {
   const finished = room.game?.state?.winnerId || room.game?.state?.draw;
   if (isLocalMode()) {
-    if (finished) return "winner";
+    if (finished) return "game";
     if (shouldShowLocalPassScreen(room, state.localPrivacy)) return "pass";
     if (room.game && !finished) return "game";
     if (room.round?.status === "waiting_game") return "lobby";
     return "lobby";
   }
   const preferred = getPreferredRoomScreen(room?.code);
-  if (room.game && !finished) return "game";
-  if (finished) {
-    const endSignature = getEndSignature(room);
-    const dismissedSignature = getDismissedWinnerSignature(room?.code);
-    if (endSignature && dismissedSignature === endSignature) {
-      return preferred;
-    }
-    return "winner";
-  }
+  if (room.game) return "game";
   if (room.players.host && room.players.guest && !room.game) return preferred;
   return "lobby";
 }

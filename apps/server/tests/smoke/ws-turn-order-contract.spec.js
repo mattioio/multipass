@@ -130,7 +130,8 @@ test("starter is host in round 1, then alternates to guest in round 2", async ()
     "after host winning move"
   );
   host.send(JSON.stringify({ type: "move", move: { index: 2 } }));
-  await afterHostWinningMove;
+  const winningState = await afterHostWinningMove;
+  expect(winningState.room.game.state.winningLine).toEqual([0, 1, 2]);
 
   const roundResetPromise = waitForMessage(
     host,

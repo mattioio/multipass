@@ -528,6 +528,21 @@
   justify-content: center;
 }
 
+.game-result-panel {
+  max-width: 920px;
+  margin: 10px auto 0;
+  text-align: center;
+  gap: 16px;
+}
+
+.game-result-columns {
+  margin-top: 4px;
+}
+
+.game-result-actions {
+  justify-content: center;
+}
+
 .game-top {
   display: flex;
   flex-wrap: wrap;
@@ -807,6 +822,30 @@
 .ttt-cell:not(:disabled):hover {
   transform: translateY(-1px);
   border-color: color-mix(in srgb, var(--cta) 38%, var(--border));
+}
+
+.ttt-board.has-winning-line.is-finished .ttt-cell:not(.is-winning) {
+  opacity: 0.74;
+}
+
+.ttt-cell.is-winning {
+  border-color: color-mix(in srgb, var(--theme-strong, var(--cta)) 76%, #ffffff24);
+  background:
+    linear-gradient(
+      165deg,
+      color-mix(in srgb, var(--theme-soft, var(--surface)) 34%, var(--surface) 66%) 0%,
+      color-mix(in srgb, var(--theme-mid, var(--surface-2)) 34%, var(--surface-2) 66%) 100%
+    );
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, #ffffff 54%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--theme-strong, var(--cta)) 34%, transparent),
+    0 12px 22px color-mix(in srgb, var(--theme-strong, var(--cta)) 24%, transparent);
+}
+
+.ttt-cell.is-winning .ttt-mark {
+  filter:
+    drop-shadow(0 2px 4px rgba(8, 12, 22, 0.34))
+    drop-shadow(0 0 10px color-mix(in srgb, var(--theme-strong, var(--cta)) 38%, transparent));
 }
 
 .ttt-cell.is-preview {
