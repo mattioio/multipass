@@ -36,7 +36,10 @@ describe("PlayerCardShell", () => {
     expect(container.querySelector(".player-card-shell--score")).toBeInTheDocument();
     expect(container.querySelector(".player-card-art-placeholder")).toBeInTheDocument();
     expect(container.querySelector(".player-card-spinner")).toBeInTheDocument();
-    expect(container.querySelector(".player-card-badge--leader")?.textContent).toBe("Leader");
+    const leaderBadge = container.querySelector(".player-card-badge--leader");
+    expect(leaderBadge).toBeInTheDocument();
+    expect(leaderBadge).toHaveAttribute("aria-label", "Leader");
+    expect(leaderBadge?.textContent).toBe("");
     expect(container.querySelector(".avatar-lower-third")).not.toBeInTheDocument();
   });
 });

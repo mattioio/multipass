@@ -59,6 +59,14 @@ test("online happy path: host + guest choose game -> game", async ({ browser }) 
 
   await expect(hostPage.locator("#screen-game.active")).toBeVisible();
   await expect(guestPage.locator("#screen-game.active")).toBeVisible();
+  await expect(hostPage.locator("#screen-game .game-surface-head")).toHaveCount(0);
+  await expect(hostPage.locator("#screen-game .game-surface-title")).toHaveCount(0);
+  await expect(hostPage.locator("#screen-game .game-surface-status")).toHaveCount(0);
+  await expect(guestPage.locator("#screen-game .game-surface-head")).toHaveCount(0);
+  await expect(guestPage.locator("#screen-game .game-surface-title")).toHaveCount(0);
+  await expect(guestPage.locator("#screen-game .game-surface-status")).toHaveCount(0);
+  await expect(hostPage.locator("#turn-indicator .turn-player")).toHaveCount(2);
+  await expect(guestPage.locator("#turn-indicator .turn-player")).toHaveCount(2);
   const firstRoundStarter = await hostPage.evaluate(() => {
     const room = window.__multipassStore.getState().room;
     return {

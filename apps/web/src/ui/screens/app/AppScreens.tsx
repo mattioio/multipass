@@ -199,8 +199,7 @@ export function AppScreens({ isDevBuild }: AppScreensProps) {
 
       <Screen id="screen-game">
         <GameSurfaceShell
-          title="Game board"
-          status="Live round"
+          showHead={false}
           state="active"
           actions={(
             <GameActionRow>

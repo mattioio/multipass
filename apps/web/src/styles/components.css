@@ -200,6 +200,9 @@ button:disabled {
 }
 
 .landing-segmented {
+  --landing-mode-progress: 0;
+  --landing-local-active-pct: 100%;
+  --landing-online-active-pct: 0%;
   position: relative;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -235,11 +238,8 @@ button:disabled {
   box-shadow:
     0 8px 18px color-mix(in srgb, var(--cta) 26%, transparent),
     inset 0 1px 0 color-mix(in srgb, #ffffff 35%, transparent);
+  transform: translateX(calc(var(--landing-mode-progress, 0) * 100%));
   transition: transform var(--motion-base) var(--ease-out);
-}
-
-.landing-segmented[data-mode="online"]::before {
-  transform: translateX(100%);
 }
 
 .landing-segment {
@@ -253,7 +253,24 @@ button:disabled {
   font-size: 1.22rem;
   letter-spacing: 0.02em;
   color: var(--muted);
+  transition: color var(--motion-fast) linear;
   z-index: 1;
+}
+
+#landing-tab-local {
+  color: color-mix(
+    in srgb,
+    var(--cta-text) var(--landing-local-active-pct, 100%),
+    var(--muted)
+  );
+}
+
+#landing-tab-online {
+  color: color-mix(
+    in srgb,
+    var(--cta-text) var(--landing-online-active-pct, 0%),
+    var(--muted)
+  );
 }
 
 .landing-segment.has-alert::after {
@@ -1073,19 +1090,18 @@ button:disabled {
 
 .player-card-badge.player-card-badge--leader {
   position: absolute;
-  top: 8px;
-  right: 8px;
-  font-size: 0.62rem;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  line-height: 1;
-  padding: 6px 8px;
-  border-radius: 999px;
-  background: color-mix(in srgb, #141126 72%, var(--theme-strong, var(--cta)) 28%);
-  border: 1px solid color-mix(in srgb, #ffffff 22%, transparent);
-  box-shadow: 0 6px 14px color-mix(in srgb, #000000 28%, transparent);
-  z-index: 3;
+  top: 12px;
+  right: 12px;
+  width: clamp(42px, 17%, 56px);
+  aspect-ratio: 1 / 1;
+  background: #ffffff;
+  -webkit-mask: url("../assets/trophy.svg") center / contain no-repeat;
+  mask: url("../assets/trophy.svg") center / contain no-repeat;
+  filter:
+    drop-shadow(0 2px 0 color-mix(in srgb, #ffffff 16%, transparent))
+    drop-shadow(0 8px 10px color-mix(in srgb, #000000 34%, transparent));
+  pointer-events: none;
+  z-index: 4;
 }
 
 .local-wizard {

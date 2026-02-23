@@ -30,4 +30,27 @@ describe("game host patterns", () => {
 
     expect(screen.getByRole("heading", { name: "Winner" })).toBeInTheDocument();
   });
+
+  it("can hide shell head while preserving body and actions", () => {
+    render(
+      <GameSurfaceShell
+        title="Hidden Title"
+        status="Hidden Status"
+        showHead={false}
+        actions={(
+          <GameActionRow>
+            <Button type="button">Primary</Button>
+          </GameActionRow>
+        )}
+      >
+        <TurnStatusBar id="turn-indicator-test-hidden-head" />
+      </GameSurfaceShell>
+    );
+
+    expect(document.querySelector(".game-surface-head")).not.toBeInTheDocument();
+    expect(screen.queryByText("Hidden Title")).not.toBeInTheDocument();
+    expect(screen.queryByText("Hidden Status")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Primary" })).toBeInTheDocument();
+    expect(document.getElementById("turn-indicator-test-hidden-head")).toBeInTheDocument();
+  });
 });

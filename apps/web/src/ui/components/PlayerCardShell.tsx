@@ -65,7 +65,9 @@ export function PlayerCardShell({
           <span className={classes.selectedLabel}>Selected</span>
         </span>
       ) : null}
-      {leader ? <span className={classes.leaderBadge}>Leader</span> : null}
+      {leader ? (
+        <span className={classes.leaderBadge} role="img" aria-label="Leader" title="Leader" />
+      ) : null}
       {waiting ? <span className={classes.spinner} aria-hidden="true" /> : null}
       {showLockSlot ? <span className={classes.lockBadge} aria-hidden="true" /> : null}
     </RootTag>

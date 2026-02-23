@@ -151,6 +151,7 @@ function createInitialState() {
     joinHonorific: "mr",
     localHonorifics: { p1: "mr", p2: "mr" },
     landingMode: "local",
+    landingModeProgress: 0,
     devkitReturnScreen: "landing",
     boardGesture: createInitialBoardGestureState(),
     landingGesture: createInitialLandingGestureState()
@@ -1211,16 +1212,8 @@ function getGameBannerClass(game) {
   const key = game?.bannerKey || game?.id || "";
   if (key === "battleships") return "game-banner-battleships";
   if (key === "zombie_dice") return "game-banner-zombie-dice";
-  if (key === "tic_tac_toe_blitz") return "game-banner-tic-tac-toe";
+  if (key === "tic_tac_toe_blitz") return "game-banner-tic-tac-toe-blitz";
   return "game-banner-tic-tac-toe";
-}
-
-function getGameBannerLabel(game) {
-  const key = game?.bannerKey || game?.id || "";
-  if (key === "battleships") return "Fleet Clash";
-  if (key === "zombie_dice") return "Brains Or Bust";
-  if (key === "tic_tac_toe_blitz") return "Speed Grid Clash";
-  return "Classic Grid Duel";
 }
 
 function isLocalMode() {
@@ -2021,11 +2014,6 @@ function renderGameList(room) {
     const banner = document.createElement("div");
     banner.className = `game-banner ${getGameBannerClass(game)}`;
 
-    const bannerLabel = document.createElement("div");
-    bannerLabel.className = "game-banner-label";
-    bannerLabel.textContent = getGameBannerLabel(game);
-    banner.appendChild(bannerLabel);
-
     const meta = document.createElement("div");
     meta.className = "game-meta";
 
@@ -2324,70 +2312,71 @@ function initTicTacToeBoardGestures() {
   boardEl.addEventListener("click", handleTicTacToeBoardClick);
 }
 
+function renderTurnIndicatorSplit(indicatorEl, room, activePlayerId = null, mode = "turn") {
+  if (!(indicatorEl instanceof HTMLElement)) return;
+
+  indicatorEl.innerHTML = "";
+  indicatorEl.classList.remove("turn-passive");
+  if (!activePlayerId) {
+    indicatorEl.classList.add("turn-passive");
+  }
+
+  const host = room?.players?.host || null;
+  const guest = room?.players?.guest || null;
+  const sides = [
+    { player: host, side: "host", fallback: "Player 1" },
+    { player: guest, side: "guest", fallback: "Player 2" }
+  ];
+
+  sides.forEach(({ player, side, fallback }) => {
+    const pane = document.createElement("div");
+    pane.className = `turn-player turn-player-${side}`;
+
+    const theme = player?.theme || (side === "host" ? "red" : "green");
+    pane.classList.add(`theme-${theme}`);
+
+    const isActive = Boolean(activePlayerId && player && player.id === activePlayerId);
+    pane.classList.add(isActive ? "is-active" : "is-inactive");
+    if (!player) pane.classList.add("is-empty");
+
+    const avatar = document.createElement("span");
+    avatar.className = "turn-player-avatar";
+    avatar.setAttribute("aria-hidden", "true");
+    const avatarImg = document.createElement("img");
+    avatarImg.src = getPlayerArtSrc(player);
+    avatarImg.alt = "";
+    avatar.appendChild(avatarImg);
+
+    const meta = document.createElement("span");
+    meta.className = "turn-player-meta";
+    const name = document.createElement("span");
+    name.className = "turn-player-name";
+    name.textContent = getDisplayPlayerName(player, fallback);
+    const stateLabel = document.createElement("span");
+    stateLabel.className = "turn-player-state";
+    if (mode === "winner") {
+      stateLabel.textContent = isActive ? "Won" : "Done";
+    } else if (mode === "draw") {
+      stateLabel.textContent = "Draw";
+    } else if (!player) {
+      stateLabel.textContent = "Waiting";
+    } else {
+      stateLabel.textContent = isActive ? "Turn" : "Waiting";
+    }
+    meta.appendChild(name);
+    meta.appendChild(stateLabel);
+
+    pane.appendChild(avatar);
+    pane.appendChild(meta);
+    indicatorEl.appendChild(pane);
+  });
+}
+
 function renderTicTacToe(room) {
   const boardEl = document.getElementById("ttt-board");
   const indicatorEl = document.getElementById("turn-indicator");
   const gameSubtext = document.getElementById("game-subtext");
-  const host = room.players?.host || null;
-  const guest = room.players?.guest || null;
   if (!boardEl || !indicatorEl) return;
-
-  const renderTurnSplit = (activePlayerId = null, mode = "turn") => {
-    if (!indicatorEl) return;
-    indicatorEl.innerHTML = "";
-    indicatorEl.classList.remove("turn-passive");
-    if (!activePlayerId) {
-      indicatorEl.classList.add("turn-passive");
-    }
-
-    const sides = [
-      { player: host, side: "host", fallback: "Player 1" },
-      { player: guest, side: "guest", fallback: "Player 2" }
-    ];
-
-    sides.forEach(({ player, side, fallback }) => {
-      const pane = document.createElement("div");
-      pane.className = `turn-player turn-player-${side}`;
-
-      const theme = player?.theme || (side === "host" ? "red" : "green");
-      pane.classList.add(`theme-${theme}`);
-
-      const isActive = Boolean(activePlayerId && player && player.id === activePlayerId);
-      pane.classList.add(isActive ? "is-active" : "is-inactive");
-      if (!player) pane.classList.add("is-empty");
-
-      const avatar = document.createElement("span");
-      avatar.className = "turn-player-avatar";
-      const avatarImg = document.createElement("img");
-      avatarImg.src = getPlayerArtSrc(player);
-      avatarImg.alt = "";
-      avatar.setAttribute("aria-hidden", "true");
-      avatar.appendChild(avatarImg);
-
-      const meta = document.createElement("span");
-      meta.className = "turn-player-meta";
-      const name = document.createElement("span");
-      name.className = "turn-player-name";
-      name.textContent = getDisplayPlayerName(player, fallback);
-      const stateLabel = document.createElement("span");
-      stateLabel.className = "turn-player-state";
-      if (mode === "winner") {
-        stateLabel.textContent = isActive ? "Won" : "Done";
-      } else if (mode === "draw") {
-        stateLabel.textContent = "Draw";
-      } else if (!player) {
-        stateLabel.textContent = "Waiting";
-      } else {
-        stateLabel.textContent = isActive ? "Turn" : "Waiting";
-      }
-      meta.appendChild(name);
-      meta.appendChild(stateLabel);
-
-      pane.appendChild(avatar);
-      pane.appendChild(meta);
-      indicatorEl.appendChild(pane);
-    });
-  };
 
   const stateGame = getTicTacToeState(room);
 
@@ -2398,7 +2387,7 @@ function renderTicTacToe(room) {
     PLAYER_THEME_CLASS_NAMES.forEach((className) => boardEl.classList.remove(className));
     boardEl.innerHTML = "";
     if (gameSubtext) gameSubtext.classList.add("hidden");
-    renderTurnSplit(null, "idle");
+    renderTurnIndicatorSplit(indicatorEl, room, null, "idle");
     return;
   }
 
@@ -2418,13 +2407,15 @@ function renderTicTacToe(room) {
   });
 
   if (winner) {
-    renderTurnSplit(winner.id, "winner");
+    renderTurnIndicatorSplit(indicatorEl, room, winner.id, "winner");
   } else if (stateGame.draw) {
-    renderTurnSplit(null, "draw");
+    renderTurnIndicatorSplit(indicatorEl, room, null, "draw");
   } else {
-    renderTurnSplit(stateGame.nextPlayerId || null, "turn");
+    renderTurnIndicatorSplit(indicatorEl, room, stateGame.nextPlayerId || null, "turn");
   }
 
+  const host = room.players?.host || null;
+  const guest = room.players?.guest || null;
   const boardThemePlayer = winner
     || (!stateGame.draw ? playerById(room, stateGame.nextPlayerId) : null)
     || host
@@ -2571,20 +2562,16 @@ function renderBattleships(room) {
   }
 
   if (indicatorEl) {
-    indicatorEl.innerHTML = "";
-    indicatorEl.classList.add("turn-passive");
-    const text = document.createElement("span");
     if (isFinished) {
       const winner = playerById(room, fullState.winnerId);
-      text.textContent = winner
-        ? `${getDisplayPlayerName(winner, "Winner")} won.`
-        : "Round complete.";
-    } else if (isViewerTurn) {
-      text.textContent = `${getDisplayPlayerName(viewer, "You")} to play`;
+      if (winner) {
+        renderTurnIndicatorSplit(indicatorEl, room, winner.id, "winner");
+      } else {
+        renderTurnIndicatorSplit(indicatorEl, room, null, "draw");
+      }
     } else {
-      text.textContent = `Waiting for ${getDisplayPlayerName(playerById(room, fullState.nextPlayerId), "opponent")}`;
+      renderTurnIndicatorSplit(indicatorEl, room, fullState.nextPlayerId || null, "turn");
     }
-    indicatorEl.appendChild(text);
   }
 
   const board = gameState.board || {};
@@ -3250,6 +3237,29 @@ function getLandingTrackOffsetPx(mode, panelWidthPx) {
   return mode === "online" ? -panelWidthPx : 0;
 }
 
+function getLandingModeProgress(mode) {
+  return mode === "online" ? 1 : 0;
+}
+
+function applyLandingModeProgress(progress) {
+  const normalized = clamp(
+    Number.isFinite(progress) ? progress : getLandingModeProgress(state.landingMode),
+    0,
+    1
+  );
+  state.landingModeProgress = normalized;
+  if (!(landingSegmented instanceof HTMLElement)) return;
+  landingSegmented.style.setProperty("--landing-mode-progress", normalized.toFixed(4));
+  landingSegmented.style.setProperty(
+    "--landing-local-active-pct",
+    `${Math.round((1 - normalized) * 100)}%`
+  );
+  landingSegmented.style.setProperty(
+    "--landing-online-active-pct",
+    `${Math.round(normalized * 100)}%`
+  );
+}
+
 function clearLandingGestureTracking(options = {}) {
   const preserveSuppression = Boolean(options.preserveSuppression);
   state.landingGesture.activePointerId = null;
@@ -3290,6 +3300,7 @@ function handleLandingPointerDown(event) {
   state.landingGesture.panelWidthPx = panelWidthPx;
   state.landingGesture.startOffsetPx = getLandingTrackOffsetPx(state.landingMode, panelWidthPx);
   state.landingGesture.isDragging = false;
+  applyLandingModeProgress(getLandingModeProgress(state.landingMode));
 }
 
 function handleLandingPointerMove(event) {
@@ -3327,6 +3338,7 @@ function handleLandingPointerMove(event) {
     0
   );
   landingTrack.style.transform = `translateX(${nextOffset}px)`;
+  applyLandingModeProgress(Math.abs(nextOffset) / panelWidthPx);
 
   if (event.cancelable) {
     event.preventDefault();
@@ -3423,6 +3435,7 @@ function setLandingMode(mode, options = {}) {
   if (landingSegmented) {
     landingSegmented.dataset.mode = nextMode;
   }
+  applyLandingModeProgress(getLandingModeProgress(nextMode));
   if (landingTabLocal) {
     const isLocal = nextMode === "local";
     landingTabLocal.classList.toggle("active", isLocal);

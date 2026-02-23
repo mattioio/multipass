@@ -1,0 +1,39 @@
+@font-face {
+  font-family: "ITC Kabel Std";
+  src: url("../assets/itc-kabel-std/ITCKabelStdBook.TTF") format("truetype");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "ITC Kabel Std";
+  src: url("../assets/itc-kabel-std/ITCKabelStdMedium.TTF") format("truetype");
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "ITC Kabel Std";
+  src: url("../assets/itc-kabel-std/ITCKabelStdDemi.TTF") format("truetype");
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "ITC Kabel Std";
+  src: url("../assets/itc-kabel-std/ITCKabelStdBold.TTF") format("truetype");
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "ITC Kabel Std";
+  src: url("../assets/itc-kabel-std/ITCKabelStdUltra.TTF") format("truetype");
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+}

@@ -10,9 +10,7 @@ export interface GameTileProps {
 export function GameTile({ title, bannerClassName = "game-banner game-banner-tic-tac-toe", badge, cta }: GameTileProps) {
   return (
     <article className="game-card">
-      <div className={bannerClassName}>
-        <div className="game-banner-label">Classic Grid Duel</div>
-      </div>
+      <div className={bannerClassName} />
       <div className="game-meta">
         <div className="game-name-row">
           <h3 className="game-name">{title}</h3>

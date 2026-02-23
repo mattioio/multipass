@@ -28,7 +28,9 @@ function appendLockBadge(root, classes) {
 function appendLeaderBadge(root, classes) {
   const badge = document.createElement("span");
   badge.className = classes.leaderBadge;
-  badge.textContent = "Leader";
+  badge.setAttribute("role", "img");
+  badge.setAttribute("aria-label", "Leader");
+  badge.setAttribute("title", "Leader");
   root.appendChild(badge);
 }
 

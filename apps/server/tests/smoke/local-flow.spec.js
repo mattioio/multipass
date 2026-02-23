@@ -54,6 +54,10 @@ test("local happy path: setup -> lobby -> pick -> game", async ({ page }) => {
   await page.getByRole("button", { name: "Play Tic Tac Toe", exact: true }).click();
 
   await expect(page.locator("#screen-game.active")).toBeVisible();
+  await expect(page.locator("#screen-game .game-surface-head")).toHaveCount(0);
+  await expect(page.locator("#screen-game .game-surface-title")).toHaveCount(0);
+  await expect(page.locator("#screen-game .game-surface-status")).toHaveCount(0);
+  await expect(page.locator("#turn-indicator .turn-player")).toHaveCount(2);
   const firstRoundStarter = await page.evaluate(() => {
     const room = window.__multipassStore.getState().room;
     return {
@@ -365,6 +369,10 @@ test("battleships uses a single board with tap-then-confirm fire", async ({ page
   await expect(page.locator("#screen-pick.active")).toBeVisible();
   await page.getByRole("button", { name: "Play Battleships" }).click();
   await expect(page.locator("#screen-game.active")).toBeVisible();
+  await expect(page.locator("#screen-game .game-surface-head")).toHaveCount(0);
+  await expect(page.locator("#screen-game .game-surface-title")).toHaveCount(0);
+  await expect(page.locator("#screen-game .game-surface-status")).toHaveCount(0);
+  await expect(page.locator("#turn-indicator .turn-player")).toHaveCount(2);
 
   await expect(page.locator("#battleship-layout")).not.toHaveClass(/hidden/);
   await expect(page.locator("#battleship-own-board .battleship-cell")).toHaveCount(36);
