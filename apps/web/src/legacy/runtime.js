@@ -3,6 +3,20 @@ import { AVATARS, getAvatar, getAvatarByTheme } from "../domain/avatars.js";
 import { isTicTacToeSurfaceGame, localGames, listLocalGames } from "../domain/localGames.js";
 import { resolvePickerGames } from "../domain/games/picker.js";
 import { createWsClient } from "../net/wsClient.js";
+import {
+  createConnectionManager,
+  getPrimaryWebSocketUrl,
+  getWebSocketCandidates
+} from "../net/connectionManager.ts";
+import {
+  buildJoinRoomMessage,
+  buildValidateRoomMessage,
+  getJoinCodeErrorStatusMessage,
+  isAvatarRequiredError,
+  isRoomFullError,
+  isRoomNotFoundError,
+  parseServerMessage
+} from "../net/protocolAdapter.ts";
 import { actions } from "../state/actions.js";
 import { reducer } from "../state/reducer.js";
 import { getLeaderId } from "../state/selectors.js";
@@ -176,7 +190,9 @@ function createInitialState() {
 const store = createStore(createInitialState(), reducer);
 const state = store.getState();
 const dispatch = store.dispatch;
-const wsClient = createWsClient({ getUrl: getWebSocketUrl });
+const wsClient = createWsClient({
+  getUrl: () => getPrimaryWebSocketUrl(resolveWebSocketCandidateOptions()) || PROD_WS_FALLBACK_URLS[0]
+});
 window.__multipassStore = store;
 
 const screens = {
@@ -376,12 +392,6 @@ function clearJoinCodeStatusMessage() {
   if (!(joinHint instanceof HTMLElement)) return;
   if (state.joinStep !== "code" || state.joinValidating) return;
   joinHint.textContent = "Enter 4-letter code";
-}
-
-function getJoinCodeErrorStatusMessage(rawMessage) {
-  if (rawMessage === "Room not found.") return "Room not found";
-  if (rawMessage === "Room is full.") return "Room is full";
-  return "Couldn't verify room";
 }
 
 function writeJoinCodeIntoSlots(rawCode, startIndex = 0) {
@@ -984,107 +994,75 @@ function logWs(message, details) {
   console.info(`[multipass/ws] ${message}`, details);
 }
 
-function parseWsUrlList(rawValue) {
-  if (!rawValue) return [];
-  return String(rawValue)
-    .split(",")
-    .map((url) => url.trim())
-    .filter(Boolean);
-}
-
-function getWebSocketCandidates() {
-  // 1) Build-time production override from CI/deploy.
-  const envOverrideRaw = typeof import.meta !== "undefined" && import.meta.env
-    ? import.meta.env.VITE_WS_URL
-    : null;
-  const envOverrides = parseWsUrlList(envOverrideRaw);
-  if (envOverrides.length) return [...new Set(envOverrides)];
-  // 2) Local override for live debugging in browser.
-  const overrideRaw = window.localStorage?.getItem("multipass_ws_url");
-  const overrides = parseWsUrlList(overrideRaw);
-  if (overrides.length) return [...new Set(overrides)];
-  // 3) Dev fallback when running Vite + local API server.
-  if (typeof import.meta !== "undefined" && import.meta.env?.DEV) {
-    const protocol = window.location.protocol === "https:" ? "wss" : "ws";
-    return [`${protocol}://${window.location.hostname}:3001`];
-  }
-  // 4) Legacy localhost fallback if app is served by local static host.
-  const host = window.location.hostname;
-  if (host === "localhost" || host === "127.0.0.1") {
-    const protocol = window.location.protocol === "https:" ? "wss" : "ws";
-    return [`${protocol}://${window.location.host}`];
-  }
-  return [...PROD_WS_FALLBACK_URLS];
-}
-
-function getWebSocketUrl() {
-  return getWebSocketCandidates()[0] || PROD_WS_FALLBACK_URLS[0];
+function resolveWebSocketCandidateOptions() {
+  return {
+    envOverrideRaw: typeof import.meta !== "undefined" && import.meta.env
+      ? import.meta.env.VITE_WS_URL
+      : null,
+    localOverrideRaw: window.localStorage?.getItem("multipass_ws_url"),
+    isDev: Boolean(typeof import.meta !== "undefined" && import.meta.env?.DEV),
+    protocol: window.location.protocol,
+    hostname: window.location.hostname,
+    host: window.location.host,
+    fallbackUrls: [...PROD_WS_FALLBACK_URLS]
+  };
 }
 
 function runPendingJoinValidation() {
   const code = state.pendingDeepLinkJoinCode;
   if (!code) return false;
   state.pendingDeepLinkJoinCode = null;
-  send({
-    type: "validate_room",
+  send(buildValidateRoomMessage({
     code,
     clientId: state.clientId,
     seatToken: state.seatToken
-  });
+  }));
   return true;
 }
 
 function connect() {
-  const wsUrls = getWebSocketCandidates();
-  let hasConnected = false;
-  let attemptIndex = 0;
-  let connectTimeoutId = null;
+  const wsUrls = getWebSocketCandidates(resolveWebSocketCandidateOptions());
 
-  function clearConnectTimeout() {
-    if (connectTimeoutId === null) return;
-    clearTimeout(connectTimeoutId);
-    connectTimeoutId = null;
-  }
-
-  function connectAttempt() {
-    const wsUrl = wsUrls[Math.min(attemptIndex, wsUrls.length - 1)];
-    clearConnectTimeout();
-    logWs(`connecting to ${wsUrl} (attempt ${attemptIndex + 1}/${wsUrls.length})`);
-    const socket = wsClient.connect(wsUrl);
-    dispatch(actions.wsSet(socket));
-    connectTimeoutId = setTimeout(() => {
-      if (hasConnected) return;
-      if (wsClient.getSocket() !== socket) return;
-      if (socket.readyState === WebSocket.CONNECTING) {
-        logWs(`connect timeout after ${WS_CONNECT_ATTEMPT_TIMEOUT_MS}ms`, wsUrl);
-        socket.close();
-      }
-    }, WS_CONNECT_ATTEMPT_TIMEOUT_MS);
-  }
-
-  connectAttempt();
-
-  wsClient.subscribe("open", (event) => {
-    if (event?.target && event.target !== wsClient.getSocket()) return;
-    hasConnected = true;
-    clearConnectTimeout();
+  const connectionManager = createConnectionManager({
+    wsClient,
+    candidateUrls: wsUrls,
+    connectTimeoutMs: WS_CONNECT_ATTEMPT_TIMEOUT_MS,
+    log: logWs,
+    onSocket: (socket) => {
+      dispatch(actions.wsSet(socket));
+    },
+    onOpen: () => {
     logWs("open");
     if (runPendingJoinValidation()) {
       return;
     }
     if (state.lastRoomCode && state.mode === "online") {
       dispatch(actions.autoJoinCodeSet(state.lastRoomCode));
-      send({
-        type: "join_room",
+      send(buildJoinRoomMessage({
         code: state.lastRoomCode,
         clientId: state.clientId,
         seatToken: state.seatToken
-      });
+      }));
+    }
+    },
+    onExhausted: () => {
+      showToast("Could not connect to rooms. Check network/backend and retry.");
+    },
+    onDisconnected: (event) => {
+      logWs(
+        `close code=${event?.code ?? "unknown"} reason=${event?.reason || "n/a"} clean=${Boolean(event?.wasClean)}`
+      );
+      showToast("Disconnected. Refresh to reconnect.");
     }
   });
 
-  wsClient.subscribe("message", (message) => {
-    if (message.type === "session") {
+  connectionManager.start();
+
+  wsClient.subscribe("message", (rawMessage) => {
+    const parsedMessage = parseServerMessage(rawMessage);
+
+    if (parsedMessage.kind === "session") {
+      const message = parsedMessage.message;
       dispatch(actions.clientIdSet(message.clientId));
       localStorage.setItem("multipass_client_id", message.clientId);
       if (typeof message.seatToken === "string" && message.seatToken) {
@@ -1094,7 +1072,8 @@ function connect() {
       return;
     }
 
-    if (message.type === "room_state") {
+    if (parsedMessage.kind === "room_state") {
+      const message = parsedMessage.message;
       if (state.mode === "local") {
         return;
       }
@@ -1138,7 +1117,8 @@ function connect() {
       return;
     }
 
-    if (message.type === "room_preview") {
+    if (parsedMessage.kind === "room_preview") {
+      const message = parsedMessage.message;
       state.joinValidating = false;
       state.joinValidationSource = null;
       state.joinCodeStatusMessage = "";
@@ -1150,12 +1130,11 @@ function connect() {
         state.joinValidating = true;
         renderJoinSetup();
         clearRecentLeaveGuard();
-        send({
-          type: "join_room",
+        send(buildJoinRoomMessage({
           code: state.joinValidatedCode,
           clientId: state.clientId,
           seatToken: state.seatToken
-        });
+        }));
         return;
       }
       state.joinStep = "avatar";
@@ -1164,30 +1143,31 @@ function connect() {
       return;
     }
 
-    if (message.type === "error") {
+    if (parsedMessage.kind === "error") {
+      const message = parsedMessage.message;
       const joinValidationSource = state.joinValidationSource;
       if (state.joinValidating) {
         state.joinValidating = false;
         state.joinCodeStatusMessage = joinValidationSource === "manual"
-          ? getJoinCodeErrorStatusMessage(message.message)
+          ? getJoinCodeErrorStatusMessage(message)
           : "";
         state.joinValidationSource = null;
         renderJoinSetup();
       }
       if (joinValidationSource === "deep_link") {
-        if (message.message === "Room not found.") {
+        if (isRoomNotFoundError(message)) {
           showToast("This invite is expired. Ask for a new link.");
           showScreen("join", { history: "replace" });
           return;
         }
-        if (message.message === "Room is full.") {
+        if (isRoomFullError(message)) {
           showToast("Room already has two players. Ask host for a fresh room.");
           showScreen("join", { history: "replace" });
           return;
         }
       }
       if (state.autoJoinCode) {
-        if (message.message === "Room not found.") {
+        if (isRoomNotFoundError(message)) {
           dispatch(actions.autoJoinCodeSet(null));
           dispatch(actions.lastRoomCodeSet(null));
           clearOnlineRejoinData();
@@ -1196,7 +1176,7 @@ function connect() {
           showScreen("landing", { history: "replace" });
           return;
         }
-        if (message.message === "Pick an avatar.") {
+        if (isAvatarRequiredError(message)) {
           dispatch(actions.autoJoinCodeSet(null));
           const joinCodeInput = document.getElementById("join-code");
           if (joinCodeInput instanceof HTMLInputElement && state.lastRoomCode) {
@@ -1217,24 +1197,6 @@ function connect() {
   wsClient.subscribe("error", (event) => {
     if (event?.target && event.target !== wsClient.getSocket()) return;
     logWs("error", event);
-  });
-
-  wsClient.subscribe("close", (event) => {
-    if (event?.target && event.target !== wsClient.getSocket()) return;
-    clearConnectTimeout();
-    logWs(
-      `close code=${event?.code ?? "unknown"} reason=${event?.reason || "n/a"} clean=${Boolean(event?.wasClean)}`
-    );
-    if (!hasConnected && attemptIndex < wsUrls.length - 1) {
-      attemptIndex += 1;
-      connectAttempt();
-      return;
-    }
-    if (!hasConnected) {
-      showToast("Could not connect to rooms. Check network/backend and retry.");
-      return;
-    }
-    showToast("Disconnected. Refresh to reconnect.");
   });
 }
 
@@ -3522,14 +3484,13 @@ function setup() {
       return;
     }
     clearRecentLeaveGuard();
-    send({
-      type: "join_room",
+    send(buildJoinRoomMessage({
       code: state.joinValidatedCode || code,
       avatar: avatar.id,
       honorific: state.joinHonorific,
       clientId: state.clientId,
       seatToken: state.seatToken
-    });
+    }));
   });
 
   if (shareRoomLinkButton) {
@@ -3606,12 +3567,11 @@ function setup() {
     state.mode = "online";
     state.autoJoinCode = state.lastRoomCode;
     clearRecentLeaveGuard();
-    send({
-      type: "join_room",
+    send(buildJoinRoomMessage({
       code: state.lastRoomCode,
       clientId: state.clientId,
       seatToken: state.seatToken
-    });
+    }));
   });
 
   const battleshipOrientation = document.getElementById("battleship-orientation");
@@ -4109,12 +4069,11 @@ function beginJoinValidation(rawCode, options = {}) {
   }
 
   state.pendingDeepLinkJoinCode = null;
-  send({
-    type: "validate_room",
+  send(buildValidateRoomMessage({
     code,
     clientId: state.clientId,
     seatToken: state.seatToken
-  });
+  }));
   return true;
 }
 
