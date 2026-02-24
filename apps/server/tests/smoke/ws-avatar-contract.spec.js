@@ -49,6 +49,7 @@ test("create_room rejects deprecated alias payload", async () => {
   ws.send(JSON.stringify({ type: "create_room", fruit: "banana" }));
   const error = await errorPromise;
 
+  expect(error.code).toBe("AVATAR_REQUIRED");
   expect(error.message).toBe("Pick an avatar.");
   ws.close();
 });
@@ -62,9 +63,10 @@ test("create_room honors explicit honorific", async () => {
     (message) => message.type === "room_state" && message.room?.players?.host?.theme === "yellow"
   );
   ws.send(JSON.stringify({ type: "create_room", avatar: "yellow", honorific: "mrs" }));
-  await sessionPromise;
+  const session = await sessionPromise;
   const roomState = await roomPromise;
 
+  expect(typeof session.seatToken).toBe("string");
   expect(roomState.room.players.host.name).toBe("Mrs Yellow");
   expect(roomState.room.players.host.honorific).toBe("mrs");
 
@@ -106,4 +108,84 @@ test("join_room honors explicit honorific independently", async () => {
 
   host.close();
   guest.close();
+});
+
+test("validate_room returns room_preview contract", async () => {
+  const host = await connectSocket();
+  const hostSessionPromise = waitForMessage(host, (message) => message.type === "session");
+  const hostRoomPromise = waitForMessage(
+    host,
+    (message) => message.type === "room_state" && Boolean(message.room?.code)
+  );
+  host.send(JSON.stringify({ type: "create_room", avatar: "yellow", honorific: "mr" }));
+
+  const hostSession = await hostSessionPromise;
+  const hostRoom = await hostRoomPromise;
+
+  const guest = await connectSocket();
+  const previewPromise = waitForMessage(guest, (message) => message.type === "room_preview");
+  guest.send(JSON.stringify({
+    type: "validate_room",
+    code: hostRoom.room.code,
+    clientId: hostSession.clientId,
+    seatToken: hostSession.seatToken
+  }));
+
+  const preview = await previewPromise;
+  expect(preview.room.code).toBe(hostRoom.room.code);
+  expect(typeof preview.room.canRejoin).toBe("boolean");
+  expect(Array.isArray(preview.room.takenThemes)).toBeTruthy();
+
+  host.close();
+  guest.close();
+});
+
+test("invalid json returns a typed protocol error", async () => {
+  const ws = await connectSocket();
+  const errorPromise = waitForMessage(
+    ws,
+    (message) => message.type === "error" && message.code === "INVALID_JSON"
+  );
+  ws.send("{");
+  const error = await errorPromise;
+  expect(error.message).toBe("Invalid JSON.");
+  ws.close();
+});
+
+test("rate limiting returns a typed protocol error", async () => {
+  const ws = await connectSocket();
+
+  const rateLimitedPromise = waitForMessage(
+    ws,
+    (message) => message.type === "error" && message.code === "RATE_LIMITED",
+    12_000
+  );
+
+  for (let index = 0; index < 110; index += 1) {
+    ws.send(JSON.stringify({
+      type: "create_room",
+      avatar: "yellow",
+      honorific: "mr",
+      clientId: `load_test_${index}`
+    }));
+  }
+
+  const rateLimited = await rateLimitedPromise;
+  expect(rateLimited.message).toBe("Too many requests. Try again in a moment.");
+
+  ws.close();
+});
+
+test("health and readiness endpoints return service status", async () => {
+  const healthResponse = await fetch("http://127.0.0.1:3001/healthz");
+  expect(healthResponse.status).toBe(200);
+  const healthPayload = await healthResponse.json();
+  expect(healthPayload.status).toBe("ok");
+  expect(typeof healthPayload.timestamp).toBe("number");
+
+  const readyResponse = await fetch("http://127.0.0.1:3001/readyz");
+  expect(readyResponse.status).toBe(200);
+  const readyPayload = await readyResponse.json();
+  expect(readyPayload.status).toBe("ready");
+  expect(readyPayload.checks?.gameRegistry).toBe("ok");
 });

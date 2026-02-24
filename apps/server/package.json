@@ -6,7 +6,9 @@
     "start": "node src/index.js",
     "dev": "concurrently -k -n api,web -c green,cyan \"npm run dev:api\" \"npm --prefix ../web run dev -- --host 127.0.0.1 --port 3000\"",
     "dev:api": "PORT=3001 node src/index.js",
+    "contract:generate": "node ./scripts/generate-ws-contract.mjs",
     "smoke": "playwright test",
+    "smoke:contract": "playwright test tests/smoke/ws-avatar-contract.spec.js tests/smoke/ws-security.spec.js",
     "smoke:local": "playwright test tests/smoke/local-flow.spec.js",
     "smoke:online": "playwright test tests/smoke/online-flow.spec.js"
   },
