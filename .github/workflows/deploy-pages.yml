@@ -21,7 +21,7 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     env:
-      VITE_WS_URL: wss://api.loreandorder.com
+      VITE_WS_URL: wss://api.loreandorder.com,wss://multipass-api.onrender.com,wss://multipass-server.onrender.com
       VITE_BASE_PATH: /
     steps:
       - name: Checkout

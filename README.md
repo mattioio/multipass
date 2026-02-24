@@ -29,8 +29,9 @@ If you want to run only the API server, use:
 Playwright will boot both required servers automatically.
 
 ## Production WebSocket endpoint
-- GitHub Pages production builds inject `VITE_WS_URL=wss://api.loreandorder.com`.
-- The app connects to that endpoint for online room features (host/join/rejoin).
+- GitHub Pages production builds inject a prioritized list in `VITE_WS_URL`.
+- Current production list: `wss://api.loreandorder.com,wss://multipass-api.onrender.com,wss://multipass-server.onrender.com`.
+- The app automatically retries the next endpoint when the current candidate fails.
 
 ## Smart invite links
 - Host can use the in-room `Share` action to copy a deep-link invite.
@@ -44,6 +45,8 @@ Quick check in browser DevTools console:
 
 Temporary browser override (for debugging):
 - `localStorage.setItem("multipass_ws_url", "wss://your-endpoint.example.com")`
+- Multi-endpoint override is also supported:
+- `localStorage.setItem("multipass_ws_url", "wss://primary.example.com,wss://backup.example.com")`
 - Refresh the page after setting the override.
 - To clear the override: `localStorage.removeItem("multipass_ws_url")`
 

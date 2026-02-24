@@ -57,7 +57,12 @@ const HASH_TO_SCREEN = Object.freeze(
 const ROOM_REQUIRED_SCREENS = new Set(["lobby", "pick", "wait", "game", "pass", "winner"]);
 const ONLINE_HERO_ROOM_SCREENS = new Set(["lobby", "pick", "wait", "game", "winner"]);
 const LEGACY_BOOTSTRAP_FLAG = "__multipassLegacyInitialized";
-const PROD_WS_FALLBACK_URL = "wss://api.loreandorder.com";
+const PROD_WS_FALLBACK_URLS = Object.freeze([
+  "wss://api.loreandorder.com",
+  "wss://multipass-api.onrender.com",
+  "wss://multipass-server.onrender.com"
+]);
+const WS_CONNECT_ATTEMPT_TIMEOUT_MS = 2600;
 const IS_DEV_BUILD = Boolean(typeof import.meta !== "undefined" && import.meta.env?.DEV);
 const RECENT_LEAVE_GUARD_MS = 5000;
 const PLAYER_THEME_CLASS_NAMES = ["theme-red", "theme-yellow", "theme-green", "theme-blue"];
@@ -987,27 +992,41 @@ function logWs(message, details) {
   console.info(`[multipass/ws] ${message}`, details);
 }
 
-function getWebSocketUrl() {
+function parseWsUrlList(rawValue) {
+  if (!rawValue) return [];
+  return String(rawValue)
+    .split(",")
+    .map((url) => url.trim())
+    .filter(Boolean);
+}
+
+function getWebSocketCandidates() {
   // 1) Build-time production override from CI/deploy.
-  const envOverride = typeof import.meta !== "undefined" && import.meta.env
+  const envOverrideRaw = typeof import.meta !== "undefined" && import.meta.env
     ? import.meta.env.VITE_WS_URL
     : null;
-  if (envOverride) return envOverride;
+  const envOverrides = parseWsUrlList(envOverrideRaw);
+  if (envOverrides.length) return [...new Set(envOverrides)];
   // 2) Local override for live debugging in browser.
-  const override = window.localStorage?.getItem("multipass_ws_url");
-  if (override) return override;
+  const overrideRaw = window.localStorage?.getItem("multipass_ws_url");
+  const overrides = parseWsUrlList(overrideRaw);
+  if (overrides.length) return [...new Set(overrides)];
   // 3) Dev fallback when running Vite + local API server.
   if (typeof import.meta !== "undefined" && import.meta.env?.DEV) {
     const protocol = window.location.protocol === "https:" ? "wss" : "ws";
-    return `${protocol}://${window.location.hostname}:3001`;
+    return [`${protocol}://${window.location.hostname}:3001`];
   }
   // 4) Legacy localhost fallback if app is served by local static host.
   const host = window.location.hostname;
   if (host === "localhost" || host === "127.0.0.1") {
     const protocol = window.location.protocol === "https:" ? "wss" : "ws";
-    return `${protocol}://${window.location.host}`;
+    return [`${protocol}://${window.location.host}`];
   }
-  return PROD_WS_FALLBACK_URL;
+  return [...PROD_WS_FALLBACK_URLS];
+}
+
+function getWebSocketUrl() {
+  return getWebSocketCandidates()[0] || PROD_WS_FALLBACK_URLS[0];
 }
 
 function runPendingJoinValidation() {
@@ -1024,14 +1043,39 @@ function runPendingJoinValidation() {
 }
 
 function connect() {
-  const wsUrl = getWebSocketUrl();
+  const wsUrls = getWebSocketCandidates();
   let hasConnected = false;
-  logWs(`connecting to ${wsUrl}`);
-  const socket = wsClient.connect();
-  dispatch(actions.wsSet(socket));
+  let attemptIndex = 0;
+  let connectTimeoutId = null;
 
-  wsClient.subscribe("open", () => {
+  function clearConnectTimeout() {
+    if (connectTimeoutId === null) return;
+    clearTimeout(connectTimeoutId);
+    connectTimeoutId = null;
+  }
+
+  function connectAttempt() {
+    const wsUrl = wsUrls[Math.min(attemptIndex, wsUrls.length - 1)];
+    clearConnectTimeout();
+    logWs(`connecting to ${wsUrl} (attempt ${attemptIndex + 1}/${wsUrls.length})`);
+    const socket = wsClient.connect(wsUrl);
+    dispatch(actions.wsSet(socket));
+    connectTimeoutId = setTimeout(() => {
+      if (hasConnected) return;
+      if (wsClient.getSocket() !== socket) return;
+      if (socket.readyState === WebSocket.CONNECTING) {
+        logWs(`connect timeout after ${WS_CONNECT_ATTEMPT_TIMEOUT_MS}ms`, wsUrl);
+        socket.close();
+      }
+    }, WS_CONNECT_ATTEMPT_TIMEOUT_MS);
+  }
+
+  connectAttempt();
+
+  wsClient.subscribe("open", (event) => {
+    if (event?.target && event.target !== wsClient.getSocket()) return;
     hasConnected = true;
+    clearConnectTimeout();
     logWs("open");
     if (runPendingJoinValidation()) {
       return;
@@ -1179,13 +1223,21 @@ function connect() {
   });
 
   wsClient.subscribe("error", (event) => {
+    if (event?.target && event.target !== wsClient.getSocket()) return;
     logWs("error", event);
   });
 
   wsClient.subscribe("close", (event) => {
+    if (event?.target && event.target !== wsClient.getSocket()) return;
+    clearConnectTimeout();
     logWs(
       `close code=${event?.code ?? "unknown"} reason=${event?.reason || "n/a"} clean=${Boolean(event?.wasClean)}`
     );
+    if (!hasConnected && attemptIndex < wsUrls.length - 1) {
+      attemptIndex += 1;
+      connectAttempt();
+      return;
+    }
     if (!hasConnected) {
       showToast("Could not connect to rooms. Check network/backend and retry.");
       return;

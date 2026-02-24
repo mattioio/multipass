@@ -16,9 +16,9 @@ export function createWsClient({ getUrl }) {
     for (const cb of set) cb(payload);
   }
 
-  function connect() {
-    socket = new WebSocket(getUrl());
-    socket.addEventListener("open", () => emit("open", undefined));
+  function connect(urlOverride = null) {
+    socket = new WebSocket(urlOverride || getUrl());
+    socket.addEventListener("open", (event) => emit("open", event));
     socket.addEventListener("close", (event) => emit("close", event));
     socket.addEventListener("error", (event) => emit("error", event));
     socket.addEventListener("message", (event) => {
