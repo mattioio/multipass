@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: npm
+          cache-dependency-path: |
+            apps/server/package-lock.json
+            apps/web/package-lock.json
+
+      - name: Install server deps
+        id: install_server
+        run: npm --prefix apps/server ci
+
+      - name: Install web deps
+        id: install_web
+        run: npm --prefix apps/web ci
+
+      - name: Install Playwright Chromium
+        id: playwright_install
+        run: npx --prefix apps/server playwright install chromium
+
+      - name: Web tests
+        id: web_tests
+        run: npm --prefix apps/web test
+
+      - name: Web build
+        id: web_build
+        run: npm --prefix apps/web run build
+
+      - name: Server smoke local
+        id: smoke_local
+        run: npm --prefix apps/server run smoke:local
+
+      - name: Server smoke online
+        id: smoke_online
+        run: npm --prefix apps/server run smoke:online
+
+      - name: Server protocol/security smoke
+        id: smoke_contract
+        run: npm --prefix apps/server run smoke:contract
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "## Validation Results"
+            echo ""
+            echo "- Install server deps: ${{ steps.install_server.outcome }}"
+            echo "- Install web deps: ${{ steps.install_web.outcome }}"
+            echo "- Install Playwright Chromium: ${{ steps.playwright_install.outcome }}"
+            echo "- Web tests: ${{ steps.web_tests.outcome }}"
+            echo "- Web build: ${{ steps.web_build.outcome }}"
+            echo "- Server smoke local: ${{ steps.smoke_local.outcome }}"
+            echo "- Server smoke online: ${{ steps.smoke_online.outcome }}"
+            echo "- Server protocol/security smoke: ${{ steps.smoke_contract.outcome }}"
+          } >> "$GITHUB_STEP_SUMMARY"
