@@ -1,6 +1,17 @@
-const CACHE_VERSION = "multipass-shell-v3";
+const CACHE_VERSION = "multipass-shell-v4";
 const SHELL_CACHE = CACHE_VERSION;
-const SHELL_ASSETS = ["/", "/index.html", "/manifest.webmanifest", "/assets/icon-192.png", "/assets/icon-512.png", "/icons/apple-touch-icon.png"];
+const SHELL_ASSETS = [
+  "/",
+  "/index.html",
+  "/manifest.webmanifest",
+  "/favicon.ico",
+  "/assets/icon-192.png",
+  "/assets/icon-512.png",
+  "/icons/appicon.svg",
+  "/icons/favicon-16.png",
+  "/icons/favicon-32.png",
+  "/icons/apple-touch-icon.png"
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(

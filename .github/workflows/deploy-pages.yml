@@ -53,6 +53,15 @@ jobs:
           fi
           echo "Using VITE_BASE_PATH=$VITE_BASE_PATH"
 
+      - name: Install server dependencies for icon generation
+        run: npm --prefix apps/server ci
+
+      - name: Install Chromium for icon generation
+        run: npx --prefix apps/server playwright install chromium
+
+      - name: Generate icons from appicon.svg
+        run: npm --prefix apps/web run icons:generate
+
       - name: Build web app
         run: |
           npm --prefix apps/web ci

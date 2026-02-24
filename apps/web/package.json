@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "icons:generate": "node ./scripts/generate-icons.mjs",
     "preview": "vite preview",
     "test": "npm run test:player-card-contract && vitest run",
     "test:player-card-contract": "node ./scripts/check-player-card-contract.mjs"

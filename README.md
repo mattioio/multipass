@@ -28,6 +28,13 @@ If you want to run only the API server, use:
 
 Playwright will boot both required servers automatically.
 
+## App icon source of truth
+- Canonical icon artwork lives at `/Users/matthew/Projects/multipass/apps/web/src/assets/appicon.svg`.
+- Generated outputs include favicon PNGs, `favicon.ico`, Apple touch icon, and manifest icons.
+- Regenerate icons locally with:
+  - `npm --prefix /Users/matthew/Projects/multipass/apps/web run icons:generate`
+- GitHub Pages deploy workflow regenerates icons from `appicon.svg` before building.
+
 ## Production WebSocket endpoint
 - GitHub Pages production builds inject a prioritized list in `VITE_WS_URL`.
 - Current production list: `wss://api.loreandorder.com,wss://multipass-api.onrender.com,wss://multipass-server.onrender.com`.

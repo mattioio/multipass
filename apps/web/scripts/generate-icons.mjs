@@ -1,4 +1,4 @@
-import { mkdir, copyFile, readFile } from "node:fs/promises";
+import { mkdir, copyFile, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
@@ -7,17 +7,35 @@ const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const webRoot = path.resolve(scriptDir, "..");
 const sourceSvgPath = path.resolve(webRoot, "src/assets/appicon.svg");
 
+const favicon16 = path.resolve(webRoot, "icons/favicon-16.png");
+const favicon32 = path.resolve(webRoot, "icons/favicon-32.png");
+const favicon48 = path.resolve(webRoot, "icons/favicon-48.png");
+const faviconIco = path.resolve(webRoot, "icons/favicon.ico");
 const icon192 = path.resolve(webRoot, "icons/icon-192.png");
 const icon512 = path.resolve(webRoot, "icons/icon-512.png");
 const appleTouch = path.resolve(webRoot, "icons/apple-touch-icon.png");
+const publicFaviconIco = path.resolve(webRoot, "public/favicon.ico");
+const publicFavicon16 = path.resolve(webRoot, "public/icons/favicon-16.png");
+const publicFavicon32 = path.resolve(webRoot, "public/icons/favicon-32.png");
+const publicFavicon48 = path.resolve(webRoot, "public/icons/favicon-48.png");
+const publicAppiconSvg = path.resolve(webRoot, "public/icons/appicon.svg");
 const public192 = path.resolve(webRoot, "public/assets/icon-192.png");
 const public512 = path.resolve(webRoot, "public/assets/icon-512.png");
 const publicAppleTouch = path.resolve(webRoot, "public/icons/apple-touch-icon.png");
 
 const outputSpecs = [
+  { size: 16, path: favicon16 },
+  { size: 32, path: favicon32 },
+  { size: 48, path: favicon48 },
   { size: 192, path: icon192 },
   { size: 512, path: icon512 },
   { size: 180, path: appleTouch }
+];
+
+const faviconIcoPngSpecs = [
+  { size: 16, path: favicon16 },
+  { size: 32, path: favicon32 },
+  { size: 48, path: favicon48 }
 ];
 
 const serverPackageJsonPath = path.resolve(webRoot, "../server/package.json");
@@ -168,15 +186,60 @@ async function renderIcon(page, size, outputPath, inlinedSvg) {
 
 async function ensureOutputDirs() {
   const dirs = [
+    path.dirname(favicon16),
+    path.dirname(favicon32),
+    path.dirname(favicon48),
+    path.dirname(faviconIco),
     path.dirname(icon192),
     path.dirname(icon512),
     path.dirname(appleTouch),
+    path.dirname(publicFaviconIco),
+    path.dirname(publicFavicon16),
+    path.dirname(publicFavicon32),
+    path.dirname(publicFavicon48),
+    path.dirname(publicAppiconSvg),
     path.dirname(public192),
     path.dirname(public512),
     path.dirname(publicAppleTouch)
   ];
 
   await Promise.all(dirs.map((dir) => mkdir(dir, { recursive: true })));
+}
+
+async function buildIcoBufferFromPngSpecs(pngSpecs) {
+  const pngEntries = await Promise.all(
+    pngSpecs.map(async (spec) => ({
+      size: spec.size,
+      buffer: await readFile(spec.path)
+    }))
+  );
+
+  const count = pngEntries.length;
+  const headerSize = 6 + count * 16;
+  const header = Buffer.alloc(headerSize);
+  header.writeUInt16LE(0, 0);
+  header.writeUInt16LE(1, 2);
+  header.writeUInt16LE(count, 4);
+
+  let offset = headerSize;
+  const payloadBuffers = [];
+  pngEntries.forEach((entry, index) => {
+    const base = 6 + index * 16;
+    const width = entry.size >= 256 ? 0 : entry.size;
+    const height = entry.size >= 256 ? 0 : entry.size;
+    header.writeUInt8(width, base + 0);
+    header.writeUInt8(height, base + 1);
+    header.writeUInt8(0, base + 2);
+    header.writeUInt8(0, base + 3);
+    header.writeUInt16LE(1, base + 4);
+    header.writeUInt16LE(32, base + 6);
+    header.writeUInt32LE(entry.buffer.length, base + 8);
+    header.writeUInt32LE(offset, base + 12);
+    offset += entry.buffer.length;
+    payloadBuffers.push(entry.buffer);
+  });
+
+  return Buffer.concat([header, ...payloadBuffers]);
 }
 
 async function main() {
@@ -192,16 +255,25 @@ async function main() {
       await renderIcon(page, outputSpec.size, outputSpec.path, inlinedSvg);
       console.log(`Generated ${path.relative(webRoot, outputSpec.path)} (${outputSpec.size}x${outputSpec.size})`);
     }
+
+    const icoBuffer = await buildIcoBufferFromPngSpecs(faviconIcoPngSpecs);
+    await writeFile(faviconIco, icoBuffer);
+    console.log(`Generated ${path.relative(webRoot, faviconIco)} (${faviconIcoPngSpecs.length} embedded sizes)`);
   } finally {
     await page.close();
     await browser.close();
   }
 
+  await copyFile(favicon16, publicFavicon16);
+  await copyFile(favicon32, publicFavicon32);
+  await copyFile(favicon48, publicFavicon48);
+  await copyFile(faviconIco, publicFaviconIco);
+  await copyFile(sourceSvgPath, publicAppiconSvg);
   await copyFile(icon192, public192);
   await copyFile(icon512, public512);
   await copyFile(appleTouch, publicAppleTouch);
 
-  console.log("Mirrored icons to public assets and public icons directories");
+  console.log("Mirrored icons to public favicon, assets, and icons directories");
 }
 
 main().catch((error) => {
