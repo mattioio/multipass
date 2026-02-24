@@ -3024,13 +3024,13 @@ function renderWinner(room, leaderId) {
 }
 
 function getEndSignature(room) {
-  const stateGame = room.game?.state;
+  const stateGame = room?.game?.state;
   if (!stateGame) return null;
-  if (stateGame.draw) return `${room.code}:draw:${stateGame.history?.length || 0}`;
+  if (stateGame.draw) return `${room?.code || "room"}:draw:${stateGame.history?.length || 0}`;
   if (!stateGame.winnerId) return null;
   const winner = playerById(room, stateGame.winnerId);
   if (!winner) return null;
-  return `${room.code}:${stateGame.winnerId}:${winner.gamesWon}`;
+  return `${room?.code || "room"}:${stateGame.winnerId}:${winner.gamesWon}`;
 }
 
 function renderEndRequest(room) {
