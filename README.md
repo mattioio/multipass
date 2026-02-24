@@ -2,6 +2,14 @@
 
 Multiplayer, turn-based mini-games for two players (with future spectator support).
 
+## Environment requirements
+- Node.js `20` (same version used in CI).
+- npm (bundled with Node).
+
+If you have `nvm` installed:
+- `cd /Users/matthew/Projects/multipass`
+- `nvm use`
+
 ## Local dev (first time)
 1. Install server dependencies:
    - `cd /Users/matthew/Projects/multipass/apps/server`
@@ -28,6 +36,13 @@ If you want to run only the API server, use:
 
 Playwright will boot both required servers automatically.
 
+## Baseline validation gate
+Run this full suite before merging major backend/protocol work:
+- `npm --prefix /Users/matthew/Projects/multipass/apps/web test`
+- `npm --prefix /Users/matthew/Projects/multipass/apps/web run build`
+- `npm --prefix /Users/matthew/Projects/multipass/apps/server run smoke:local`
+- `npm --prefix /Users/matthew/Projects/multipass/apps/server run smoke:online`
+
 ## App icon source of truth
 - Canonical icon artwork lives at `/Users/matthew/Projects/multipass/apps/web/src/assets/appicon.svg`.
 - Generated outputs include favicon PNGs, `favicon.ico`, Apple touch icon, and manifest icons.
@@ -37,8 +52,10 @@ Playwright will boot both required servers automatically.
 
 ## Production WebSocket endpoint
 - GitHub Pages production builds inject a prioritized list in `VITE_WS_URL`.
-- Current production list: `wss://api.loreandorder.com,wss://multipass-api.onrender.com,wss://multipass-server.onrender.com`.
-- The app automatically retries the next endpoint when the current candidate fails.
+- Canonical primary endpoint: `wss://api.loreandorder.com`.
+- Backup failover endpoints: `wss://multipass-api.onrender.com`, `wss://multipass-server.onrender.com`.
+- Current production list (priority order): `wss://api.loreandorder.com,wss://multipass-api.onrender.com,wss://multipass-server.onrender.com`.
+- The app retries the next endpoint only if the current candidate fails.
 
 ## Smart invite links
 - Host can use the in-room `Share` action to copy a deep-link invite.
@@ -77,3 +94,15 @@ Temporary browser override (for debugging):
 - Rooms expire after 90 minutes of inactivity.
 - No accounts. Rejoin uses a device token stored locally.
 - Tic Tac Toe is the first game; more games can be added under `apps/server/src/games`.
+
+## Backend environment variables
+- `WS_ALLOWED_ORIGINS`: comma-separated origin allowlist (empty means allow all).
+- `WS_MAX_PAYLOAD_BYTES`: max WebSocket payload size in bytes.
+- `WS_RATE_LIMIT_WINDOW_MS`: rate-limit window for high-risk actions.
+- `WS_RATE_LIMIT_MAX_REQUESTS`: max allowed requests per window for high-risk actions.
+- `ROOM_TTL_MS`: room expiry duration in milliseconds.
+
+## Protocol docs generation
+- WebSocket contract docs are generated from server protocol schema.
+- Regenerate with:
+  - `npm --prefix /Users/matthew/Projects/multipass/apps/server run contract:generate`
