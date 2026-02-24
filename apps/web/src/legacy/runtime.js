@@ -217,14 +217,6 @@ function staggerLandingPanel(panel) {
     child.classList.remove("is-entered");
     child.style.removeProperty("--item-index");
   });
-  if (!children.length) return;
-  children.forEach((child, index) => {
-    child.style.setProperty("--item-index", String(index));
-  });
-  panel.classList.add("is-staggering");
-  requestAnimationFrame(() => {
-    children.forEach((child) => child.classList.add("is-entered"));
-  });
 }
 
 function parseScreenHash(hash = window.location.hash) {

@@ -341,17 +341,15 @@ button:disabled {
 }
 
 .landing-panel.is-staggering > * {
-  opacity: 0;
-  transform: translateX(calc(-1 * var(--landing-stagger-x-distance)));
+  opacity: 1;
+  transform: none;
 }
 
 .landing-panel.is-staggering > .is-entered {
   opacity: 1;
-  transform: translateX(0);
-  transition:
-    opacity var(--landing-stagger-duration) var(--ease-out),
-    transform var(--landing-stagger-duration) var(--ease-out);
-  transition-delay: calc(var(--item-index, 0) * var(--landing-stagger-step));
+  transform: none;
+  transition: none;
+  transition-delay: 0ms;
 }
 
 .landing-card {
