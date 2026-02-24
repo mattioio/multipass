@@ -1,10 +1,16 @@
 import ticTacToe from "./ticTacToe.js";
+import dotsAndBoxes from "./dotsAndBoxes.js";
 
 const games = {
   [ticTacToe.id]: {
     ...ticTacToe,
     comingSoon: false,
     bannerKey: "tic_tac_toe"
+  },
+  [dotsAndBoxes.id]: {
+    ...dotsAndBoxes,
+    comingSoon: false,
+    bannerKey: "dots_and_boxes"
   }
 };
 

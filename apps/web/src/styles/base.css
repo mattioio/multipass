@@ -151,7 +151,11 @@ body::after {
 
   .ttt-cell.is-win-reason,
   .battleship-cell.is-win-reason-shot,
-  .battleship-cell.is-win-reason-shot::before {
+  .battleship-cell.is-win-reason-shot::before,
+  .dots-edge.is-scoring-opportunity::before,
+  .dots-box.is-hot-box,
+  .dots-box.is-win-reason,
+  .dots-box.is-win-reason::before {
     animation: none;
   }
 

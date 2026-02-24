@@ -210,6 +210,9 @@ export function AppScreens({ isDevBuild }: AppScreensProps) {
         >
           <TurnStatusBar />
           <div id="ttt-board" className="ttt-board"></div>
+          <div id="dots-layout" className="dots-layout hidden">
+            <div id="dots-board" className="dots-board"></div>
+          </div>
           <div id="battleship-layout" className="battleship-layout hidden">
             <div className="battleship-controls">
               <p id="battleship-phase-label" className="subtext battleship-phase-label"></p>
@@ -234,10 +237,6 @@ export function AppScreens({ isDevBuild }: AppScreensProps) {
             <div className="game-result-sheet">
               <ResultBanner emojiId="game-result-emoji" titleId="winner-title" title="Winner" />
               <div id="winner-hero" className="game-result-hero hidden"></div>
-              <ScoreColumns
-                id="winner-score-columns"
-                className="score-columns game-result-score-row"
-              />
               <div className="button-row winner-actions game-result-actions">
                 <Button id="winner-play-again" className="cta-main">
                   Next game

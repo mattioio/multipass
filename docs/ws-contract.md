@@ -55,6 +55,14 @@ This document defines the current wire contract between `/Users/matthew/Projects
         "maxPlayers": 2,
         "comingSoon": false,
         "bannerKey": "tic_tac_toe"
+      },
+      {
+        "id": "dots_and_boxes",
+        "name": "Dots & Boxes",
+        "minPlayers": 2,
+        "maxPlayers": 2,
+        "comingSoon": false,
+        "bannerKey": "dots_and_boxes"
       }
     ]
   },
@@ -100,6 +108,11 @@ This document defines the current wire contract between `/Users/matthew/Projects
 ### `move`
 ```json
 { "type": "move", "gameId": "tic_tac_toe", "move": { "index": 0 } }
+```
+
+Dots & Boxes moves use an edge index:
+```json
+{ "type": "move", "gameId": "dots_and_boxes", "move": { "edgeIndex": 0 } }
 ```
 
 ### `new_round`

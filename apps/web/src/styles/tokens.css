@@ -110,7 +110,7 @@
   --pattern-speed-default-score: calc(var(--pattern-speed-default) / 4);
   --pattern-size-default-turn: var(--pattern-size-default);
   --pattern-opacity-default-turn: var(--pattern-opacity-default);
-  --pattern-speed-default-turn: var(--pattern-speed-default);
+  --pattern-speed-default-turn: var(--pattern-speed-default-avatar);
   --pattern-size-default-header: 110px auto;
   --pattern-opacity-default-header: 0.05;
   --pattern-speed-default-header: calc(var(--header-stripe-speed) / 2);

@@ -1253,6 +1253,52 @@ function playerById(room, id) {
   return list.find((entry) => entry.id === id) || null;
 }
 
+function getDotsThemeLabel(themeId, fallback = "Player") {
+  const normalized = String(themeId || "").toLowerCase();
+  if (normalized === "red") return "Red";
+  if (normalized === "yellow") return "Yellow";
+  if (normalized === "green") return "Green";
+  if (normalized === "blue") return "Blue";
+  return fallback;
+}
+
+function getTurnHeaderScores(room) {
+  const host = room?.players?.host || null;
+  const guest = room?.players?.guest || null;
+  const asScore = (value) => {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : 0;
+  };
+
+  const scores = {
+    host: {
+      gameScore: 0,
+      showGameScore: false
+    },
+    guest: {
+      gameScore: 0,
+      showGameScore: false
+    }
+  };
+
+  const activeGameId = room?.game?.id || null;
+  const stateGame = getDisplayStateForRoomGame(room) || room?.game?.state || null;
+  if (activeGameId !== "dots_and_boxes" || !stateGame || typeof stateGame !== "object") {
+    return scores;
+  }
+
+  const roundScores = stateGame.scores;
+  if (!roundScores || typeof roundScores !== "object") {
+    return scores;
+  }
+
+  scores.host.showGameScore = true;
+  scores.guest.showGameScore = true;
+  scores.host.gameScore = asScore(host?.id ? roundScores[host.id] : 0);
+  scores.guest.gameScore = asScore(guest?.id ? roundScores[guest.id] : 0);
+  return scores;
+}
+
 function getGameName(room, gameId) {
   if (!room || !gameId) return null;
   const found = (room.games || []).find((game) => game.id === gameId);
@@ -1262,6 +1308,7 @@ function getGameName(room, gameId) {
 function getGameBannerClass(game) {
   const key = game?.bannerKey || game?.id || "";
   if (key === "battleships") return "game-banner-battleships";
+  if (key === "dots_and_boxes") return "game-banner-dots-and-boxes";
   return "game-banner-tic-tac-toe";
 }
 
@@ -1812,6 +1859,7 @@ function renderRoom(options = {}) {
   renderGameList(room);
   renderPassScreen(room);
   renderBattleships(room);
+  renderDotsAndBoxes(room);
   renderTicTacToe(room);
   renderEndRequest(room);
 
@@ -2125,6 +2173,105 @@ function renderGameList(room) {
   }
 }
 
+function getDotsAndBoxesState(room) {
+  const activeGameId = room?.game?.id || null;
+  if (!room?.game || activeGameId !== "dots_and_boxes") return null;
+  return getDisplayStateForRoomGame(room) || room.game.state;
+}
+
+function getDotsAndBoxesGeometry(stateGame) {
+  const dotCount = Number(stateGame?.dotCount) || 6;
+  const boxSpan = Math.max(1, dotCount - 1);
+  return {
+    dotCount,
+    boxSpan,
+    horizontalEdgeCount: dotCount * boxSpan,
+    totalBoxes: boxSpan * boxSpan,
+    gridSize: (dotCount * 2) - 1
+  };
+}
+
+function getDotsAndBoxesBoxEdgeIndices(boxIndex, geometry) {
+  const row = Math.floor(boxIndex / geometry.boxSpan);
+  const col = boxIndex % geometry.boxSpan;
+  const top = row * geometry.boxSpan + col;
+  const bottom = (row + 1) * geometry.boxSpan + col;
+  const left = geometry.horizontalEdgeCount + (row * geometry.dotCount) + col;
+  const right = geometry.horizontalEdgeCount + (row * geometry.dotCount) + (col + 1);
+  return [top, bottom, left, right];
+}
+
+function getHotBoxIndices(stateGame, geometry = getDotsAndBoxesGeometry(stateGame)) {
+  const boxes = Array.isArray(stateGame?.boxes) ? stateGame.boxes : [];
+  const edges = Array.isArray(stateGame?.edges) ? stateGame.edges : [];
+  const hot = [];
+  for (let boxIndex = 0; boxIndex < geometry.totalBoxes; boxIndex += 1) {
+    if (boxes[boxIndex]) continue;
+    const edgeIndices = getDotsAndBoxesBoxEdgeIndices(boxIndex, geometry);
+    const claimedCount = edgeIndices.reduce((total, index) => (edges[index] ? total + 1 : total), 0);
+    if (claimedCount === 3) {
+      hot.push(boxIndex);
+    }
+  }
+  return hot;
+}
+
+function getScoringEdgeIndices(stateGame, hotBoxIndices = null, geometry = getDotsAndBoxesGeometry(stateGame)) {
+  const edges = Array.isArray(stateGame?.edges) ? stateGame.edges : [];
+  const hot = Array.isArray(hotBoxIndices) ? hotBoxIndices : getHotBoxIndices(stateGame, geometry);
+  const scoring = new Set();
+
+  for (const boxIndex of hot) {
+    const edgeIndices = getDotsAndBoxesBoxEdgeIndices(boxIndex, geometry);
+    const missingEdge = edgeIndices.find((index) => !edges[index]);
+    if (Number.isInteger(missingEdge)) {
+      scoring.add(missingEdge);
+    }
+  }
+
+  return scoring;
+}
+
+function getLastMoveEdgeIndex(stateGame) {
+  const history = Array.isArray(stateGame?.history) ? stateGame.history : [];
+  if (!history.length) return null;
+  const last = Number(history[history.length - 1]?.edgeIndex);
+  return Number.isInteger(last) ? last : null;
+}
+
+function isDotsAndBoxesEdgePlayable(room, edgeIndex, providedState = null) {
+  const numericEdgeIndex = Number(edgeIndex);
+  if (!Number.isInteger(numericEdgeIndex) || numericEdgeIndex < 0) return false;
+  const stateGame = providedState || getDotsAndBoxesState(room);
+  if (!stateGame || !Array.isArray(stateGame.edges)) return false;
+  if (stateGame.winnerId || stateGame.draw) return false;
+  if (numericEdgeIndex >= stateGame.edges.length) return false;
+  if (stateGame.edges[numericEdgeIndex]) return false;
+
+  const isPlayer = isLocalMode() || state.you?.role === "host" || state.you?.role === "guest";
+  if (!isPlayer) return false;
+
+  const isYourTurn = isLocalMode()
+    ? Boolean(stateGame.nextPlayerId)
+    : stateGame.nextPlayerId === state.you?.playerId;
+
+  return Boolean(isYourTurn);
+}
+
+function commitDotsAndBoxesMove(edgeIndex) {
+  if (!state.room?.game) return false;
+  if (!isDotsAndBoxesEdgePlayable(state.room, edgeIndex)) return false;
+
+  const numericEdgeIndex = Number(edgeIndex);
+  if (isLocalMode()) {
+    applyLocalMove({ edgeIndex: numericEdgeIndex });
+  } else {
+    send({ type: "move", gameId: state.room.game?.id, move: { edgeIndex: numericEdgeIndex } });
+  }
+
+  return true;
+}
+
 function getTicTacToeState(room) {
   const activeGameId = room?.game?.id || null;
   const isTicTacToeSurface = Boolean(activeGameId) && (
@@ -2390,7 +2537,7 @@ function resetWinReveal() {
 
 function normalizeWinRevealReason(reason) {
   if (!reason || typeof reason !== "object") return null;
-  const boardId = reason.boardId === "ttt" || reason.boardId === "battleships"
+  const boardId = reason.boardId === "ttt" || reason.boardId === "battleships" || reason.boardId === "dots_boxes"
     ? reason.boardId
     : null;
   if (!boardId) return null;
@@ -2465,7 +2612,8 @@ function startWinReveal(room, options = {}) {
     return;
   }
   const shouldAnimate = Boolean(options.shouldAnimate) && !prefersReducedMotion();
-  const shouldMorph = Boolean(room?.game?.state?.winnerId && !room?.game?.state?.draw);
+  // Disable turn-header winner morph; keep reason + overlay reveal flow.
+  const shouldMorph = false;
   const reason = getWinRevealReason(room);
 
   clearWinRevealTimers();
@@ -2512,7 +2660,7 @@ function syncWinReveal(room, options = {}) {
   if (!state.winRevealReason) {
     state.winRevealReason = getWinRevealReason(room);
   }
-  state.winRevealShouldMorph = Boolean(room?.game?.state?.winnerId && !room?.game?.state?.draw);
+  state.winRevealShouldMorph = false;
   if (!options.shouldAnimate && state.winRevealPhase !== "overlay" && !state.winRevealTimerId && !state.winRevealTimerId2) {
     state.winRevealPhase = "overlay";
   }
@@ -2531,9 +2679,7 @@ function renderTurnIndicatorSplit(indicatorEl, room, activePlayerId = null, mode
   if (!activePlayerId) {
     indicatorEl.classList.add("turn-passive");
   }
-  if (reveal?.phase === "morph" && reveal?.winnerSide) {
-    indicatorEl.classList.add("turn-reveal-morph", `turn-reveal-winner-${reveal.winnerSide}`);
-  }
+  // Header morph animation is intentionally disabled.
 
   const host = room?.players?.host || null;
   const guest = room?.players?.guest || null;
@@ -2541,6 +2687,7 @@ function renderTurnIndicatorSplit(indicatorEl, room, activePlayerId = null, mode
     { player: host, side: "host", fallback: "Player 1" },
     { player: guest, side: "guest", fallback: "Player 2" }
   ];
+  const headerScores = getTurnHeaderScores(room);
 
   sides.forEach(({ player, side, fallback }) => {
     const pane = document.createElement("div");
@@ -2577,13 +2724,192 @@ function renderTurnIndicatorSplit(indicatorEl, room, activePlayerId = null, mode
     } else {
       stateLabel.textContent = isActive ? "Turn" : "Waiting";
     }
+    const metaRow = document.createElement("span");
+    metaRow.className = "turn-player-meta-row";
+    metaRow.appendChild(stateLabel);
+
     meta.appendChild(name);
-    meta.appendChild(stateLabel);
+    meta.appendChild(metaRow);
 
     pane.appendChild(avatar);
     pane.appendChild(meta);
+    if (headerScores?.[side]?.showGameScore) {
+      const gameScoreValue = Number(headerScores[side].gameScore || 0);
+      const gameScore = document.createElement("span");
+      gameScore.className = "turn-player-score-game";
+      gameScore.textContent = String(gameScoreValue);
+      gameScore.setAttribute("aria-label", `Current game score ${gameScoreValue}`);
+      pane.appendChild(gameScore);
+      pane.classList.add("has-game-score");
+    }
     indicatorEl.appendChild(pane);
   });
+}
+
+function renderDotsAndBoxes(room) {
+  const dotsLayout = document.getElementById("dots-layout");
+  const boardEl = document.getElementById("dots-board");
+  const indicatorEl = document.getElementById("turn-indicator");
+  if (!dotsLayout || !boardEl || !indicatorEl) return;
+
+  const stateGame = getDotsAndBoxesState(room);
+  if (!stateGame) {
+    dotsLayout.classList.add("hidden");
+    boardEl.innerHTML = "";
+    if (!room?.game) {
+      renderTurnIndicatorSplit(indicatorEl, room, null, "idle", null);
+    }
+    return;
+  }
+
+  dotsLayout.classList.remove("hidden");
+
+  const geometry = getDotsAndBoxesGeometry(stateGame);
+  const hotBoxIndices = getHotBoxIndices(stateGame, geometry);
+  const hotBoxSet = new Set(hotBoxIndices);
+  const scoringEdgeIndices = getScoringEdgeIndices(stateGame, hotBoxIndices, geometry);
+  const lastMoveEdgeIndex = getLastMoveEdgeIndex(stateGame);
+
+  const edges = Array.isArray(stateGame.edges) ? stateGame.edges : [];
+  const boxes = Array.isArray(stateGame.boxes) ? stateGame.boxes : [];
+  const reveal = getWinRevealSnapshot(room);
+  const reasonIndices = reveal.phase === "reason" && reveal.reason?.boardId === "dots_boxes"
+    ? new Set(reveal.reason.indices)
+    : null;
+
+  const winner = stateGame.winnerId ? playerById(room, stateGame.winnerId) : null;
+  if (winner) {
+    renderTurnIndicatorSplit(indicatorEl, room, winner.id, "winner", reveal);
+  } else if (stateGame.draw) {
+    renderTurnIndicatorSplit(indicatorEl, room, null, "draw", reveal);
+  } else {
+    renderTurnIndicatorSplit(indicatorEl, room, stateGame.nextPlayerId || null, "turn", reveal);
+  }
+
+  boardEl.style.setProperty("--dots-grid-size", String(geometry.gridSize));
+  boardEl.innerHTML = "";
+
+  for (let row = 0; row < geometry.gridSize; row += 1) {
+    for (let col = 0; col < geometry.gridSize; col += 1) {
+      const rowEven = row % 2 === 0;
+      const colEven = col % 2 === 0;
+
+      if (rowEven && colEven) {
+        const dot = document.createElement("span");
+        dot.className = "dots-dot";
+        dot.setAttribute("aria-hidden", "true");
+        boardEl.appendChild(dot);
+        continue;
+      }
+
+      if (rowEven && !colEven) {
+        const dotRow = row / 2;
+        const edgeIndex = dotRow * geometry.boxSpan + ((col - 1) / 2);
+        const ownerId = edges[edgeIndex] || null;
+        const owner = ownerId ? playerById(room, ownerId) : null;
+        const isPlayable = isDotsAndBoxesEdgePlayable(room, edgeIndex, stateGame);
+        const wouldScore = !owner && scoringEdgeIndices.has(edgeIndex);
+        const isScoring = wouldScore && isPlayable;
+
+        const edge = document.createElement("button");
+        edge.type = "button";
+        edge.className = "dots-edge dots-edge-h";
+        edge.dataset.edgeIndex = String(edgeIndex);
+        edge.disabled = !isPlayable;
+        const ownerName = owner ? getDotsThemeLabel(owner.theme, "Player") : "";
+        const labelSuffix = owner
+          ? `Claimed by ${ownerName}.`
+          : (isScoring
+            ? "Scoring move."
+            : (isPlayable ? "Playable now." : "Not playable right now."));
+        edge.setAttribute("aria-label", `Horizontal edge ${edgeIndex + 1} (index ${edgeIndex}). ${labelSuffix}`);
+        if (owner) {
+          edge.classList.add("is-claimed");
+          if (owner.theme) {
+            edge.classList.add(`theme-${owner.theme}`);
+          }
+        } else {
+          if (isPlayable) {
+            edge.classList.add("is-playable");
+          }
+          if (isScoring) {
+            edge.classList.add("is-scoring-opportunity");
+          }
+          edge.addEventListener("click", () => {
+            commitDotsAndBoxesMove(edgeIndex);
+          });
+        }
+        if (lastMoveEdgeIndex === edgeIndex) {
+          edge.classList.add("is-last-move");
+        }
+        boardEl.appendChild(edge);
+        continue;
+      }
+
+      if (!rowEven && colEven) {
+        const edgeIndex = geometry.horizontalEdgeCount + (((row - 1) / 2) * geometry.dotCount) + (col / 2);
+        const ownerId = edges[edgeIndex] || null;
+        const owner = ownerId ? playerById(room, ownerId) : null;
+        const isPlayable = isDotsAndBoxesEdgePlayable(room, edgeIndex, stateGame);
+        const wouldScore = !owner && scoringEdgeIndices.has(edgeIndex);
+        const isScoring = wouldScore && isPlayable;
+
+        const edge = document.createElement("button");
+        edge.type = "button";
+        edge.className = "dots-edge dots-edge-v";
+        edge.dataset.edgeIndex = String(edgeIndex);
+        edge.disabled = !isPlayable;
+        const ownerName = owner ? getDotsThemeLabel(owner.theme, "Player") : "";
+        const labelSuffix = owner
+          ? `Claimed by ${ownerName}.`
+          : (isScoring
+            ? "Scoring move."
+            : (isPlayable ? "Playable now." : "Not playable right now."));
+        edge.setAttribute("aria-label", `Vertical edge ${edgeIndex + 1} (index ${edgeIndex}). ${labelSuffix}`);
+        if (owner) {
+          edge.classList.add("is-claimed");
+          if (owner.theme) {
+            edge.classList.add(`theme-${owner.theme}`);
+          }
+        } else {
+          if (isPlayable) {
+            edge.classList.add("is-playable");
+          }
+          if (isScoring) {
+            edge.classList.add("is-scoring-opportunity");
+          }
+          edge.addEventListener("click", () => {
+            commitDotsAndBoxesMove(edgeIndex);
+          });
+        }
+        if (lastMoveEdgeIndex === edgeIndex) {
+          edge.classList.add("is-last-move");
+        }
+        boardEl.appendChild(edge);
+        continue;
+      }
+
+      const boxIndex = (((row - 1) / 2) * geometry.boxSpan) + ((col - 1) / 2);
+      const ownerId = boxes[boxIndex] || null;
+      const owner = ownerId ? playerById(room, ownerId) : null;
+      const box = document.createElement("div");
+      box.className = "dots-box";
+      box.dataset.boxIndex = String(boxIndex);
+      if (owner) {
+        box.classList.add("is-claimed");
+        if (owner.theme) {
+          box.classList.add(`theme-${owner.theme}`);
+        }
+      }
+      if (!owner && hotBoxSet.has(boxIndex)) {
+        box.classList.add("is-hot-box");
+      }
+      if (reasonIndices && reasonIndices.has(boxIndex)) {
+        box.classList.add("is-win-reason");
+      }
+      boardEl.appendChild(box);
+    }
+  }
 }
 
 function renderTicTacToe(room) {
@@ -2604,7 +2930,9 @@ function renderTicTacToe(room) {
       gameSurfaceShell.classList.remove("game-shell-highlight");
       PLAYER_THEME_CLASS_NAMES.forEach((className) => gameSurfaceShell.classList.remove(className));
     }
-    renderTurnIndicatorSplit(indicatorEl, room, null, "idle", null);
+    if (!room?.game) {
+      renderTurnIndicatorSplit(indicatorEl, room, null, "idle", null);
+    }
     return;
   }
 
@@ -2958,7 +3286,6 @@ function renderWinner(room, leaderId) {
 
   const titleEl = document.getElementById("winner-title");
   const heroEl = document.getElementById("winner-hero");
-  const columns = document.getElementById("winner-score-columns");
   const hasEnded = Boolean(winnerId || isDraw);
   const reveal = getWinRevealSnapshot(room);
   const showOverlay = hasEnded && reveal.phase === "overlay";
@@ -2973,9 +3300,6 @@ function renderWinner(room, leaderId) {
     if (heroEl instanceof HTMLElement) {
       heroEl.classList.add("hidden");
       heroEl.innerHTML = "";
-    }
-    if (columns) {
-      columns.innerHTML = "";
     }
     return;
   }
@@ -3004,14 +3328,6 @@ function renderWinner(room, leaderId) {
     } else {
       heroEl.classList.add("hidden");
     }
-  }
-  if (columns) {
-    columns.innerHTML = "";
-    columns.appendChild(buildSharedScoreBroadcastRow({
-      host: room.players.host,
-      guest: room.players.guest,
-      isWaiting: !room.players.guest
-    }));
   }
 }
 

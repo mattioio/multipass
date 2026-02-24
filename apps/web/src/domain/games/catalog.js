@@ -1,4 +1,5 @@
 import { createBattleshipsEngine } from "./engines/battleshipsEngine.js";
+import { createDotsAndBoxesEngine } from "./engines/dotsAndBoxesEngine.js";
 
 const LINES = [
   [0, 1, 2],
@@ -136,6 +137,32 @@ export const gameCatalog = {
     id: "tic_tac_toe",
     name: "Tic Tac Toe"
   }),
+  dots_and_boxes: {
+    id: "dots_and_boxes",
+    name: "Dots & Boxes",
+    minPlayers: 2,
+    maxPlayers: 2,
+    comingSoon: false,
+    isAvailable: true,
+    bannerKey: "dots_and_boxes",
+    surfaceType: "dots_and_boxes",
+    mode: "board",
+    visibility: "public",
+    getWinRevealReason(state) {
+      const history = Array.isArray(state?.history) ? state.history : [];
+      const lastMove = history.length ? history[history.length - 1] : null;
+      const completed = Array.isArray(lastMove?.completedBoxIndices)
+        ? lastMove.completedBoxIndices.map((index) => Number(index)).filter((index) => Number.isInteger(index))
+        : [];
+      if (!completed.length) return null;
+      return {
+        boardId: "dots_boxes",
+        effect: "impact",
+        indices: completed
+      };
+    },
+    localEngine: createDotsAndBoxesEngine()
+  },
   battleships: {
     id: "battleships",
     name: "Battleships",

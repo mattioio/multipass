@@ -1,6 +1,6 @@
 import type { GameDefinition, GameRegistry } from "../../types";
 import { gameCatalog } from "./catalog.js";
-import { TicTacToeSurface, UnavailableGameSurface } from "./surfaces";
+import { DotsAndBoxesSurface, TicTacToeSurface, UnavailableGameSurface } from "./surfaces";
 
 const unknownGameDefinition: GameDefinition = {
   id: "unknown",
@@ -19,6 +19,7 @@ const unknownGameDefinition: GameDefinition = {
 function resolveSurfaceComponent(surfaceType: string, isAvailable: boolean) {
   if (!isAvailable) return UnavailableGameSurface;
   if (surfaceType === "tic_tac_toe") return TicTacToeSurface;
+  if (surfaceType === "dots_and_boxes") return DotsAndBoxesSurface;
   return UnavailableGameSurface;
 }
 

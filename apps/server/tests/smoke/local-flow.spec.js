@@ -104,6 +104,8 @@ test("local happy path: setup -> lobby -> pick -> game", async ({ page }) => {
   await expect(page.locator("#screen-game .game-surface-title")).toHaveCount(0);
   await expect(page.locator("#screen-game .game-surface-status")).toHaveCount(0);
   await expect(page.locator("#turn-indicator .turn-player")).toHaveCount(2);
+  await expect(page.locator("#turn-indicator .turn-player-score-match")).toHaveCount(0);
+  await expect(page.locator("#turn-indicator .turn-player-score-game")).toHaveCount(0);
   const firstRoundStarter = await page.evaluate(() => {
     const room = window.__multipassStore.getState().room;
     return {
@@ -127,8 +129,7 @@ test("local happy path: setup -> lobby -> pick -> game", async ({ page }) => {
   await expect(page.locator("#ttt-board .ttt-cell.is-win-reason")).toHaveCount(3);
   await expect(page.locator("#game-result-panel:not(.hidden)")).toBeVisible({ timeout: 6000 });
   await expect(page.locator("#winner-hero .player-card-shell--score")).toHaveCount(1);
-  await expect(page.locator("#winner-score-columns .score-broadcast-row")).toHaveCount(1);
-  await expect(page.locator("#winner-score-columns .score-duel-panel")).toHaveCount(0);
+  await expect(page.locator("#winner-score-columns")).toHaveCount(0);
   await expect(page.locator("#ttt-board .ttt-cell.is-win-reason")).toHaveCount(0);
   await expect(page.locator("#ttt-board .ttt-cell.is-winning")).toHaveCount(3);
 
@@ -439,6 +440,84 @@ test("battleships uses a single board with tap-then-confirm fire", async ({ page
   await expect(page.locator("#screen-pass.active")).toBeVisible();
   const historyAfterFire = await page.evaluate(() => window.__multipassStore.getState().room.game.state.shotHistory.length);
   expect(historyAfterFire).toBe(historyBefore + 1);
+});
+
+test("dots and boxes keeps turn on box completion and reaches winner overlay", async ({ page }) => {
+  await page.goto("/");
+  await page.waitForFunction(() => window.__multipassLegacyReady === true);
+
+  await page.getByRole("button", { name: "Start" }).click();
+  await expect(page.locator("#screen-local.active")).toBeVisible();
+  await page.locator('#local-avatar-grid .avatar-option[data-avatar="yellow"]').click();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.locator('#local-avatar-grid .avatar-option[data-avatar="green"]').click();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.locator("#screen-lobby.active")).toBeVisible();
+
+  await page.getByRole("button", { name: "Pick a game" }).click();
+  await expect(page.locator("#screen-pick.active")).toBeVisible();
+  await page.getByRole("button", { name: "Play Dots & Boxes" }).click();
+  await expect(page.locator("#screen-game.active")).toBeVisible();
+  await expect(page.locator("#dots-layout")).not.toHaveClass(/hidden/);
+  await expect(page.locator("#dots-board .dots-edge")).toHaveCount(60);
+  await expect(page.locator("#dots-board .dots-box")).toHaveCount(25);
+  await expect(page.locator("#dots-board .dots-edge.is-playable")).toHaveCount(60);
+  await expect(page.locator("#turn-indicator .turn-player-score-match")).toHaveCount(0);
+  await expect(page.locator("#turn-indicator .turn-player-score-game")).toHaveCount(2);
+  const mirrorLayout = await page.evaluate(() => {
+    const guestPane = document.querySelector("#turn-indicator .turn-player-guest");
+    const guestMeta = document.querySelector("#turn-indicator .turn-player-guest .turn-player-meta");
+    if (!(guestPane instanceof HTMLElement) || !(guestMeta instanceof HTMLElement)) return null;
+    return {
+      guestFlexDirection: getComputedStyle(guestPane).flexDirection,
+      guestMetaTextAlign: getComputedStyle(guestMeta).textAlign
+    };
+  });
+  expect(mirrorLayout).not.toBeNull();
+  expect(mirrorLayout?.guestFlexDirection).toBe("row-reverse");
+  expect(mirrorLayout?.guestMetaTextAlign).toBe("right");
+
+  const [hostId, guestId] = await page.evaluate(() => {
+    const room = window.__multipassStore.getState().room;
+    return [room.players.host.id, room.players.guest.id];
+  });
+
+  const clickEdge = async (edgeIndex) => {
+    await page.locator(`#dots-board .dots-edge[data-edge-index="${edgeIndex}"]`).click();
+  };
+
+  await clickEdge(0);
+  await clickEdge(10);
+  await clickEdge(30);
+  await clickEdge(11);
+  await clickEdge(5);
+  await clickEdge(12);
+  await expect(page.locator('#dots-board .dots-edge[data-edge-index="31"]')).toHaveClass(/is-scoring-opportunity/);
+  await clickEdge(31);
+  await expect(page.locator("#dots-board .dots-edge.is-last-move")).toHaveCount(1);
+
+  const afterScoringMove = await page.evaluate(() => {
+    const room = window.__multipassStore.getState().room;
+    return {
+      nextPlayerId: room.game.state.nextPlayerId,
+      boxOwner: room.game.state.boxes[0],
+      scores: room.game.state.scores
+    };
+  });
+  expect(afterScoringMove.nextPlayerId).toBe(hostId);
+  expect(afterScoringMove.boxOwner).toBe(hostId);
+  expect(afterScoringMove.scores[hostId]).toBe(1);
+  expect(afterScoringMove.scores[guestId]).toBe(0);
+  await expect(page.locator("#turn-indicator .turn-player-host .turn-player-score-game")).toHaveText("1");
+
+  const prePlayedEdges = new Set([0, 10, 30, 11, 5, 12, 31]);
+  for (let edgeIndex = 0; edgeIndex < 60; edgeIndex += 1) {
+    if (prePlayedEdges.has(edgeIndex)) continue;
+    await clickEdge(edgeIndex);
+  }
+
+  await expect(page.locator("#game-result-panel:not(.hidden)")).toBeVisible({ timeout: 9000 });
+  await expect(page.locator("#turn-indicator .turn-player-score-match")).toHaveCount(0);
 });
 
 test("local lobby duel sides remain side-by-side on mobile", async ({ page }) => {
