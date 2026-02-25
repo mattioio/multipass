@@ -591,3 +591,64 @@ test("local lobby duel sides remain side-by-side on mobile", async ({ page }) =>
   await expect(page.locator("#screen-pick.active")).toBeVisible();
   await expect(page.locator("#app-fixed-footer")).toHaveClass(/hidden/);
 });
+
+test("local pick can launch word fight module", async ({ page }) => {
+  await page.goto("/");
+  await page.waitForFunction(() => window.__multipassLegacyReady === true);
+
+  await page.getByRole("button", { name: "Start" }).click();
+  await page.locator('#local-avatar-grid .avatar-option[data-avatar="yellow"]').click();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.locator('#local-avatar-grid .avatar-option[data-avatar="green"]').click();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.locator("#screen-lobby.active")).toBeVisible();
+
+  await page.getByRole("button", { name: "Pick a game" }).click();
+  await expect(page.locator("#screen-pick.active")).toBeVisible();
+  await page.getByRole("button", { name: "Play Word Fight", exact: true }).click();
+
+  await expect(page.locator("#screen-game.active")).toBeVisible();
+  await expect(page.locator("#word-fight-layout")).not.toHaveClass(/hidden/);
+  await expect(page.locator("#word-fight-secret")).toHaveCount(0);
+  await expect(page.locator("#word-fight-draft-row")).toHaveCount(0);
+  await expect(page.locator("#word-fight-keyboard")).toBeVisible();
+  await expect(page.locator('#word-fight-keyboard [data-word-fight-key="T"]')).toBeVisible();
+  await expect(page.locator("#word-fight-status")).toBeHidden();
+  await expect(page.locator("#word-fight-active-board .word-fight-row")).toHaveCount(5);
+  await expect(page.locator("#word-fight-you-board")).toHaveCount(0);
+  await expect(page.locator("#word-fight-opponent-board")).toHaveCount(0);
+  await expect(page.locator("#turn-indicator .turn-player-host")).toHaveClass(/is-active/);
+  await expect(page.locator("#turn-indicator .turn-player-guest")).toHaveClass(/is-inactive/);
+  await expect(page.locator("#turn-indicator .turn-player-host .turn-player-score-game")).toHaveText("0");
+  await expect(page.locator("#turn-indicator .turn-player-guest .turn-player-score-game")).toHaveText("0");
+
+  await page.locator('#word-fight-keyboard [data-word-fight-key="T"]').click();
+  await page.locator('#word-fight-keyboard [data-word-fight-key="I"]').click();
+  await page.locator('#word-fight-keyboard [data-word-fight-key="M"]').click();
+  await page.locator('#word-fight-keyboard [data-word-fight-key="E"]').click();
+  await expect(page.locator("#word-fight-active-board .word-fight-row").nth(0).locator(".word-fight-tile").nth(0)).toHaveText("T");
+  await expect(page.locator("#word-fight-active-board .word-fight-row").nth(0).locator(".word-fight-tile").nth(1)).toHaveText("I");
+  await expect(page.locator("#word-fight-active-board .word-fight-row").nth(0).locator(".word-fight-tile").nth(2)).toHaveText("M");
+  await expect(page.locator("#word-fight-active-board .word-fight-row").nth(0).locator(".word-fight-tile").nth(3)).toHaveText("E");
+  await page.locator('#word-fight-keyboard [data-word-fight-key="ENTER"]').click();
+
+  await expect(page.locator("#screen-game.active")).toBeVisible();
+  await expect(page.locator("#screen-pass.active")).toHaveCount(0);
+  await expect(page.locator("#word-fight-keyboard")).toHaveClass(/hidden/);
+  await expect(page.locator("#word-fight-actions")).not.toHaveClass(/hidden/);
+  await expect(page.locator("#word-fight-pass-turn")).toBeVisible();
+  await expect(page.locator("#word-fight-status")).toBeHidden();
+  await expect(page.locator("#turn-indicator .turn-player-host")).toHaveClass(/is-active/);
+  await expect(page.locator("#turn-indicator .turn-player-guest")).toHaveClass(/is-inactive/);
+  const hostScoreAfterGuess = await page.locator("#turn-indicator .turn-player-host .turn-player-score-game").innerText();
+  expect(Number.parseInt(hostScoreAfterGuess, 10)).toBeGreaterThanOrEqual(0);
+  await expect(page.locator("#turn-indicator .turn-player-guest .turn-player-score-game")).toHaveText("0");
+
+  await page.locator("#word-fight-pass-turn").click();
+  await expect(page.locator("#word-fight-keyboard")).not.toHaveClass(/hidden/);
+  await expect(page.locator("#word-fight-actions")).toHaveClass(/hidden/);
+  await expect(page.locator("#turn-indicator .turn-player-host")).toHaveClass(/is-inactive/);
+  await expect(page.locator("#turn-indicator .turn-player-guest")).toHaveClass(/is-active/);
+  await expect(page.locator("#turn-indicator .turn-player-host .turn-player-score-game")).toHaveText(hostScoreAfterGuess);
+  await expect(page.locator("#turn-indicator .turn-player-guest .turn-player-score-game")).toHaveText("0");
+});

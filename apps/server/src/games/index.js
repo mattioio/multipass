@@ -1,5 +1,7 @@
 import ticTacToe from "./ticTacToe.js";
 import dotsAndBoxes from "./dotsAndBoxes.js";
+import wordFight from "./wordFight.js";
+import pokerDice from "./pokerDice.js";
 
 const games = {
   [ticTacToe.id]: {
@@ -12,13 +14,15 @@ const games = {
     comingSoon: false,
     bannerKey: "dots_and_boxes"
   },
-  word_fight: {
-    id: "word_fight",
-    name: "Word Fight",
-    minPlayers: 2,
-    maxPlayers: 2,
-    comingSoon: true,
+  [wordFight.id]: {
+    ...wordFight,
+    comingSoon: false,
     bannerKey: "word_fight"
+  },
+  [pokerDice.id]: {
+    ...pokerDice,
+    comingSoon: false,
+    bannerKey: "poker_dice"
   }
 };
 

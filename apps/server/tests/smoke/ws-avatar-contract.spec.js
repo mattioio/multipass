@@ -163,9 +163,8 @@ test("rate limiting returns a typed protocol error", async () => {
 
   for (let index = 0; index < 110; index += 1) {
     ws.send(JSON.stringify({
-      type: "create_room",
-      avatar: "yellow",
-      honorific: "mr",
+      type: "validate_room",
+      code: "ABCD",
       clientId: `load_test_${index}`
     }));
   }

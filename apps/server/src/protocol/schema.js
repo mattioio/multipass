@@ -137,8 +137,16 @@ export const CONTRACT_EXAMPLES = Object.freeze({
             name: "Word Fight",
             minPlayers: 2,
             maxPlayers: 2,
-            comingSoon: true,
+            comingSoon: false,
             bannerKey: "word_fight"
+          },
+          {
+            id: "poker_dice",
+            name: "Poker Dice",
+            minPlayers: 2,
+            maxPlayers: 2,
+            comingSoon: false,
+            bannerKey: "poker_dice"
           }
         ]
       },
@@ -183,6 +191,9 @@ export const CONTRACT_EXAMPLES = Object.freeze({
     select_game: { type: "select_game", gameId: "tic_tac_toe" },
     move_tic_tac_toe: { type: "move", gameId: "tic_tac_toe", move: { index: 0 } },
     move_dots_and_boxes: { type: "move", gameId: "dots_and_boxes", move: { edgeIndex: 0 } },
+    move_word_fight: { type: "move", gameId: "word_fight", move: { guess: "LAMP" } },
+    move_poker_dice_roll: { type: "move", gameId: "poker_dice", move: { action: "roll", hold: [0, 2] } },
+    move_poker_dice_bank: { type: "move", gameId: "poker_dice", move: { action: "bank" } },
     new_round: { type: "new_round" },
     end_game_request: { type: "end_game_request" },
     end_game_agree: { type: "end_game_agree" }

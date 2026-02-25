@@ -121,7 +121,28 @@ export function createRoomService({ store, gameService, roomTtlMs = DEFAULT_ROOM
     };
   }
 
-  function publicRoom(room) {
+  function projectGameForViewer(gameInstance, viewerPlayerId = null) {
+    if (!gameInstance) return null;
+    const gameConfig = gameService.getGame(gameInstance.id);
+    if (typeof gameConfig?.projectState !== "function") {
+      return gameInstance;
+    }
+
+    let projectedState = gameInstance.state;
+    try {
+      projectedState = gameConfig.projectState(gameInstance.state, viewerPlayerId);
+    } catch {
+      projectedState = gameInstance.state;
+    }
+
+    return {
+      ...gameInstance,
+      state: projectedState
+    };
+  }
+
+  function publicRoom(room, options = {}) {
+    const viewerPlayerId = options.viewerPlayerId || null;
     return {
       code: room.code,
       createdAt: room.createdAt,
@@ -144,7 +165,7 @@ export function createRoomService({ store, gameService, roomTtlMs = DEFAULT_ROOM
           }
         : null,
       endRequest: room.endRequest,
-      game: room.game,
+      game: projectGameForViewer(room.game, viewerPlayerId),
       games: gameService.listPublicGames()
     };
   }

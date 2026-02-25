@@ -6,6 +6,8 @@
     "start": "node src/index.js",
     "dev": "concurrently -k -n api,web -c green,cyan \"npm run dev:api\" \"npm --prefix ../web run dev -- --host 127.0.0.1 --port 3000\"",
     "dev:api": "PORT=3001 node src/index.js",
+    "dict:wordfight": "node ./scripts/build-word-fight-dictionary.mjs",
+    "dict:wordfight:check": "node ./scripts/build-word-fight-dictionary.mjs --check",
     "contract:generate": "node ./scripts/generate-ws-contract.mjs",
     "smoke": "playwright test",
     "smoke:contract": "playwright test tests/smoke/ws-avatar-contract.spec.js tests/smoke/ws-security.spec.js",
@@ -17,6 +19,7 @@
     "concurrently": "^9.2.1"
   },
   "dependencies": {
+    "wordlist-english": "^1.2.1",
     "ws": "^8.16.0"
   }
 }

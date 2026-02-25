@@ -1,0 +1,5 @@
+{
+  "name": "multipass-shared",
+  "private": true,
+  "type": "module"
+}

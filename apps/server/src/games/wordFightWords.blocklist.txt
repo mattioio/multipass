@@ -1,0 +1,15 @@
+# Basic safety blocklist for four-letter entries.
+# Exact-match, case-insensitive after normalization.
+
+CHNK
+COON
+CUNT
+FAGG
+FUCK
+GOOK
+KIKE
+NIGG
+SHIT
+SPIC
+TWAT
+WOGS

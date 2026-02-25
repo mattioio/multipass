@@ -86,7 +86,7 @@ export function createWsHandler({
       if (client.roomCode !== room.code) continue;
       send(ws, {
         type: "room_state",
-        room: roomService.publicRoom(room),
+        room: roomService.publicRoom(room, { viewerPlayerId: client.playerId }),
         you: {
           clientId: client.clientId,
           playerId: client.playerId,
@@ -384,6 +384,13 @@ export function createWsHandler({
       if (type === "move") {
         if (client.role !== "host" && client.role !== "guest") {
           sendError(ws, ERROR_CODES.SPECTATOR_CANNOT_PLAY);
+          return;
+        }
+
+        const requestedGameId = String(message.gameId || "").trim();
+        const activeGameId = String(room.game?.id || "");
+        if (requestedGameId && activeGameId && requestedGameId !== activeGameId) {
+          sendError(ws, ERROR_CODES.INVALID_PAYLOAD, "Move gameId does not match the active game.");
           return;
         }
 

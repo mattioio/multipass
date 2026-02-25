@@ -233,6 +233,65 @@ export function AppScreens({ isDevBuild }: AppScreensProps) {
               <Button id="battleship-fire-target" className="compact-action">Fire</Button>
             </div>
           </div>
+          <div id="word-fight-layout" className="word-fight-layout hidden">
+            <div className="word-fight-controls">
+              <div id="word-fight-actions" className="word-fight-actions hidden">
+                <Button id="word-fight-pass-turn" variant="ghost" className="compact-action hidden">Pass turn</Button>
+              </div>
+              <div id="word-fight-keyboard" className="word-fight-keyboard" aria-label="Word Fight keyboard">
+                <div className="word-fight-keyboard-row">
+                  <button type="button" className="word-fight-key" data-word-fight-key="Q">Q</button>
+                  <button type="button" className="word-fight-key" data-word-fight-key="W">W</button>
+                  <button type="button" className="word-fight-key" data-word-fight-key="E">E</button>
+                  <button type="button" className="word-fight-key" data-word-fight-key="R">R</button>
+                  <button type="button" className="word-fight-key" data-word-fight-key="T">T</button>
+                  <button type="button" className="word-fight-key" data-word-fight-key="Y">Y</button>
+                  <button type="button" className="word-fight-key" data-word-fight-key="U">U</button>
+                  <button type="button" className="word-fight-key" data-word-fight-key="I">I</button>
+                  <button type="button" className="word-fight-key" data-word-fight-key="O">O</button>
+                  <button type="button" className="word-fight-key" data-word-fight-key="P">P</button>
+                </div>
+                <div className="word-fight-keyboard-row">
+                  <button type="button" className="word-fight-key" data-word-fight-key="A">A</button>
+                  <button type="button" className="word-fight-key" data-word-fight-key="S">S</button>
+                  <button type="button" className="word-fight-key" data-word-fight-key="D">D</button>
+                  <button type="button" className="word-fight-key" data-word-fight-key="F">F</button>
+                  <button type="button" className="word-fight-key" data-word-fight-key="G">G</button>
+                  <button type="button" className="word-fight-key" data-word-fight-key="H">H</button>
+                  <button type="button" className="word-fight-key" data-word-fight-key="J">J</button>
+                  <button type="button" className="word-fight-key" data-word-fight-key="K">K</button>
+                  <button type="button" className="word-fight-key" data-word-fight-key="L">L</button>
+                </div>
+                <div className="word-fight-keyboard-row">
+                  <button type="button" className="word-fight-key is-action" data-word-fight-key="ENTER">ENTER</button>
+                  <button type="button" className="word-fight-key" data-word-fight-key="Z">Z</button>
+                  <button type="button" className="word-fight-key" data-word-fight-key="X">X</button>
+                  <button type="button" className="word-fight-key" data-word-fight-key="C">C</button>
+                  <button type="button" className="word-fight-key" data-word-fight-key="V">V</button>
+                  <button type="button" className="word-fight-key" data-word-fight-key="B">B</button>
+                  <button type="button" className="word-fight-key" data-word-fight-key="N">N</button>
+                  <button type="button" className="word-fight-key" data-word-fight-key="M">M</button>
+                  <button type="button" className="word-fight-key is-action" data-word-fight-key="BACKSPACE">⌫</button>
+                </div>
+              </div>
+              <p id="word-fight-status" className="subtext word-fight-status">Take turns to crack your own word.</p>
+            </div>
+            <section className="word-fight-board-card word-fight-board-card-single">
+              <h3 id="word-fight-active-title">Your Board</h3>
+              <div id="word-fight-active-board" className="word-fight-board-grid"></div>
+            </section>
+          </div>
+          <div id="poker-dice-layout" className="poker-dice-layout hidden">
+            <p id="poker-dice-status" className="subtext poker-dice-status">Roll up to three times, then bank your hand.</p>
+            <div id="poker-dice-score" className="poker-dice-score"></div>
+            <div id="poker-dice-dice" className="poker-dice-dice"></div>
+            <div className="poker-dice-actions">
+              <Button id="poker-dice-roll" className="compact-action">Roll</Button>
+              <Button id="poker-dice-bank" variant="ghost" className="compact-action">Bank</Button>
+              <Button id="poker-dice-clear-hold" variant="ghost" className="compact-action">Clear holds</Button>
+            </div>
+            <div id="poker-dice-summary" className="poker-dice-summary"></div>
+          </div>
           <div id="game-result-panel" className="game-result-panel game-result-overlay hidden" aria-live="polite">
             <div className="game-result-sheet">
               <ResultBanner emojiId="game-result-emoji" titleId="winner-title" title="Winner" />

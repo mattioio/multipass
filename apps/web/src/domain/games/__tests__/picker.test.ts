@@ -16,7 +16,16 @@ describe("picker game resolver", () => {
     ]);
 
     expect(resolved.bannerKey).toBe("word_fight");
-    expect(resolved.comingSoon).toBe(true);
+    expect(resolved.comingSoon).toBe(false);
+  });
+
+  it("hydrates poker dice as available", () => {
+    const [resolved] = resolvePickerGames([
+      { id: "poker_dice", name: "Poker Dice" }
+    ]);
+
+    expect(resolved.bannerKey).toBe("poker_dice");
+    expect(resolved.comingSoon).toBe(false);
   });
 
   it("keeps unknown games intact", () => {

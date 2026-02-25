@@ -170,6 +170,8 @@ function createInitialState() {
     localBattleshipOrientation: "h",
     localBattleshipPendingTargetIndex: null,
     localBattleshipLastPhase: null,
+    pokerDicePendingHolds: [],
+    wordFightDraftGuess: "",
     hostHonorific: "mr",
     joinHonorific: "mr",
     localHonorifics: { p1: "mr", p2: "mr" },
@@ -1249,19 +1251,36 @@ function getTurnHeaderScores(room) {
 
   const activeGameId = room?.game?.id || null;
   const stateGame = getDisplayStateForRoomGame(room) || room?.game?.state || null;
-  if (activeGameId !== "dots_and_boxes" || !stateGame || typeof stateGame !== "object") {
+  if (!stateGame || typeof stateGame !== "object") {
     return scores;
   }
 
-  const roundScores = stateGame.scores;
-  if (!roundScores || typeof roundScores !== "object") {
+  if (activeGameId === "dots_and_boxes") {
+    const roundScores = stateGame.scores;
+    if (!roundScores || typeof roundScores !== "object") {
+      return scores;
+    }
+
+    scores.host.showGameScore = true;
+    scores.guest.showGameScore = true;
+    scores.host.gameScore = asScore(host?.id ? roundScores[host.id] : 0);
+    scores.guest.gameScore = asScore(guest?.id ? roundScores[guest.id] : 0);
     return scores;
   }
 
-  scores.host.showGameScore = true;
-  scores.guest.showGameScore = true;
-  scores.host.gameScore = asScore(host?.id ? roundScores[host.id] : 0);
-  scores.guest.gameScore = asScore(guest?.id ? roundScores[guest.id] : 0);
+  if (activeGameId === "word_fight") {
+    const progressByPlayer = stateGame.progressByPlayer;
+    if (!progressByPlayer || typeof progressByPlayer !== "object") {
+      return scores;
+    }
+
+    scores.host.showGameScore = true;
+    scores.guest.showGameScore = true;
+    scores.host.gameScore = asScore(host?.id ? progressByPlayer[host.id]?.score : 0);
+    scores.guest.gameScore = asScore(guest?.id ? progressByPlayer[guest.id]?.score : 0);
+    return scores;
+  }
+
   return scores;
 }
 
@@ -1277,6 +1296,7 @@ function getGameBannerClass(game) {
   if (key === "battleships") return "game-banner-battleships";
   if (key === "dots_and_boxes") return "game-banner-dots-and-boxes";
   if (key === "word_fight" || key === "words") return "game-banner-word-fight";
+  if (key === "poker_dice" || key === "poker") return "game-banner-poker-dice";
   return "game-banner-tic-tac-toe";
 }
 
@@ -1472,6 +1492,9 @@ function saveLocalRejoinSnapshot(room) {
     localBattleshipPendingTargetIndex: Number.isInteger(state.localBattleshipPendingTargetIndex)
       ? state.localBattleshipPendingTargetIndex
       : null,
+    pokerDicePendingHolds: Array.isArray(state.pokerDicePendingHolds)
+      ? state.pokerDicePendingHolds.map((value) => Number(value)).filter((value) => Number.isInteger(value) && value >= 0 && value < 5)
+      : [],
     room
   };
   try {
@@ -1526,6 +1549,9 @@ function hydrateLocalFromSnapshot(snapshot) {
     ? snapshot.localBattleshipPendingTargetIndex
     : null;
   state.localBattleshipLastPhase = snapshot.room?.game?.state?.phase || null;
+  state.pokerDicePendingHolds = Array.isArray(snapshot.pokerDicePendingHolds)
+    ? snapshot.pokerDicePendingHolds.map((value) => Number(value)).filter((value) => Number.isInteger(value) && value >= 0 && value < 5)
+    : [];
   renderRoom();
   showScreen(resolveScreen(state.room), { history: "replace" });
 }
@@ -1612,6 +1638,7 @@ function advanceLocalRoundByAlternation() {
   resetLocalPrivacy(state.room);
   state.localBattleshipPendingTargetIndex = null;
   state.localBattleshipLastPhase = null;
+  state.pokerDicePendingHolds = [];
   state.room.updatedAt = Date.now();
   handleLocalUpdate();
 }
@@ -1655,6 +1682,7 @@ function startLocalGame(gameId) {
   state.localBattleshipOrientation = "h";
   state.localBattleshipPendingTargetIndex = null;
   state.localBattleshipLastPhase = null;
+  state.pokerDicePendingHolds = [];
   if (state.room.round) {
     state.room.round.hostGameId = game.id;
     state.room.round.guestGameId = game.id;
@@ -1692,6 +1720,7 @@ function startLocalRoundFromChoice(gameId) {
   state.localPrivacy = createInitialLocalPrivacyState(getDefaultLocalViewerId(state.room));
   state.localBattleshipPendingTargetIndex = null;
   state.localBattleshipLastPhase = null;
+  state.pokerDicePendingHolds = [];
 
   if (!state.room.round.firstPlayerId) {
     const players = getLocalPlayers(state.room);
@@ -1718,6 +1747,9 @@ function applyLocalMove(move) {
   state.room.game.state = result.state;
   if (state.room.game.id === "battleships") {
     state.localBattleshipPendingTargetIndex = null;
+  }
+  if (state.room.game.id === "poker_dice") {
+    state.pokerDicePendingHolds = [];
   }
   if (!previousWinner && result.state.winnerId) {
     const winner = playerById(state.room, result.state.winnerId);
@@ -1749,6 +1781,7 @@ function acknowledgeLocalPassHandoff() {
   if (!state.room || state.localPrivacy.stage !== "handoff") return;
   state.localPrivacy = confirmLocalHandoff(state.localPrivacy);
   state.localBattleshipPendingTargetIndex = null;
+  state.pokerDicePendingHolds = [];
   state.room.updatedAt = Date.now();
   handleLocalUpdate();
 }
@@ -1798,6 +1831,7 @@ function leaveLocalMatch({ saveForRejoin, history = "push" } = {}) {
   state.localBattleshipOrientation = "h";
   state.localBattleshipPendingTargetIndex = null;
   state.localBattleshipLastPhase = null;
+  state.pokerDicePendingHolds = [];
   document.body.removeAttribute("data-theme");
   updateLocalRejoinCard();
   showScreen("landing", { history });
@@ -1827,6 +1861,8 @@ function renderRoom(options = {}) {
   renderGameList(room);
   renderPassScreen(room);
   renderBattleships(room);
+  renderPokerDice(room);
+  renderWordFight(room);
   renderDotsAndBoxes(room);
   renderTicTacToe(room);
   renderEndRequest(room);
@@ -3211,6 +3247,463 @@ function renderBattleships(room) {
   }
 }
 
+function getWordFightState(room) {
+  const activeGameId = room?.game?.id || null;
+  if (!room?.game || activeGameId !== "word_fight") return null;
+  return getDisplayStateForRoomGame(room) || room.game.state;
+}
+
+function getPokerDiceState(room) {
+  const activeGameId = room?.game?.id || null;
+  if (!room?.game || activeGameId !== "poker_dice") return null;
+  return getDisplayStateForRoomGame(room) || room.game.state;
+}
+
+function getPokerCategoryLabel(category) {
+  if (category === "five_kind") return "Five of a kind";
+  if (category === "four_kind") return "Four of a kind";
+  if (category === "full_house") return "Full house";
+  if (category === "straight") return "Straight";
+  if (category === "three_kind") return "Three of a kind";
+  if (category === "two_pair") return "Two pair";
+  if (category === "one_pair") return "One pair";
+  return "High card";
+}
+
+function sanitizeWordFightGuess(rawGuess) {
+  return String(rawGuess || "")
+    .toUpperCase()
+    .replace(/[^A-Z]/g, "")
+    .slice(0, 4);
+}
+
+function getWordFightDraftGuess() {
+  state.wordFightDraftGuess = sanitizeWordFightGuess(state.wordFightDraftGuess);
+  return state.wordFightDraftGuess;
+}
+
+function clearWordFightDraftGuess() {
+  state.wordFightDraftGuess = "";
+}
+
+function getWordFightInputContext(room) {
+  const stateGame = getWordFightState(room);
+  if (!stateGame) {
+    return {
+      canType: false,
+      localBlocked: false,
+      isFinished: false,
+      showPassTurn: false,
+      viewerPlayerId: null
+    };
+  }
+  const localBlocked = isLocalMode() && state.localPrivacy.stage === "handoff";
+  const isFinished = Boolean(stateGame.winnerId || stateGame.draw);
+  const viewerPlayerId = isLocalMode() ? ensureLocalViewer(room) : (state.you?.playerId || null);
+  const myProgress = stateGame.progressByPlayer?.[viewerPlayerId] || {};
+  const exhausted = Boolean(myProgress?.exhausted);
+  const solved = Boolean(myProgress?.solved);
+  const isParticipant = Boolean(isLocalMode() || state.you?.role === "host" || state.you?.role === "guest");
+  const turnReady = !isFinished && !localBlocked && isParticipant && stateGame.nextPlayerId === viewerPlayerId;
+  const canType = turnReady && !exhausted && !solved;
+  const showPassTurn = isLocalMode() && localBlocked && !isFinished;
+  return {
+    canType,
+    localBlocked,
+    isFinished,
+    showPassTurn,
+    viewerPlayerId
+  };
+}
+
+function applyWordFightInputKey(rawKey) {
+  if (!state.room?.game || state.room.game.id !== "word_fight") return false;
+  const context = getWordFightInputContext(state.room);
+  if (!context.canType) return false;
+
+  const key = String(rawKey || "").toUpperCase();
+  if (key === "BACKSPACE") {
+    const current = getWordFightDraftGuess();
+    state.wordFightDraftGuess = current.slice(0, -1);
+    return true;
+  }
+  if (/^[A-Z]$/.test(key)) {
+    const current = getWordFightDraftGuess();
+    if (current.length >= 4) return false;
+    state.wordFightDraftGuess = `${current}${key}`;
+    return true;
+  }
+  return false;
+}
+
+function commitWordFightGuess(rawGuess) {
+  if (!state.room?.game || state.room.game.id !== "word_fight") return false;
+  const context = getWordFightInputContext(state.room);
+  if (!context.canType) return false;
+  const guess = sanitizeWordFightGuess(rawGuess);
+  if (guess.length !== 4) {
+    showToast("Enter a 4-letter word.");
+    return false;
+  }
+
+  if (isLocalMode()) {
+    applyLocalMove({ guess });
+  } else {
+    send({ type: "move", gameId: state.room.game.id, move: { guess } });
+  }
+  clearWordFightDraftGuess();
+  return true;
+}
+
+function commitPokerDiceRoll() {
+  if (!state.room?.game || state.room.game.id !== "poker_dice") return false;
+  const hold = Array.isArray(state.pokerDicePendingHolds)
+    ? state.pokerDicePendingHolds.map((value) => Number(value)).filter((value) => Number.isInteger(value) && value >= 0 && value < 5)
+    : [];
+  state.pokerDicePendingHolds = [];
+  if (isLocalMode()) {
+    applyLocalMove({ action: "roll", hold });
+  } else {
+    send({ type: "move", gameId: state.room.game.id, move: { action: "roll", hold } });
+  }
+  return true;
+}
+
+function commitPokerDiceBank() {
+  if (!state.room?.game || state.room.game.id !== "poker_dice") return false;
+  state.pokerDicePendingHolds = [];
+  if (isLocalMode()) {
+    applyLocalMove({ action: "bank" });
+  } else {
+    send({ type: "move", gameId: state.room.game.id, move: { action: "bank" } });
+  }
+  return true;
+}
+
+function renderWordFightBoardRows(target, entries, maxGuesses = 5, draftGuess = "", showDraftInBoard = false) {
+  if (!(target instanceof HTMLElement)) return;
+  target.innerHTML = "";
+  const history = Array.isArray(entries) ? entries : [];
+  const normalizedDraft = sanitizeWordFightGuess(draftGuess);
+  const draftRowIndex = showDraftInBoard && history.length < maxGuesses ? history.length : -1;
+  for (let rowIndex = 0; rowIndex < maxGuesses; rowIndex += 1) {
+    const row = document.createElement("div");
+    row.className = "word-fight-row";
+    const entry = history[rowIndex] || null;
+    for (let colIndex = 0; colIndex < 4; colIndex += 1) {
+      const tile = document.createElement("span");
+      tile.className = "word-fight-tile";
+      if (entry) {
+        const letter = String(entry.guess || "")[colIndex] || "";
+        tile.textContent = letter;
+        const feedback = Array.isArray(entry.feedback) ? String(entry.feedback[colIndex] || "absent") : "absent";
+        if (feedback === "exact" || feedback === "present" || feedback === "absent") {
+          tile.classList.add(`is-${feedback}`);
+        }
+      } else if (rowIndex === draftRowIndex) {
+        tile.textContent = normalizedDraft[colIndex] || "";
+      } else {
+        tile.textContent = "";
+      }
+      row.appendChild(tile);
+    }
+    target.appendChild(row);
+  }
+}
+
+function getWordFightKeyStateByLetter(entries) {
+  const rankByState = { absent: 1, present: 2, exact: 3 };
+  const stateByLetter = {};
+  const history = Array.isArray(entries) ? entries : [];
+  history.forEach((entry) => {
+    const guess = String(entry?.guess || "");
+    const feedback = Array.isArray(entry?.feedback) ? entry.feedback : [];
+    for (let index = 0; index < 4; index += 1) {
+      const letter = String(guess[index] || "").toUpperCase();
+      if (!/^[A-Z]$/.test(letter)) continue;
+      const stateValue = String(feedback[index] || "absent");
+      if (!(stateValue in rankByState)) continue;
+      const current = stateByLetter[letter] || null;
+      if (!current || rankByState[stateValue] > rankByState[current]) {
+        stateByLetter[letter] = stateValue;
+      }
+    }
+  });
+  return stateByLetter;
+}
+
+function renderWordFightKeyboard(target, boardEntries, disabled) {
+  if (!(target instanceof HTMLElement)) return;
+  const stateByLetter = getWordFightKeyStateByLetter(boardEntries);
+  target.querySelectorAll("[data-word-fight-key]").forEach((button) => {
+    if (!(button instanceof HTMLButtonElement)) return;
+    const key = String(button.dataset.wordFightKey || "").toUpperCase();
+    const letterState = stateByLetter[key] || null;
+    button.classList.remove("is-absent", "is-present", "is-exact");
+    if (letterState) {
+      button.classList.add(`is-${letterState}`);
+    }
+    button.disabled = Boolean(disabled);
+  });
+}
+
+function renderWordFight(room) {
+  const layout = document.getElementById("word-fight-layout");
+  const keyboard = document.getElementById("word-fight-keyboard");
+  const actionRow = document.getElementById("word-fight-actions");
+  const passTurnButton = document.getElementById("word-fight-pass-turn");
+  const statusEl = document.getElementById("word-fight-status");
+  const activeBoardTitle = document.getElementById("word-fight-active-title");
+  const activeBoard = document.getElementById("word-fight-active-board");
+  const indicatorEl = document.getElementById("turn-indicator");
+
+  if (!(layout instanceof HTMLElement) || !(keyboard instanceof HTMLElement)) return;
+
+  const stateGame = getWordFightState(room);
+  if (!stateGame) {
+    layout.classList.add("hidden");
+    if (activeBoard instanceof HTMLElement) activeBoard.innerHTML = "";
+    if (keyboard instanceof HTMLElement) {
+      keyboard.classList.remove("hidden");
+      renderWordFightKeyboard(keyboard, [], true);
+    }
+    if (actionRow instanceof HTMLElement) actionRow.classList.add("hidden");
+    if (passTurnButton instanceof HTMLButtonElement) {
+      passTurnButton.classList.add("hidden");
+      passTurnButton.disabled = true;
+    }
+    clearWordFightDraftGuess();
+    return;
+  }
+
+  layout.classList.remove("hidden");
+  const context = getWordFightInputContext(room);
+  const { localBlocked, isFinished, showPassTurn, viewerPlayerId } = context;
+  const effectiveHeaderPlayerId = localBlocked && !isFinished
+    ? (ensureLocalViewer(room) || stateGame.nextPlayerId || null)
+    : (stateGame.nextPlayerId || null);
+
+  const reveal = getWinRevealSnapshot(room);
+  if (indicatorEl instanceof HTMLElement) {
+    if (stateGame.winnerId) {
+      renderTurnIndicatorSplit(indicatorEl, room, stateGame.winnerId, "winner", reveal);
+    } else if (stateGame.draw) {
+      renderTurnIndicatorSplit(indicatorEl, room, null, "draw", reveal);
+    } else {
+      renderTurnIndicatorSplit(indicatorEl, room, effectiveHeaderPlayerId, "turn", reveal);
+    }
+  }
+
+  const viewer = playerById(room, viewerPlayerId);
+  const activeBoardPlayerId = localBlocked
+    ? (viewerPlayerId || stateGame.playerOrder?.[0] || null)
+    : (stateGame.nextPlayerId || viewerPlayerId || stateGame.playerOrder?.[0] || null);
+  const activeBoardPlayer = playerById(room, activeBoardPlayerId);
+
+  if (activeBoardTitle) {
+    if (!activeBoardPlayerId || !activeBoardPlayer) {
+      activeBoardTitle.textContent = "Current Board";
+    } else if (!isLocalMode() && activeBoardPlayerId === viewerPlayerId) {
+      activeBoardTitle.textContent = "Your Board";
+    } else {
+      activeBoardTitle.textContent = `${getDisplayPlayerName(activeBoardPlayer, "Player")} Board`;
+    }
+  }
+
+  const boardsByPlayer = stateGame.boardsByPlayer || {};
+  const maxGuesses = Number(stateGame.maxGuesses) || 5;
+  const activeBoardEntries = boardsByPlayer?.[activeBoardPlayerId] || [];
+  const showDraftInBoard = context.canType && !showPassTurn;
+  const draftGuess = showDraftInBoard ? getWordFightDraftGuess() : "";
+  renderWordFightBoardRows(activeBoard, activeBoardEntries, maxGuesses, draftGuess, showDraftInBoard);
+  if (keyboard instanceof HTMLElement) {
+    keyboard.classList.toggle("hidden", showPassTurn);
+    renderWordFightKeyboard(keyboard, activeBoardEntries, showPassTurn || !context.canType);
+  }
+  if (actionRow instanceof HTMLElement) {
+    actionRow.classList.toggle("hidden", !showPassTurn);
+  }
+  if (passTurnButton instanceof HTMLButtonElement) {
+    passTurnButton.classList.toggle("hidden", !showPassTurn);
+    passTurnButton.disabled = !showPassTurn;
+  }
+  if (!context.canType || showPassTurn) {
+    clearWordFightDraftGuess();
+  }
+
+  if (statusEl) {
+    statusEl.textContent = "";
+  }
+}
+
+function renderPokerDice(room) {
+  const layout = document.getElementById("poker-dice-layout");
+  const statusEl = document.getElementById("poker-dice-status");
+  const scoreEl = document.getElementById("poker-dice-score");
+  const diceEl = document.getElementById("poker-dice-dice");
+  const rollButton = document.getElementById("poker-dice-roll");
+  const bankButton = document.getElementById("poker-dice-bank");
+  const clearButton = document.getElementById("poker-dice-clear-hold");
+  const summaryEl = document.getElementById("poker-dice-summary");
+  const indicatorEl = document.getElementById("turn-indicator");
+
+  if (!(layout instanceof HTMLElement) || !(diceEl instanceof HTMLElement) || !(scoreEl instanceof HTMLElement) || !(summaryEl instanceof HTMLElement)) return;
+
+  const stateGame = getPokerDiceState(room);
+  if (!stateGame) {
+    layout.classList.add("hidden");
+    diceEl.innerHTML = "";
+    scoreEl.innerHTML = "";
+    summaryEl.innerHTML = "";
+    state.pokerDicePendingHolds = [];
+    if (rollButton instanceof HTMLButtonElement) rollButton.disabled = true;
+    if (bankButton instanceof HTMLButtonElement) bankButton.disabled = true;
+    if (clearButton instanceof HTMLButtonElement) clearButton.disabled = true;
+    return;
+  }
+
+  layout.classList.remove("hidden");
+  const reveal = getWinRevealSnapshot(room);
+  if (indicatorEl instanceof HTMLElement) {
+    if (stateGame.winnerId) {
+      renderTurnIndicatorSplit(indicatorEl, room, stateGame.winnerId, "winner", reveal);
+    } else if (stateGame.draw) {
+      renderTurnIndicatorSplit(indicatorEl, room, null, "draw", reveal);
+    } else {
+      renderTurnIndicatorSplit(indicatorEl, room, stateGame.nextPlayerId || null, "turn", reveal);
+    }
+  }
+
+  const viewerPlayerId = isLocalMode() ? ensureLocalViewer(room) : (state.you?.playerId || null);
+  const viewer = playerById(room, viewerPlayerId);
+  const opponentId = stateGame.playerOrder?.find((id) => id !== viewerPlayerId) || null;
+  const opponent = playerById(room, opponentId);
+
+  const handWins = stateGame.handWins || {};
+  scoreEl.innerHTML = "";
+  const scoreMine = document.createElement("span");
+  scoreMine.className = "poker-dice-score-chip";
+  scoreMine.textContent = `${getDisplayPlayerName(viewer, "You")}: ${Number(handWins[viewerPlayerId] || 0)}`;
+  const scoreOpp = document.createElement("span");
+  scoreOpp.className = "poker-dice-score-chip";
+  scoreOpp.textContent = `${getDisplayPlayerName(opponent, "Opponent")}: ${Number(handWins[opponentId] || 0)}`;
+  const scoreHand = document.createElement("span");
+  scoreHand.className = "poker-dice-score-chip";
+  scoreHand.textContent = `Hand ${Number(stateGame.currentHandNumber || 1)} · Ties ${Number(stateGame.handTies || 0)}`;
+  scoreEl.appendChild(scoreMine);
+  scoreEl.appendChild(scoreOpp);
+  scoreEl.appendChild(scoreHand);
+
+  const isParticipant = Boolean(isLocalMode() || state.you?.role === "host" || state.you?.role === "guest");
+  const localBlocked = isLocalMode() && state.localPrivacy.stage === "handoff";
+  const isFinished = Boolean(stateGame.winnerId || stateGame.draw || stateGame.phase === "finished");
+  const canInteract = isParticipant && !localBlocked && !isFinished && stateGame.nextPlayerId === viewerPlayerId;
+
+  const currentHand = stateGame.currentHand || {};
+  const rollsUsed = Number(currentHand.rollsUsedByPlayer?.[viewerPlayerId] || 0);
+  const dice = Array.isArray(currentHand.diceByPlayer?.[viewerPlayerId])
+    ? currentHand.diceByPlayer[viewerPlayerId]
+    : [null, null, null, null, null];
+  const locks = Array.isArray(currentHand.locksByPlayer?.[viewerPlayerId])
+    ? currentHand.locksByPlayer[viewerPlayerId]
+    : [false, false, false, false, false];
+  const myFinal = currentHand.finalByPlayer?.[viewerPlayerId] || null;
+  const oppFinal = currentHand.finalByPlayer?.[opponentId] || null;
+
+  if (!Array.isArray(state.pokerDicePendingHolds)) {
+    state.pokerDicePendingHolds = [];
+  }
+  if (!canInteract || myFinal) {
+    state.pokerDicePendingHolds = [];
+  } else if (!state.pokerDicePendingHolds.length && rollsUsed > 0) {
+    state.pokerDicePendingHolds = locks
+      .map((locked, index) => (locked ? index : null))
+      .filter((value) => Number.isInteger(value));
+  } else {
+    state.pokerDicePendingHolds = state.pokerDicePendingHolds.filter((index) => Number.isInteger(index) && index >= 0 && index < 5);
+  }
+
+  const holdSet = new Set(state.pokerDicePendingHolds);
+
+  diceEl.innerHTML = "";
+  for (let index = 0; index < 5; index += 1) {
+    const die = document.createElement("button");
+    die.type = "button";
+    die.className = "poker-die";
+    die.textContent = Number.isInteger(dice[index]) ? String(dice[index]) : "-";
+    die.disabled = !canInteract || rollsUsed < 1 || Boolean(myFinal);
+    if (holdSet.has(index)) {
+      die.classList.add("is-hold");
+    }
+    if (!die.disabled) {
+      die.addEventListener("click", () => {
+        if (holdSet.has(index)) {
+          state.pokerDicePendingHolds = state.pokerDicePendingHolds.filter((value) => value !== index);
+        } else {
+          state.pokerDicePendingHolds = [...state.pokerDicePendingHolds, index].sort((a, b) => a - b);
+        }
+        renderRoom();
+      });
+    }
+    diceEl.appendChild(die);
+  }
+
+  const canRoll = canInteract && !myFinal && rollsUsed < 3;
+  const canBank = canInteract && !myFinal && rollsUsed >= 1 && rollsUsed < 3;
+  if (rollButton instanceof HTMLButtonElement) {
+    rollButton.disabled = !canRoll;
+    rollButton.textContent = rollsUsed < 1 ? "Roll" : `Roll (${rollsUsed}/3)`;
+  }
+  if (bankButton instanceof HTMLButtonElement) {
+    bankButton.disabled = !canBank;
+  }
+  if (clearButton instanceof HTMLButtonElement) {
+    clearButton.disabled = !canRoll || state.pokerDicePendingHolds.length === 0;
+  }
+
+  summaryEl.innerHTML = "";
+  if (myFinal) {
+    const row = document.createElement("div");
+    row.className = "poker-dice-summary-row";
+    row.textContent = `${getDisplayPlayerName(viewer, "You")}: ${getPokerCategoryLabel(myFinal.category)} (${myFinal.dice.join(" ")})`;
+    summaryEl.appendChild(row);
+  }
+  if (oppFinal) {
+    const row = document.createElement("div");
+    row.className = "poker-dice-summary-row";
+    row.textContent = `${getDisplayPlayerName(opponent, "Opponent")}: ${getPokerCategoryLabel(oppFinal.category)} (${oppFinal.dice.join(" ")})`;
+    summaryEl.appendChild(row);
+  }
+
+  const lastHistory = Array.isArray(stateGame.history) && stateGame.history.length
+    ? stateGame.history[stateGame.history.length - 1]
+    : null;
+  if (lastHistory?.type === "hand_tie") {
+    const row = document.createElement("div");
+    row.className = "poker-dice-summary-row";
+    row.textContent = "Tie hand. Replay this hand.";
+    summaryEl.appendChild(row);
+  }
+
+  if (statusEl) {
+    if (isFinished) {
+      const winner = playerById(room, stateGame.winnerId);
+      statusEl.textContent = winner
+        ? `${getDisplayPlayerName(winner, "Someone")} wins the match.`
+        : "Match complete.";
+    } else if (myFinal && !oppFinal) {
+      statusEl.textContent = "Hand banked. Waiting for opponent.";
+    } else if (canInteract) {
+      statusEl.textContent = rollsUsed === 0
+        ? "Your turn. Roll to start this hand."
+        : "Choose holds, then roll again or bank.";
+    } else {
+      const active = playerById(room, stateGame.nextPlayerId);
+      statusEl.textContent = `Waiting for ${getDisplayPlayerName(active, "opponent")}.`;
+    }
+  }
+}
+
 function renderPickScreen(room) {
   renderPickHint({
     room,
@@ -3342,7 +3835,10 @@ function resolveScreen(room) {
   const finished = room.game?.state?.winnerId || room.game?.state?.draw;
   if (isLocalMode()) {
     if (finished) return "game";
-    if (shouldShowLocalPassScreen(room, state.localPrivacy)) return "pass";
+    if (shouldShowLocalPassScreen(room, state.localPrivacy)) {
+      if (room?.game?.id === "word_fight") return "game";
+      return "pass";
+    }
     if (room.game && !finished) return "game";
     if (room.round?.status === "waiting_game") return "lobby";
     return "lobby";
@@ -3375,6 +3871,7 @@ function setup() {
     state.localHonorifics = { p1: "mr", p2: "mr" };
     state.localBattleshipPendingTargetIndex = null;
     state.localBattleshipLastPhase = null;
+    state.pokerDicePendingHolds = [];
     updateLocalPickers();
     showScreen("local", { history: "push" });
   });
@@ -3611,6 +4108,85 @@ function setup() {
         action: "fire",
         index: state.localBattleshipPendingTargetIndex
       });
+    });
+  }
+
+  const wordFightKeyboard = document.getElementById("word-fight-keyboard");
+  const wordFightPassTurn = document.getElementById("word-fight-pass-turn");
+  if (wordFightKeyboard instanceof HTMLElement) {
+    wordFightKeyboard.addEventListener("click", (event) => {
+      const target = event.target instanceof HTMLElement
+        ? event.target.closest("[data-word-fight-key]")
+        : null;
+      if (!(target instanceof HTMLButtonElement)) return;
+      const key = String(target.dataset.wordFightKey || "").toUpperCase();
+      if (!key) return;
+      if (key === "ENTER") {
+        const committed = commitWordFightGuess(getWordFightDraftGuess());
+        if (committed) renderRoom();
+        return;
+      }
+      const updated = applyWordFightInputKey(key);
+      if (updated) renderRoom();
+    });
+  }
+  if (wordFightPassTurn instanceof HTMLButtonElement) {
+    wordFightPassTurn.addEventListener("click", () => {
+      acknowledgeLocalPassHandoff();
+    });
+  }
+
+  window.addEventListener("keydown", (event) => {
+    if (event.defaultPrevented) return;
+    if (state.activeScreen !== "game") return;
+    if (!state.room?.game || state.room.game.id !== "word_fight") return;
+    const target = event.target;
+    if (
+      target instanceof HTMLInputElement ||
+      target instanceof HTMLTextAreaElement ||
+      target instanceof HTMLSelectElement ||
+      (target instanceof HTMLElement && target.isContentEditable)
+    ) {
+      return;
+    }
+
+    const key = String(event.key || "");
+    if (key === "Enter") {
+      event.preventDefault();
+      const committed = commitWordFightGuess(getWordFightDraftGuess());
+      if (committed) renderRoom();
+      return;
+    }
+    if (key === "Backspace") {
+      event.preventDefault();
+      if (applyWordFightInputKey("BACKSPACE")) renderRoom();
+      return;
+    }
+    if (/^[a-zA-Z]$/.test(key)) {
+      event.preventDefault();
+      if (applyWordFightInputKey(key)) renderRoom();
+    }
+  });
+
+  const pokerDiceRollButton = document.getElementById("poker-dice-roll");
+  if (pokerDiceRollButton instanceof HTMLButtonElement) {
+    pokerDiceRollButton.addEventListener("click", () => {
+      commitPokerDiceRoll();
+      renderRoom();
+    });
+  }
+  const pokerDiceBankButton = document.getElementById("poker-dice-bank");
+  if (pokerDiceBankButton instanceof HTMLButtonElement) {
+    pokerDiceBankButton.addEventListener("click", () => {
+      commitPokerDiceBank();
+      renderRoom();
+    });
+  }
+  const pokerDiceClearHoldButton = document.getElementById("poker-dice-clear-hold");
+  if (pokerDiceClearHoldButton instanceof HTMLButtonElement) {
+    pokerDiceClearHoldButton.addEventListener("click", () => {
+      state.pokerDicePendingHolds = [];
+      renderRoom();
     });
   }
 
@@ -4195,6 +4771,7 @@ function startLocalRoomFromSetupSelections() {
   state.localBattleshipOrientation = "h";
   state.localBattleshipPendingTargetIndex = null;
   state.localBattleshipLastPhase = null;
+  state.pokerDicePendingHolds = [];
   state.localStep = "p1";
   saveLocalRejoinSnapshot(state.room);
   updateLocalRejoinCard();

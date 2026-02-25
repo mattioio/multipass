@@ -121,6 +121,12 @@
   --game-banner-icon-color: color-mix(in srgb, #8a56db 70%, #f1dcff);
 }
 
+.game-banner-poker-dice {
+  --game-banner-gradient: linear-gradient(135deg, #4a8f44 0%, #2f6f3f 48%, #1d4d30 100%);
+  --game-banner-image: none;
+  --game-banner-icon-color: color-mix(in srgb, #79c974 72%, #dff4df);
+}
+
 .game-meta {
   display: grid;
   gap: 8px;
@@ -1107,6 +1113,204 @@ body[data-mode="dark"] .ttt-board {
 
 .battleship-cell:disabled {
   cursor: default;
+}
+
+.word-fight-layout {
+  display: grid;
+  gap: 12px;
+}
+
+.word-fight-controls {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+}
+
+.word-fight-actions {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+.word-fight-keyboard {
+  width: min(100%, 520px);
+  display: grid;
+  gap: 8px;
+}
+
+.word-fight-keyboard-row {
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.word-fight-keyboard-row:nth-child(2) {
+  grid-template-columns: repeat(9, minmax(0, 1fr));
+  width: 90%;
+  margin: 0 auto;
+}
+
+.word-fight-keyboard-row:nth-child(3) {
+  grid-template-columns: 1.5fr repeat(7, minmax(0, 1fr)) 1.5fr;
+}
+
+.word-fight-key {
+  min-height: 42px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-2) 84%, var(--surface));
+  color: var(--text);
+  font-weight: 700;
+  font-size: 0.9rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.word-fight-key:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.word-fight-key.is-action {
+  font-size: 0.8rem;
+}
+
+.word-fight-key.is-exact {
+  background: color-mix(in srgb, #2f8f46 50%, var(--surface));
+  border-color: color-mix(in srgb, #2f8f46 74%, var(--border));
+}
+
+.word-fight-key.is-present {
+  background: color-mix(in srgb, #cf9b2a 50%, var(--surface));
+  border-color: color-mix(in srgb, #cf9b2a 74%, var(--border));
+}
+
+.word-fight-key.is-absent {
+  background: color-mix(in srgb, var(--surface-3) 84%, var(--surface));
+}
+
+.word-fight-board-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--surface-2) 72%, var(--surface));
+  padding: 10px;
+}
+
+.word-fight-board-card-single {
+  width: min(100%, 320px);
+  margin: 0 auto;
+}
+
+.word-fight-board-card h3 {
+  margin: 0 0 8px;
+  font-size: 0.95rem;
+}
+
+.word-fight-board-grid {
+  display: grid;
+  gap: 6px;
+}
+
+.word-fight-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.word-fight-tile {
+  aspect-ratio: 1 / 1;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: color-mix(in srgb, var(--surface-2) 84%, var(--surface));
+}
+
+.word-fight-tile.is-exact {
+  background: color-mix(in srgb, #2f8f46 50%, var(--surface));
+  border-color: color-mix(in srgb, #2f8f46 74%, var(--border));
+}
+
+.word-fight-tile.is-present {
+  background: color-mix(in srgb, #cf9b2a 50%, var(--surface));
+  border-color: color-mix(in srgb, #cf9b2a 74%, var(--border));
+}
+
+.word-fight-tile.is-absent {
+  background: color-mix(in srgb, var(--surface-3) 84%, var(--surface));
+}
+
+.word-fight-status {
+  display: none;
+}
+
+.poker-dice-layout {
+  display: grid;
+  gap: 10px;
+}
+
+.poker-dice-score {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.poker-dice-score-chip {
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-2) 78%, var(--surface));
+  padding: 4px 10px;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.poker-dice-dice {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(5, minmax(44px, 1fr));
+}
+
+.poker-die {
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  min-height: 52px;
+  background: color-mix(in srgb, var(--surface-2) 84%, var(--surface));
+  color: var(--text);
+  font-size: 1.15rem;
+  font-weight: 800;
+}
+
+.poker-die.is-hold {
+  border-color: color-mix(in srgb, var(--cta) 62%, var(--border));
+  background: color-mix(in srgb, var(--cta) 18%, var(--surface));
+}
+
+.poker-die:disabled {
+  opacity: 0.85;
+}
+
+.poker-dice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.poker-dice-summary {
+  display: grid;
+  gap: 6px;
+}
+
+.poker-dice-summary-row {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: color-mix(in srgb, var(--surface-2) 76%, var(--surface));
+  font-size: 0.88rem;
 }
 
 .battleship-cell.is-win-reason-shot {

@@ -395,6 +395,45 @@ test("online honorific picker is independent per player", async ({ browser }) =>
   await guestContext.close();
 });
 
+test("online pick can launch poker dice module", async ({ browser }) => {
+  const hostContext = await browser.newContext();
+  const guestContext = await browser.newContext();
+  const hostPage = await hostContext.newPage();
+  const guestPage = await guestContext.newPage();
+
+  await hostPage.goto("http://127.0.0.1:3000/");
+  await hostPage.getByRole("tab", { name: "Online" }).click();
+  await hostPage.getByRole("button", { name: "Host a room" }).click();
+  await hostPage.locator('#host-avatar-picker .avatar-option[data-avatar="yellow"]').click();
+  await hostPage.getByRole("button", { name: "Continue" }).click();
+  await expect(hostPage.locator("#screen-lobby.active")).toBeVisible();
+  const roomCode = (await hostPage.locator("#room-code").textContent())?.trim() || "";
+
+  await guestPage.goto("http://127.0.0.1:3000/");
+  await guestPage.getByRole("tab", { name: "Online" }).click();
+  await guestPage.getByRole("button", { name: "Join a room" }).click();
+  await fillJoinCodeSlots(guestPage, roomCode);
+  await expect(guestPage.locator("#join-avatar-picker:not(.hidden)")).toBeVisible();
+  await guestPage.locator('#join-avatar-picker .avatar-option[data-avatar="green"]').click();
+  await guestPage.getByRole("button", { name: "Join room" }).click();
+  await expect(guestPage.locator("#screen-lobby.active")).toBeVisible();
+
+  await hostPage.getByRole("button", { name: "Pick a game" }).click();
+  await guestPage.getByRole("button", { name: "Pick a game" }).click();
+  await hostPage.getByRole("button", { name: "Play Poker Dice", exact: true }).click();
+  await guestPage.getByRole("button", { name: "Play Poker Dice", exact: true }).click();
+
+  await expect(hostPage.locator("#screen-game.active")).toBeVisible();
+  await expect(guestPage.locator("#screen-game.active")).toBeVisible();
+  await expect(hostPage.locator("#poker-dice-layout")).not.toHaveClass(/hidden/);
+  await expect(guestPage.locator("#poker-dice-layout")).not.toHaveClass(/hidden/);
+  await expect(hostPage.locator("#poker-dice-dice .poker-die")).toHaveCount(5);
+  await expect(guestPage.locator("#poker-dice-dice .poker-die")).toHaveCount(5);
+
+  await hostContext.close();
+  await guestContext.close();
+});
+
 test("join code slots sanitize ambiguous letters and support paste/backspace flow", async ({ browser }) => {
   const hostContext = await browser.newContext();
   const guestContext = await browser.newContext();

@@ -1,5 +1,7 @@
 import { createBattleshipsEngine } from "./engines/battleshipsEngine.js";
 import { createDotsAndBoxesEngine } from "./engines/dotsAndBoxesEngine.js";
+import { createWordFightEngine } from "./engines/wordFightEngine.js";
+import { createPokerDiceEngine } from "./engines/pokerDiceEngine.js";
 
 const LINES = [
   [0, 1, 2],
@@ -192,15 +194,32 @@ export const gameCatalog = {
     name: "Word Fight",
     minPlayers: 2,
     maxPlayers: 2,
-    comingSoon: true,
-    isAvailable: false,
+    comingSoon: false,
+    isAvailable: true,
     bannerKey: "word_fight",
-    surfaceType: "placeholder",
+    surfaceType: "word_fight",
     mode: "board",
+    visibility: "hidden_pass_device",
+    getWinRevealReason() {
+      return null;
+    },
+    localEngine: createWordFightEngine()
+  },
+  poker_dice: {
+    id: "poker_dice",
+    name: "Poker Dice",
+    minPlayers: 2,
+    maxPlayers: 2,
+    comingSoon: false,
+    isAvailable: true,
+    bannerKey: "poker_dice",
+    surfaceType: "poker_dice",
+    mode: "dice",
     visibility: "public",
     getWinRevealReason() {
       return null;
-    }
+    },
+    localEngine: createPokerDiceEngine()
   }
 };
 

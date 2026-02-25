@@ -67,6 +67,22 @@ Do not edit it manually; regenerate with `npm --prefix /Users/matthew/Projects/m
         "maxPlayers": 2,
         "comingSoon": false,
         "bannerKey": "dots_and_boxes"
+      },
+      {
+        "id": "word_fight",
+        "name": "Word Fight",
+        "minPlayers": 2,
+        "maxPlayers": 2,
+        "comingSoon": false,
+        "bannerKey": "word_fight"
+      },
+      {
+        "id": "poker_dice",
+        "name": "Poker Dice",
+        "minPlayers": 2,
+        "maxPlayers": 2,
+        "comingSoon": false,
+        "bannerKey": "poker_dice"
       }
     ]
   },
@@ -190,6 +206,46 @@ Do not edit it manually; regenerate with `npm --prefix /Users/matthew/Projects/m
   "gameId": "dots_and_boxes",
   "move": {
     "edgeIndex": 0
+  }
+}
+```
+
+### `move_word_fight`
+
+```json
+{
+  "type": "move",
+  "gameId": "word_fight",
+  "move": {
+    "guess": "LAMP"
+  }
+}
+```
+
+### `move_poker_dice_roll`
+
+```json
+{
+  "type": "move",
+  "gameId": "poker_dice",
+  "move": {
+    "action": "roll",
+    "hold": [
+      0,
+      2
+    ]
+  }
+}
+```
+
+### `move_poker_dice_bank`
+
+```json
+{
+  "type": "move",
+  "gameId": "poker_dice",
+  "move": {
+    "action": "bank"
   }
 }
 ```
