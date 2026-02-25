@@ -810,7 +810,7 @@ button:disabled {
     --pattern-opacity-override-avatar,
     var(--pattern-opacity-override, var(--pattern-opacity-default-avatar))
   );
-  transform: rotate(-3deg);
+  transform: rotate(var(--avatar-pattern-rotation, 0deg));
   transform-origin: center;
   animation-name: avatar-pattern-scroll;
   animation-duration: var(
@@ -834,6 +834,8 @@ button:disabled {
   background-repeat: repeat;
   background-size: var(--scratch-size-surface);
   background-position: 0 0;
+  transform: rotate(var(--avatar-pattern-rotation, 0deg));
+  transform-origin: center;
   mix-blend-mode: plus-lighter;
   opacity: clamp(0.16, calc(var(--scratch-opacity-tile) * 3), 0.3);
   pointer-events: none;
@@ -1333,6 +1335,7 @@ button:disabled {
   --theme-soft: var(--red-3);
   --theme-pattern-image: var(--pattern-image-dots);
   --player-pattern-image: var(--theme-pattern-image);
+  --avatar-pattern-rotation: 90deg;
 }
 
 .theme-yellow {
@@ -1341,6 +1344,7 @@ button:disabled {
   --theme-soft: var(--yellow-3);
   --theme-pattern-image: var(--pattern-image-diagonal);
   --player-pattern-image: var(--theme-pattern-image);
+  --avatar-pattern-rotation: 0deg;
 }
 
 .theme-green {
@@ -1349,6 +1353,7 @@ button:disabled {
   --theme-soft: var(--green-3);
   --theme-pattern-image: var(--pattern-image-zig);
   --player-pattern-image: var(--theme-pattern-image);
+  --avatar-pattern-rotation: 180deg;
 }
 
 .theme-blue {
@@ -1357,6 +1362,7 @@ button:disabled {
   --theme-soft: var(--blue-3);
   --theme-pattern-image: var(--pattern-image-vertical);
   --player-pattern-image: var(--theme-pattern-image);
+  --avatar-pattern-rotation: 270deg;
 }
 
 .end-game {

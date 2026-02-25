@@ -1,5 +1,18 @@
 import { expect, test } from "@playwright/test";
 
+async function getPseudoRotationDegrees(locator, pseudo = "::before") {
+  const transform = await locator.evaluate((node, targetPseudo) => getComputedStyle(node, targetPseudo).transform, pseudo);
+  if (!transform || transform === "none") return 0;
+
+  const match = transform.match(/matrix\(([^)]+)\)/);
+  if (!match) throw new Error(`Unsupported transform value: ${transform}`);
+
+  const parts = match[1].split(",").map((value) => Number.parseFloat(value.trim()));
+  const [a, b] = parts;
+  const rawAngle = (Math.atan2(b, a) * 180) / Math.PI;
+  return ((Math.round(rawAngle) % 360) + 360) % 360;
+}
+
 test("local happy path: setup -> lobby -> pick -> game", async ({ page }) => {
   await page.goto("/");
   await page.waitForFunction(() => window.__multipassLegacyReady === true);
@@ -18,6 +31,22 @@ test("local happy path: setup -> lobby -> pick -> game", async ({ page }) => {
   const pickerAvatarNameWeight = await page.locator('#local-avatar-grid .avatar-option[data-avatar="yellow"] .avatar-name').evaluate((node) => {
     return getComputedStyle(node).fontWeight;
   });
+  const pickerYellowRotation = await getPseudoRotationDegrees(
+    page.locator('#local-avatar-grid .avatar-option[data-avatar="yellow"] .avatar-shell')
+  );
+  const pickerRedRotation = await getPseudoRotationDegrees(
+    page.locator('#local-avatar-grid .avatar-option[data-avatar="red"] .avatar-shell')
+  );
+  const pickerGreenRotation = await getPseudoRotationDegrees(
+    page.locator('#local-avatar-grid .avatar-option[data-avatar="green"] .avatar-shell')
+  );
+  const pickerBlueRotation = await getPseudoRotationDegrees(
+    page.locator('#local-avatar-grid .avatar-option[data-avatar="blue"] .avatar-shell')
+  );
+  expect(pickerYellowRotation).toBe(0);
+  expect(pickerRedRotation).toBe(90);
+  expect(pickerGreenRotation).toBe(180);
+  expect(pickerBlueRotation).toBe(270);
 
   const localContinue = page.getByRole("button", { name: "Pick a player" });
   await expect(localContinue).toBeDisabled();
@@ -77,6 +106,14 @@ test("local happy path: setup -> lobby -> pick -> game", async ({ page }) => {
   await expect(page.locator("#score-columns .score-broadcast-row")).toHaveCount(1);
   await expect(page.locator("#score-columns .score-role")).toHaveCount(0);
   await expect(page.locator("#score-columns .score-column")).toHaveCount(0);
+  const lobbyHostScoreRotationVar = await page
+    .locator("#score-columns .score-duel-side:not(.score-duel-side-guest) .player-card-shell--score")
+    .evaluate((node) => getComputedStyle(node).getPropertyValue("--avatar-pattern-rotation").trim());
+  const lobbyGuestScoreRotationVar = await page
+    .locator("#score-columns .score-duel-side-guest .player-card-shell--score")
+    .evaluate((node) => getComputedStyle(node).getPropertyValue("--avatar-pattern-rotation").trim());
+  expect(lobbyHostScoreRotationVar).toBe("0deg");
+  expect(lobbyGuestScoreRotationVar).toBe("180deg");
   const guestScoreLowerThirdStyle = await page.locator("#score-columns .score-duel-side-guest .player-card-lower-third--score").first().evaluate((node) => {
     const styles = getComputedStyle(node);
     return {

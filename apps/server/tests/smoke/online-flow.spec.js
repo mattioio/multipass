@@ -47,6 +47,22 @@ test("online happy path: host + guest choose game -> game", async ({ browser }) 
   await expect(hostPage.locator("#score-columns .score-broadcast-row")).toHaveCount(1);
   await expect(hostPage.locator("#score-columns .score-role")).toHaveCount(0);
   await expect(hostPage.locator("#score-columns .score-column")).toHaveCount(0);
+  const hostLobbyHostScoreRotationVar = await hostPage
+    .locator("#score-columns .score-duel-side:not(.score-duel-side-guest) .player-card-shell--score")
+    .evaluate((node) => getComputedStyle(node).getPropertyValue("--avatar-pattern-rotation").trim());
+  const hostLobbyGuestScoreRotationVar = await hostPage
+    .locator("#score-columns .score-duel-side-guest .player-card-shell--score")
+    .evaluate((node) => getComputedStyle(node).getPropertyValue("--avatar-pattern-rotation").trim());
+  const guestLobbyHostScoreRotationVar = await guestPage
+    .locator("#score-columns .score-duel-side:not(.score-duel-side-guest) .player-card-shell--score")
+    .evaluate((node) => getComputedStyle(node).getPropertyValue("--avatar-pattern-rotation").trim());
+  const guestLobbyGuestScoreRotationVar = await guestPage
+    .locator("#score-columns .score-duel-side-guest .player-card-shell--score")
+    .evaluate((node) => getComputedStyle(node).getPropertyValue("--avatar-pattern-rotation").trim());
+  expect(hostLobbyHostScoreRotationVar).toBe("0deg");
+  expect(hostLobbyGuestScoreRotationVar).toBe("180deg");
+  expect(guestLobbyHostScoreRotationVar).toBe("0deg");
+  expect(guestLobbyGuestScoreRotationVar).toBe("180deg");
 
   await hostPage.getByRole("button", { name: "Pick a game" }).click();
   await guestPage.getByRole("button", { name: "Pick a game" }).click();
