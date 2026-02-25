@@ -1,5 +1,10 @@
 import { expect, test } from "@playwright/test";
 
+async function gotoApp(page, hash = "") {
+  await page.goto(`http://127.0.0.1:3000/${hash}`);
+  await page.waitForFunction(() => window.__multipassLegacyReady === true);
+}
+
 async function fillJoinCodeSlots(page, rawCode) {
   const code = String(rawCode || "")
     .trim()
@@ -18,7 +23,7 @@ test("online happy path: host + guest choose game -> game", async ({ browser }) 
   const hostPage = await hostContext.newPage();
   const guestPage = await guestContext.newPage();
 
-  await hostPage.goto("http://127.0.0.1:3000/");
+  await gotoApp(hostPage);
   await hostPage.getByRole("tab", { name: "Online" }).click();
   await hostPage.getByRole("button", { name: "Host a room" }).click();
   await expect(hostPage.getByRole("button", { name: "Pick a player" })).toBeDisabled();
@@ -30,7 +35,7 @@ test("online happy path: host + guest choose game -> game", async ({ browser }) 
   await expect(hostPage.locator("#room-code")).toContainText(/[A-Z]{4}/);
   const roomCode = (await hostPage.locator("#room-code").textContent())?.trim() || "";
 
-  await guestPage.goto("http://127.0.0.1:3000/");
+  await gotoApp(guestPage);
   await guestPage.getByRole("tab", { name: "Online" }).click();
   await guestPage.getByRole("button", { name: "Join a room" }).click();
   await fillJoinCodeSlots(guestPage, roomCode);
@@ -109,8 +114,7 @@ test("online dots and boxes syncs edge moves across host and guest", async ({ br
   const hostPage = await hostContext.newPage();
   const guestPage = await guestContext.newPage();
 
-  await hostPage.goto("http://127.0.0.1:3000/");
-  await hostPage.waitForFunction(() => window.__multipassLegacyReady === true);
+  await gotoApp(hostPage);
   await hostPage.getByRole("tab", { name: "Online" }).click();
   await hostPage.getByRole("button", { name: "Host a room" }).click();
   await hostPage.locator('#host-avatar-picker .avatar-option[data-avatar="yellow"]').click();
@@ -118,8 +122,7 @@ test("online dots and boxes syncs edge moves across host and guest", async ({ br
   await expect(hostPage.locator("#screen-lobby.active")).toBeVisible();
   const roomCode = (await hostPage.locator("#room-code").textContent())?.trim() || "";
 
-  await guestPage.goto("http://127.0.0.1:3000/");
-  await guestPage.waitForFunction(() => window.__multipassLegacyReady === true);
+  await gotoApp(guestPage);
   await guestPage.getByRole("tab", { name: "Online" }).click();
   await guestPage.getByRole("button", { name: "Join a room" }).click();
   await fillJoinCodeSlots(guestPage, roomCode);
@@ -242,7 +245,7 @@ test("online deep-link join: guest opens #join=CODE invite", async ({ browser })
   const hostPage = await hostContext.newPage();
   const guestPage = await guestContext.newPage();
 
-  await hostPage.goto("http://127.0.0.1:3000/");
+  await gotoApp(hostPage);
   await hostPage.getByRole("tab", { name: "Online" }).click();
   await hostPage.getByRole("button", { name: "Host a room" }).click();
   await expect(hostPage.getByRole("button", { name: "Pick a player" })).toBeDisabled();
@@ -252,7 +255,7 @@ test("online deep-link join: guest opens #join=CODE invite", async ({ browser })
   await expect(hostPage.locator("#screen-lobby.active")).toBeVisible();
 
   const roomCode = (await hostPage.locator("#room-code").textContent())?.trim() || "";
-  await guestPage.goto(`http://127.0.0.1:3000/#join=${roomCode}`);
+  await gotoApp(guestPage, `#join=${roomCode}`);
 
   await expect(guestPage.locator("#screen-join.active")).toBeVisible();
   await expect(guestPage.locator("#join-code")).toHaveValue(roomCode);
@@ -273,7 +276,7 @@ test("online deep-link join: guest opens #join=CODE invite", async ({ browser })
 });
 
 test("online lobby Exit leaves on first click and stays on landing", async ({ page }) => {
-  await page.goto("http://127.0.0.1:3000/");
+  await gotoApp(page);
   await page.getByRole("tab", { name: "Online" }).click();
   await page.getByRole("button", { name: "Host a room" }).click();
   await page.locator('#host-avatar-picker .avatar-option[data-avatar="yellow"]').click();
@@ -293,7 +296,7 @@ test("online game Exit leaves on first click and stays on landing", async ({ bro
   const hostPage = await hostContext.newPage();
   const guestPage = await guestContext.newPage();
 
-  await hostPage.goto("http://127.0.0.1:3000/");
+  await gotoApp(hostPage);
   await hostPage.getByRole("tab", { name: "Online" }).click();
   await hostPage.getByRole("button", { name: "Host a room" }).click();
   await hostPage.locator('#host-avatar-picker .avatar-option[data-avatar="yellow"]').click();
@@ -301,7 +304,7 @@ test("online game Exit leaves on first click and stays on landing", async ({ bro
   await expect(hostPage.locator("#screen-lobby.active")).toBeVisible();
   const roomCode = (await hostPage.locator("#room-code").textContent())?.trim() || "";
 
-  await guestPage.goto("http://127.0.0.1:3000/");
+  await gotoApp(guestPage);
   await guestPage.getByRole("tab", { name: "Online" }).click();
   await guestPage.getByRole("button", { name: "Join a room" }).click();
   await fillJoinCodeSlots(guestPage, roomCode);
@@ -332,7 +335,7 @@ test("online honorific picker is independent per player", async ({ browser }) =>
   const hostPage = await hostContext.newPage();
   const guestPage = await guestContext.newPage();
 
-  await hostPage.goto("http://127.0.0.1:3000/");
+  await gotoApp(hostPage);
   await hostPage.getByRole("tab", { name: "Online" }).click();
   await hostPage.getByRole("button", { name: "Host a room" }).click();
   await hostPage.locator("#host-honorific-toolbar .switch").click();
@@ -342,7 +345,7 @@ test("online honorific picker is independent per player", async ({ browser }) =>
   await expect(hostPage.locator("#score-columns")).toContainText("Mrs Yellow");
   const roomCode = (await hostPage.locator("#room-code").textContent())?.trim() || "";
 
-  await guestPage.goto("http://127.0.0.1:3000/");
+  await gotoApp(guestPage);
   await guestPage.getByRole("tab", { name: "Online" }).click();
   await guestPage.getByRole("button", { name: "Join a room" }).click();
   await fillJoinCodeSlots(guestPage, roomCode);
@@ -401,7 +404,7 @@ test("online pick can launch poker dice module", async ({ browser }) => {
   const hostPage = await hostContext.newPage();
   const guestPage = await guestContext.newPage();
 
-  await hostPage.goto("http://127.0.0.1:3000/");
+  await gotoApp(hostPage);
   await hostPage.getByRole("tab", { name: "Online" }).click();
   await hostPage.getByRole("button", { name: "Host a room" }).click();
   await hostPage.locator('#host-avatar-picker .avatar-option[data-avatar="yellow"]').click();
@@ -409,7 +412,7 @@ test("online pick can launch poker dice module", async ({ browser }) => {
   await expect(hostPage.locator("#screen-lobby.active")).toBeVisible();
   const roomCode = (await hostPage.locator("#room-code").textContent())?.trim() || "";
 
-  await guestPage.goto("http://127.0.0.1:3000/");
+  await gotoApp(guestPage);
   await guestPage.getByRole("tab", { name: "Online" }).click();
   await guestPage.getByRole("button", { name: "Join a room" }).click();
   await fillJoinCodeSlots(guestPage, roomCode);
@@ -440,7 +443,7 @@ test("join code slots sanitize ambiguous letters and support paste/backspace flo
   const hostPage = await hostContext.newPage();
   const guestPage = await guestContext.newPage();
 
-  await hostPage.goto("http://127.0.0.1:3000/");
+  await gotoApp(hostPage);
   await hostPage.getByRole("tab", { name: "Online" }).click();
   await hostPage.getByRole("button", { name: "Host a room" }).click();
   await hostPage.locator('#host-avatar-picker .avatar-option[data-avatar="yellow"]').click();
@@ -448,7 +451,7 @@ test("join code slots sanitize ambiguous letters and support paste/backspace flo
   await expect(hostPage.locator("#screen-lobby.active")).toBeVisible();
   const roomCode = (await hostPage.locator("#room-code").textContent())?.trim() || "";
 
-  await guestPage.goto("http://127.0.0.1:3000/");
+  await gotoApp(guestPage);
   await guestPage.getByRole("tab", { name: "Online" }).click();
   await guestPage.getByRole("button", { name: "Join a room" }).click();
   await expect(guestPage.locator("#screen-join.active")).toBeVisible();
