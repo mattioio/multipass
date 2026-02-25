@@ -110,6 +110,7 @@ test("online dots and boxes syncs edge moves across host and guest", async ({ br
   const guestPage = await guestContext.newPage();
 
   await hostPage.goto("http://127.0.0.1:3000/");
+  await hostPage.waitForFunction(() => window.__multipassLegacyReady === true);
   await hostPage.getByRole("tab", { name: "Online" }).click();
   await hostPage.getByRole("button", { name: "Host a room" }).click();
   await hostPage.locator('#host-avatar-picker .avatar-option[data-avatar="yellow"]').click();
@@ -118,6 +119,7 @@ test("online dots and boxes syncs edge moves across host and guest", async ({ br
   const roomCode = (await hostPage.locator("#room-code").textContent())?.trim() || "";
 
   await guestPage.goto("http://127.0.0.1:3000/");
+  await guestPage.waitForFunction(() => window.__multipassLegacyReady === true);
   await guestPage.getByRole("tab", { name: "Online" }).click();
   await guestPage.getByRole("button", { name: "Join a room" }).click();
   await fillJoinCodeSlots(guestPage, roomCode);
