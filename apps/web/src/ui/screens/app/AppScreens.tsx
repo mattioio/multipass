@@ -201,6 +201,7 @@ export function AppScreens({ isDevBuild }: AppScreensProps) {
         <GameSurfaceShell
           showHead={false}
           state="active"
+          topStrip={<TurnStatusBar />}
           actions={(
             <GameActionRow>
               <Button id="end-game-game" variant="ghost" className="hidden">End game</Button>
@@ -208,7 +209,6 @@ export function AppScreens({ isDevBuild }: AppScreensProps) {
             </GameActionRow>
           )}
         >
-          <TurnStatusBar />
           <div id="ttt-board" className="ttt-board"></div>
           <div id="dots-layout" className="dots-layout hidden">
             <div id="dots-board" className="dots-board"></div>

@@ -5,6 +5,7 @@ export interface GameSurfaceShellProps extends PropsWithChildren {
   status?: string;
   state?: "idle" | "active" | "disabled" | "waiting" | "error" | "complete";
   showHead?: boolean;
+  topStrip?: ReactNode;
   actions?: ReactNode;
 }
 
@@ -13,6 +14,7 @@ export function GameSurfaceShell({
   status = "Ready",
   state = "idle",
   showHead = true,
+  topStrip = null,
   actions = null,
   children
 }: GameSurfaceShellProps) {
@@ -24,6 +26,7 @@ export function GameSurfaceShell({
           <span className={`game-chip game-surface-status state-${state}`}>{status}</span>
         </div>
       ) : null}
+      {topStrip ? <div className="game-surface-strip">{topStrip}</div> : null}
       <div className="game-surface-body">{children}</div>
       {actions ? <div className="game-surface-actions">{actions}</div> : null}
     </div>

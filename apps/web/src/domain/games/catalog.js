@@ -186,6 +186,21 @@ export const gameCatalog = {
       };
     },
     localEngine: createBattleshipsEngine()
+  },
+  word_fight: {
+    id: "word_fight",
+    name: "Word Fight",
+    minPlayers: 2,
+    maxPlayers: 2,
+    comingSoon: true,
+    isAvailable: false,
+    bannerKey: "word_fight",
+    surfaceType: "placeholder",
+    mode: "board",
+    visibility: "public",
+    getWinRevealReason() {
+      return null;
+    }
   }
 };
 

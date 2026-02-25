@@ -131,6 +131,14 @@ export const CONTRACT_EXAMPLES = Object.freeze({
             maxPlayers: 2,
             comingSoon: false,
             bannerKey: "dots_and_boxes"
+          },
+          {
+            id: "word_fight",
+            name: "Word Fight",
+            minPlayers: 2,
+            maxPlayers: 2,
+            comingSoon: true,
+            bannerKey: "word_fight"
           }
         ]
       },

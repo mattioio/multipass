@@ -1273,8 +1273,10 @@ function getGameName(room, gameId) {
 
 function getGameBannerClass(game) {
   const key = game?.bannerKey || game?.id || "";
+  if (key === "tic_tac_toe") return "game-banner-tic-tac-toe";
   if (key === "battleships") return "game-banner-battleships";
   if (key === "dots_and_boxes") return "game-banner-dots-and-boxes";
+  if (key === "word_fight" || key === "words") return "game-banner-word-fight";
   return "game-banner-tic-tac-toe";
 }
 

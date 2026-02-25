@@ -9,19 +9,19 @@ describe("game host patterns", () => {
         title="Tic Tac Toe"
         status="Waiting"
         state="waiting"
+        topStrip={<TurnStatusBar id="turn-indicator-test" />}
         actions={(
           <GameActionRow>
             <Button type="button">Primary</Button>
           </GameActionRow>
         )}
-      >
-        <TurnStatusBar id="turn-indicator-test" />
-      </GameSurfaceShell>
+      />
     );
 
     expect(screen.getByText("Tic Tac Toe")).toBeInTheDocument();
     expect(screen.getByText("Waiting")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Primary" })).toBeInTheDocument();
+    expect(document.querySelector(".game-surface-strip #turn-indicator-test")).toBeInTheDocument();
     expect(document.getElementById("turn-indicator-test")).toBeInTheDocument();
   });
 

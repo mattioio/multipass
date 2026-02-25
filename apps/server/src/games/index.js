@@ -11,6 +11,14 @@ const games = {
     ...dotsAndBoxes,
     comingSoon: false,
     bannerKey: "dots_and_boxes"
+  },
+  word_fight: {
+    id: "word_fight",
+    name: "Word Fight",
+    minPlayers: 2,
+    maxPlayers: 2,
+    comingSoon: true,
+    bannerKey: "word_fight"
   }
 };
 
