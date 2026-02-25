@@ -2,10 +2,12 @@ import { render } from "@testing-library/react";
 import { App } from "../App";
 
 describe("App inline CTA layout", () => {
-  it("uses top landing tabs and inline CTA ownership without fixed footer", () => {
+  it("uses top landing tabs with inline CTAs and a hidden app dock shell", () => {
     render(<App />);
 
-    expect(document.getElementById("app-fixed-footer")).not.toBeInTheDocument();
+    const dock = document.getElementById("app-fixed-footer");
+    expect(dock).toBeInTheDocument();
+    expect(dock).toHaveClass("hidden");
     expect(document.getElementById("landing-tab-local")).toBeInTheDocument();
     expect(document.getElementById("landing-tab-online")).toBeInTheDocument();
 

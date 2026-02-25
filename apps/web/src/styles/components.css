@@ -1638,6 +1638,59 @@ button:disabled {
   animation: loading-dots 1.2s steps(3, end) infinite;
 }
 
+.app-action-dock {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 26;
+  display: none;
+  pointer-events: none;
+}
+
+.app-dock-slot {
+  width: min(100%, 720px);
+  margin: 0 auto;
+  padding:
+    0
+    calc(12px + var(--safe-right))
+    calc(10px + var(--safe-bottom))
+    calc(12px + var(--safe-left));
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+}
+
+.app-dock-slot-landing {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.app-dock-btn {
+  width: 100%;
+  min-height: 50px;
+  justify-content: center;
+  pointer-events: auto;
+  border-radius: 16px;
+}
+
+.app-dock-slot .app-dock-btn {
+  box-shadow: 0 14px 24px color-mix(in srgb, var(--cta) 18%, transparent);
+}
+
+.app-dock-slot .app-dock-btn.ghost {
+  box-shadow: 0 10px 20px color-mix(in srgb, #0b1120 10%, transparent);
+}
+
+@media (max-width: 720px) {
+  .app-action-dock {
+    display: block;
+  }
+
+  body[data-fixed-footer-active="true"] main {
+    padding-bottom: calc(var(--app-dock-height) + var(--safe-bottom));
+  }
+}
+
 .screen-head {
   display: flex;
   align-items: center;

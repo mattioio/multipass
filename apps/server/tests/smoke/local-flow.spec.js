@@ -570,6 +570,11 @@ test("local lobby duel sides remain side-by-side on mobile", async ({ page }) =>
   await expect(page.locator("#screen-lobby.active")).toBeVisible();
 
   await expect(page.locator("#score-columns .score-duel-side")).toHaveCount(2);
+  await expect(page.locator("#app-fixed-footer")).not.toHaveClass(/hidden/);
+  await expect(page.locator("#app-dock-slot-lobby")).not.toHaveClass(/hidden/);
+  const heroPosition = await page.locator(".hero").evaluate((node) => getComputedStyle(node).position);
+  expect(heroPosition).toBe("sticky");
+
   const layout = await page.locator("#score-columns .score-duel-sides").evaluate((node) => {
     const sides = Array.from(node.querySelectorAll(".score-duel-side"));
     const [left, right] = sides.map((side) => side.getBoundingClientRect());
@@ -581,4 +586,8 @@ test("local lobby duel sides remain side-by-side on mobile", async ({ page }) =>
 
   expect(layout.sameRow).toBeTruthy();
   expect(layout.separated).toBeTruthy();
+
+  await page.locator("#app-dock-lobby-ready").click();
+  await expect(page.locator("#screen-pick.active")).toBeVisible();
+  await expect(page.locator("#app-fixed-footer")).toHaveClass(/hidden/);
 });

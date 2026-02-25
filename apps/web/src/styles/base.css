@@ -6,12 +6,19 @@
 body {
   margin: 0;
   min-height: 100vh;
+  min-height: 100dvh;
   font-family: "OfficeCodeProRegular", "Office Code Pro", "Space Grotesk", monospace;
   color: var(--text);
   background: linear-gradient(180deg, var(--bg-top) 0%, var(--bg-mid) 52%, var(--bg-bottom) 100%);
   position: relative;
   isolation: isolate;
   overflow-x: hidden;
+  overscroll-behavior-y: contain;
+}
+
+#root {
+  min-height: 100vh;
+  min-height: 100dvh;
 }
 
 body::before {
@@ -174,10 +181,14 @@ body::after {
   isolation: isolate;
   max-width: 1180px;
   margin: 0 auto;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
   padding:
     var(--space-6)
     var(--app-edge-padding)
-    var(--space-6);
+    calc(var(--space-6) + var(--safe-bottom));
 }
 
 #app::after {
@@ -328,6 +339,8 @@ body:not([data-screen="landing"]) {
 main {
   display: grid;
   gap: var(--space-5);
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .screen {
@@ -346,4 +359,47 @@ h5 {
   font-family: var(--title-font);
   letter-spacing: 0.02em;
   margin: 0;
+}
+
+@media (max-width: 720px) {
+  body:is(
+    [data-screen="lobby"],
+    [data-screen="pick"],
+    [data-screen="wait"],
+    [data-screen="game"],
+    [data-screen="pass"],
+    [data-screen="winner"]
+  ) #app {
+    padding-top: calc(var(--space-2) + var(--safe-top));
+  }
+
+  body:is(
+    [data-screen="lobby"],
+    [data-screen="pick"],
+    [data-screen="wait"],
+    [data-screen="game"],
+    [data-screen="pass"],
+    [data-screen="winner"]
+  ) #app > .hero {
+    position: sticky;
+    top: 0;
+    z-index: 24;
+    margin-bottom: var(--space-3);
+    padding: 4px 0 8px;
+    gap: var(--space-2);
+    backdrop-filter: blur(10px);
+    background: color-mix(in srgb, var(--page-bg) 80%, transparent);
+    border-radius: 14px;
+  }
+
+  body:is(
+    [data-screen="lobby"],
+    [data-screen="pick"],
+    [data-screen="wait"],
+    [data-screen="game"],
+    [data-screen="pass"],
+    [data-screen="winner"]
+  ) .logo-image {
+    width: var(--logo-width, clamp(110px, 30vw, 150px));
+  }
 }

@@ -1,5 +1,5 @@
 import type { PropsWithChildren } from "react";
-import { ActionToast, AppShell, Button, Modal, Toast } from "../components";
+import { ActionToast, AppActionDock, AppShell, Button, Modal, Toast } from "../components";
 
 export interface AppLayoutProps extends PropsWithChildren {
   isDevBuild: boolean;
@@ -11,6 +11,7 @@ export function AppLayout({ children, isDevBuild }: AppLayoutProps) {
       <AppShell>
         {children}
       </AppShell>
+      <AppActionDock />
 
       <Toast />
       <ActionToast />

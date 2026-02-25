@@ -1686,7 +1686,94 @@ body[data-mode="dark"] .dots-board {
   grid-template-columns: minmax(260px, 420px);
 }
 
+@keyframes mobile-screen-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @media (max-width: 720px) {
+  body:is(
+    [data-screen="lobby"],
+    [data-screen="pick"],
+    [data-screen="wait"],
+    [data-screen="game"],
+    [data-screen="pass"],
+    [data-screen="winner"]
+  ) main {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    gap: 10px;
+  }
+
+  body:is(
+    [data-screen="lobby"],
+    [data-screen="pick"],
+    [data-screen="wait"],
+    [data-screen="game"],
+    [data-screen="pass"],
+    [data-screen="winner"]
+  ) .screen.active {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+  }
+
+  body:is(
+    [data-screen="lobby"],
+    [data-screen="pick"],
+    [data-screen="wait"],
+    [data-screen="game"],
+    [data-screen="pass"],
+    [data-screen="winner"]
+  ) .screen.active > * {
+    width: 100%;
+  }
+
+  body[data-screen="game"] #screen-game .game-surface-shell {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  body[data-screen="game"] #screen-game .game-surface-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    align-content: start;
+  }
+
+  body[data-screen="lobby"] #screen-lobby .lobby-panel,
+  body[data-screen="pick"] #screen-pick,
+  body[data-screen="wait"] #screen-wait .wait-panel,
+  body[data-screen="pass"] #screen-pass .pass-panel,
+  body[data-screen="winner"] #screen-winner .winner-panel {
+    flex: 1 1 auto;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    body:is(
+      [data-screen="lobby"],
+      [data-screen="pick"],
+      [data-screen="wait"],
+      [data-screen="game"],
+      [data-screen="pass"],
+      [data-screen="winner"]
+    ) .screen.active {
+      animation: mobile-screen-enter var(--motion-base) var(--ease-out);
+    }
+  }
+
   .player-card-shell--score {
     width: 100%;
     height: auto;
@@ -1995,6 +2082,13 @@ body[data-mode="dark"] .dots-board {
 
   .button-row {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  body[data-screen="local"] #local-continue,
+  body[data-screen="host"] #create-room,
+  body[data-screen="join"] #join-room,
+  body[data-screen="lobby"] #ready-cta {
+    display: none;
   }
 
   .screen-head {

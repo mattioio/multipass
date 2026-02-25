@@ -45,6 +45,7 @@ import {
   queueLocalHandoff,
   shouldShowLocalPassScreen
 } from "./localPrivacy.js";
+import { syncDockFromSourceButtons } from "./appDockSync.js";
 import { copyRoomInviteLink } from "./shareLink.js";
 
 const LOCAL_REJOIN_KEY = "multipass_last_local_match";
@@ -93,12 +94,11 @@ const WIN_MORPH_PAUSE_MS = 1000;
 const JOIN_CODE_LENGTH = 4;
 const JOIN_CODE_DISALLOWED_CHARS_REGEX = /[IO]/g;
 const FIXED_FOOTER_SCREEN_SLOT_MAP = Object.freeze({
-  landing: "app-fixed-footer-mode",
-  local: "local-continue",
-  host: "create-room",
-  join: "join-room",
-  lobby: "ready-cta",
-  winner: "winner-play-again"
+  local: "app-dock-slot-local",
+  host: "app-dock-slot-host",
+  join: "app-dock-slot-join",
+  lobby: "app-dock-slot-lobby",
+  winner: "app-dock-slot-winner"
 });
 const HERO_ACTION_BUTTON_IDS = ["hero-left-action", "hero-left-action-2", "hero-left-action-3"];
 
@@ -773,6 +773,8 @@ function updateFixedFooter() {
   if (!activeSlotId) {
     document.body.removeAttribute("data-fixed-footer-active");
     footer.classList.add("hidden");
+    footer.setAttribute("aria-hidden", "true");
+    syncDockFromSourceButtons({ landingMode: state.landingMode });
     return;
   }
 
@@ -782,6 +784,8 @@ function updateFixedFooter() {
   }
   document.body.setAttribute("data-fixed-footer-active", "true");
   footer.classList.remove("hidden");
+  footer.setAttribute("aria-hidden", "false");
+  syncDockFromSourceButtons({ landingMode: state.landingMode });
 }
 
 function getPrimaryHeroActionConfig() {
@@ -1827,6 +1831,7 @@ function renderRoom(options = {}) {
 
   state.lastLeaderId = leaderId;
   updateHeroActions();
+  syncDockFromSourceButtons({ landingMode: state.landingMode });
 }
 
 function renderLobby(room) {
@@ -1837,6 +1842,7 @@ function renderLobby(room) {
     cta.textContent = "Waiting for second player";
     cta.classList.add("is-waiting-copy");
     cta.dataset.action = "none";
+    syncDockFromSourceButtons({ landingMode: state.landingMode });
     return;
   }
   cta.classList.remove("is-waiting-copy");
@@ -1849,12 +1855,14 @@ function renderLobby(room) {
       cta.textContent = "Finish current game";
       cta.classList.remove("is-waiting-copy");
       cta.dataset.action = "none";
+      syncDockFromSourceButtons({ landingMode: state.landingMode });
       return;
     }
     cta.disabled = false;
     cta.textContent = "Pick a game";
     cta.classList.remove("is-waiting-copy");
     cta.dataset.action = "pick";
+    syncDockFromSourceButtons({ landingMode: state.landingMode });
     return;
   }
 
@@ -1863,6 +1871,7 @@ function renderLobby(room) {
     cta.textContent = "Waiting for players...";
     cta.classList.remove("is-waiting-copy");
     cta.dataset.action = "none";
+    syncDockFromSourceButtons({ landingMode: state.landingMode });
     return;
   }
 
@@ -1870,6 +1879,7 @@ function renderLobby(room) {
   cta.textContent = "Pick a game";
   cta.classList.remove("is-waiting-copy");
   cta.dataset.action = "pick";
+  syncDockFromSourceButtons({ landingMode: state.landingMode });
 }
 
 function renderScoreboard(room, leaderId) {
@@ -3640,6 +3650,7 @@ function setup() {
   initHashRouting();
   updateHeroActions();
   updateHeroRoomCodeVisibility();
+  syncDockFromSourceButtons({ landingMode: state.landingMode });
   connect();
   window.__multipassLegacyReady = true;
 }
@@ -4011,6 +4022,7 @@ function setLandingMode(mode, options = {}) {
       staggerLandingPanel(landingPanelLocal);
     }
   }
+  syncDockFromSourceButtons({ landingMode: state.landingMode });
 }
 
 function resetJoinFlow() {
@@ -4107,6 +4119,7 @@ function renderJoinSetup() {
     syncHonorificToggleInputs();
     refreshAvatarPickerLabels();
     refreshStaticPlayerArt();
+    syncDockFromSourceButtons({ landingMode: state.landingMode });
     return;
   }
 
@@ -4125,6 +4138,7 @@ function renderJoinSetup() {
   syncHonorificToggleInputs();
   refreshAvatarPickerLabels();
   refreshStaticPlayerArt();
+  syncDockFromSourceButtons({ landingMode: state.landingMode });
 }
 
 function renderHostSetupCta() {
@@ -4134,10 +4148,12 @@ function renderHostSetupCta() {
   if (!avatar) {
     hostCta.disabled = true;
     hostCta.textContent = "Pick a player";
+    syncDockFromSourceButtons({ landingMode: state.landingMode });
     return;
   }
   hostCta.disabled = false;
   hostCta.textContent = "Continue";
+  syncDockFromSourceButtons({ landingMode: state.landingMode });
 }
 
 function renderLocalSetupCta() {
@@ -4148,10 +4164,12 @@ function renderLocalSetupCta() {
   if (!avatar) {
     localCta.disabled = true;
     localCta.textContent = "Pick a player";
+    syncDockFromSourceButtons({ landingMode: state.landingMode });
     return;
   }
   localCta.disabled = false;
   localCta.textContent = "Continue";
+  syncDockFromSourceButtons({ landingMode: state.landingMode });
 }
 
 function startLocalRoomFromSetupSelections() {

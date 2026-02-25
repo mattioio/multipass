@@ -1,4 +1,5 @@
 export { AppShell } from "./AppShell";
+export { AppActionDock } from "./AppActionDock";
 export { Screen } from "./Screen";
 export { Card } from "./Card";
 export { CardHeader } from "./CardHeader";
