@@ -15,6 +15,10 @@ const DEFAULT_WS_MAX_PAYLOAD_BYTES = 64 * 1024;
 const DEFAULT_WS_RATE_LIMIT_WINDOW_MS = 10_000;
 const DEFAULT_WS_RATE_LIMIT_MAX_REQUESTS = 80;
 const DEFAULT_PRUNE_INTERVAL_MS = 60_000;
+const DEFAULT_PUBLIC_FRONTEND_ORIGINS = Object.freeze([
+  "https://mattioio.github.io",
+  "https://multipass.loreandorder.com"
+]);
 
 function parseInteger(value, fallback) {
   const numeric = Number(value);
@@ -29,6 +33,10 @@ function parseOrigins(value) {
     .filter(Boolean);
 }
 
+function mergeOrigins(origins) {
+  return [...new Set((origins || []).map((origin) => String(origin || "").trim()).filter(Boolean))];
+}
+
 function resolveDefaultWebRoot() {
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = path.dirname(__filename);
@@ -36,6 +44,12 @@ function resolveDefaultWebRoot() {
 }
 
 export function createMultipassServer(overrides = {}) {
+  const envAllowedOrigins = parseOrigins(process.env.WS_ALLOWED_ORIGINS);
+  const effectiveAllowedOrigins = overrides.wsAllowedOrigins
+    ?? (envAllowedOrigins.length > 0
+      ? mergeOrigins([...envAllowedOrigins, ...DEFAULT_PUBLIC_FRONTEND_ORIGINS])
+      : []);
+
   const config = {
     port: parseInteger(overrides.port ?? process.env.PORT, DEFAULT_PORT),
     roomTtlMs: parseInteger(overrides.roomTtlMs ?? process.env.ROOM_TTL_MS, DEFAULT_ROOM_TTL_MS),
@@ -51,7 +65,7 @@ export function createMultipassServer(overrides = {}) {
       overrides.wsRateLimitMaxRequests ?? process.env.WS_RATE_LIMIT_MAX_REQUESTS,
       DEFAULT_WS_RATE_LIMIT_MAX_REQUESTS
     ),
-    wsAllowedOrigins: overrides.wsAllowedOrigins || parseOrigins(process.env.WS_ALLOWED_ORIGINS),
+    wsAllowedOrigins: effectiveAllowedOrigins,
     serveStatic: overrides.serveStatic ?? process.env.SERVE_STATIC !== "false",
     webRoot: overrides.webRoot || resolveDefaultWebRoot(),
     pruneIntervalMs: parseInteger(overrides.pruneIntervalMs, DEFAULT_PRUNE_INTERVAL_MS)
