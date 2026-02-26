@@ -282,15 +282,36 @@ export function AppScreens({ isDevBuild }: AppScreensProps) {
             </section>
           </div>
           <div id="poker-dice-layout" className="poker-dice-layout hidden">
-            <p id="poker-dice-status" className="subtext poker-dice-status">Roll up to three times, then bank your hand.</p>
-            <div id="poker-dice-score" className="poker-dice-score"></div>
+            <p id="poker-dice-round-title" className="poker-dice-round-title">Round 1 of 3</p>
             <div id="poker-dice-dice" className="poker-dice-dice"></div>
+            <div className="poker-dice-mini-card">
+              <p id="poker-dice-projected" className="poker-dice-projected">Scoring hand: Roll to reveal.</p>
+              <Button id="poker-dice-info" variant="ghost" className="compact-action">Info</Button>
+            </div>
             <div className="poker-dice-actions">
               <Button id="poker-dice-roll" className="compact-action">Roll</Button>
               <Button id="poker-dice-bank" variant="ghost" className="compact-action">Bank</Button>
+              <Button id="poker-dice-pass-play" variant="ghost" className="compact-action hidden">Pass play</Button>
               <Button id="poker-dice-clear-hold" variant="ghost" className="compact-action">Clear holds</Button>
             </div>
-            <div id="poker-dice-summary" className="poker-dice-summary"></div>
+          </div>
+          <div id="poker-dice-info-modal" className="modal hidden" role="dialog" aria-modal="true" aria-labelledby="poker-dice-info-title">
+            <div className="modal-backdrop" data-close-poker-info="true"></div>
+            <div className="modal-content poker-dice-help-content">
+              <div className="modal-head">
+                <h2 id="poker-dice-info-title">Poker hand scores</h2>
+                <button id="close-poker-dice-info" className="ghost" type="button" aria-label="Close poker dice hand guide">✕</button>
+              </div>
+              <div className="poker-dice-help-list">
+                <div className="poker-dice-help-row"><strong>Royal flush</strong><span>20 pts</span></div>
+                <div className="poker-dice-help-row"><strong>Straight flush</strong><span>16 pts</span></div>
+                <div className="poker-dice-help-row"><strong>Five of a kind</strong><span>12 pts</span></div>
+                <div className="poker-dice-help-row"><strong>Four of a kind</strong><span>10 pts</span></div>
+                <div className="poker-dice-help-row"><strong>Full house</strong><span>8 pts</span></div>
+                <div className="poker-dice-help-row"><strong>Three of a kind</strong><span>4 pts</span></div>
+                <div className="poker-dice-help-row"><strong>Two pair</strong><span>2 pts</span></div>
+              </div>
+            </div>
           </div>
           <div id="game-result-panel" className="game-result-panel game-result-overlay hidden" aria-live="polite">
             <div className="game-result-sheet">

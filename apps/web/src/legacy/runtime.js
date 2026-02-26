@@ -30,6 +30,12 @@ import { getPatternConfig, resetPatternConfig, setPatternConfig } from "../ui/sh
 import { createToastController } from "../ui/shared/toast.js";
 import playerAvatar from "../assets/player.svg";
 import playerAvatarAlt from "../assets/player2.svg";
+import pokerDieAceFace from "../assets/games/Poker Dice/die-Ace.svg";
+import pokerDieKingFace from "../assets/games/Poker Dice/die-king.svg";
+import pokerDieQueenFace from "../assets/games/Poker Dice/die-queen.svg";
+import pokerDieJackFace from "../assets/games/Poker Dice/die-jack.svg";
+import pokerDieTenFace from "../assets/games/Poker Dice/die-10.svg";
+import pokerDieNineFace from "../assets/games/Poker Dice/die-9.svg";
 import { normalizeRoomCode, parseScreenRoute } from "./hashRoute.js";
 import {
   clamp,
@@ -93,6 +99,21 @@ const WIN_MORPH_ANIM_MS = 500;
 const WIN_MORPH_PAUSE_MS = 1000;
 const JOIN_CODE_LENGTH = 4;
 const JOIN_CODE_DISALLOWED_CHARS_REGEX = /[IO]/g;
+const POKER_DICE_PER_HAND = 6;
+const POKER_DICE_FACE_ASSETS = Object.freeze({
+  1: Object.freeze({ label: "Ace", src: pokerDieAceFace }),
+  2: Object.freeze({ label: "King", src: pokerDieKingFace }),
+  3: Object.freeze({ label: "Queen", src: pokerDieQueenFace }),
+  4: Object.freeze({ label: "Jack", src: pokerDieJackFace }),
+  5: Object.freeze({ label: "10", src: pokerDieTenFace }),
+  6: Object.freeze({ label: "9", src: pokerDieNineFace })
+});
+const POKER_DICE_FACE_VALUES = Object.freeze([1, 2, 3, 4, 5, 6]);
+const POKER_DICE_INITIAL_FACES = Object.freeze([6, 5, 4, 3, 2, 1]);
+const POKER_DICE_ROLL_DURATION_MS = 2000;
+const POKER_DICE_SHUFFLE_MIN_MS = 80;
+const POKER_DICE_SHUFFLE_MAX_MS = 120;
+const POKER_DICE_SETTLE_MS = 220;
 const FIXED_FOOTER_SCREEN_SLOT_MAP = Object.freeze({
   local: "app-dock-slot-local",
   host: "app-dock-slot-host",
@@ -101,6 +122,27 @@ const FIXED_FOOTER_SCREEN_SLOT_MAP = Object.freeze({
   winner: "app-dock-slot-winner"
 });
 const HERO_ACTION_BUTTON_IDS = ["hero-left-action", "hero-left-action-2", "hero-left-action-3"];
+
+function createInitialPokerDiceFxState() {
+  return {
+    rollingIndices: new Set(),
+    intervalByIndex: new Map(),
+    rollProfileByIndex: new Map(),
+    shuffleCursorByIndex: new Map(),
+    lastShownFaceByIndex: new Map(),
+    settleUntilByIndex: new Map(),
+    preRollSignatureByPlayer: {},
+    preRollFacesByPlayer: {},
+    stopTimeoutId: null,
+    pendingRollToken: 0,
+    activeRollToken: 0,
+    minEndAt: 0,
+    waitingForResolution: false,
+    expectedRollsUsed: null,
+    viewerPlayerId: null,
+    baselineDiceKey: ""
+  };
+}
 
 function createInitialBoardGestureState() {
   return {
@@ -171,6 +213,7 @@ function createInitialState() {
     localBattleshipPendingTargetIndex: null,
     localBattleshipLastPhase: null,
     pokerDicePendingHolds: [],
+    pokerDiceFx: createInitialPokerDiceFxState(),
     wordFightDraftGuess: "",
     hostHonorific: "mr",
     joinHonorific: "mr",
@@ -1281,6 +1324,14 @@ function getTurnHeaderScores(room) {
     return scores;
   }
 
+  if (activeGameId === "poker_dice") {
+    scores.host.showGameScore = true;
+    scores.guest.showGameScore = true;
+    scores.host.gameScore = asScore(host?.id ? stateGame.pointsByPlayer?.[host.id] : 0);
+    scores.guest.gameScore = asScore(guest?.id ? stateGame.pointsByPlayer?.[guest.id] : 0);
+    return scores;
+  }
+
   return scores;
 }
 
@@ -1493,7 +1544,9 @@ function saveLocalRejoinSnapshot(room) {
       ? state.localBattleshipPendingTargetIndex
       : null,
     pokerDicePendingHolds: Array.isArray(state.pokerDicePendingHolds)
-      ? state.pokerDicePendingHolds.map((value) => Number(value)).filter((value) => Number.isInteger(value) && value >= 0 && value < 5)
+      ? state.pokerDicePendingHolds
+        .map((value) => Number(value))
+        .filter((value) => Number.isInteger(value) && value >= 0 && value < POKER_DICE_PER_HAND)
       : [],
     room
   };
@@ -1550,7 +1603,9 @@ function hydrateLocalFromSnapshot(snapshot) {
     : null;
   state.localBattleshipLastPhase = snapshot.room?.game?.state?.phase || null;
   state.pokerDicePendingHolds = Array.isArray(snapshot.pokerDicePendingHolds)
-    ? snapshot.pokerDicePendingHolds.map((value) => Number(value)).filter((value) => Number.isInteger(value) && value >= 0 && value < 5)
+    ? snapshot.pokerDicePendingHolds
+      .map((value) => Number(value))
+      .filter((value) => Number.isInteger(value) && value >= 0 && value < POKER_DICE_PER_HAND)
     : [];
   renderRoom();
   showScreen(resolveScreen(state.room), { history: "replace" });
@@ -1639,6 +1694,7 @@ function advanceLocalRoundByAlternation() {
   state.localBattleshipPendingTargetIndex = null;
   state.localBattleshipLastPhase = null;
   state.pokerDicePendingHolds = [];
+  resetPokerDiceFx();
   state.room.updatedAt = Date.now();
   handleLocalUpdate();
 }
@@ -1683,6 +1739,7 @@ function startLocalGame(gameId) {
   state.localBattleshipPendingTargetIndex = null;
   state.localBattleshipLastPhase = null;
   state.pokerDicePendingHolds = [];
+  resetPokerDiceFx();
   if (state.room.round) {
     state.room.round.hostGameId = game.id;
     state.room.round.guestGameId = game.id;
@@ -1721,6 +1778,7 @@ function startLocalRoundFromChoice(gameId) {
   state.localBattleshipPendingTargetIndex = null;
   state.localBattleshipLastPhase = null;
   state.pokerDicePendingHolds = [];
+  resetPokerDiceFx();
 
   if (!state.room.round.firstPlayerId) {
     const players = getLocalPlayers(state.room);
@@ -1750,6 +1808,12 @@ function applyLocalMove(move) {
   }
   if (state.room.game.id === "poker_dice") {
     state.pokerDicePendingHolds = [];
+    const action = String(move?.action || "").toLowerCase();
+    if (action !== "roll" && result.state.nextPlayerId !== actingPlayerId) {
+      resetPokerDiceFx();
+    }
+  } else {
+    resetPokerDiceFx();
   }
   if (!previousWinner && result.state.winnerId) {
     const winner = playerById(state.room, result.state.winnerId);
@@ -1760,17 +1824,26 @@ function applyLocalMove(move) {
   }
   const hasEnded = Boolean(result.state.winnerId || result.state.draw);
   if (game.visibility === "hidden_pass_device") {
-    if (hasEnded) {
+    const nextPlayerId = result.state.nextPlayerId || null;
+    const didTurnChange = Boolean(nextPlayerId && nextPlayerId !== actingPlayerId);
+    const shouldQueueHandoff = state.room.game.id === "poker_dice"
+      ? (hasEnded || didTurnChange)
+      : true;
+    if (shouldQueueHandoff && hasEnded) {
       state.localPrivacy = queueLocalHandoff(state.localPrivacy, {
         nextViewerPlayerId: null,
         prompt: ""
       });
     } else {
-      const nextPlayer = playerById(state.room, result.state.nextPlayerId);
-      state.localPrivacy = queueLocalHandoff(state.localPrivacy, {
-        nextViewerPlayerId: result.state.nextPlayerId,
-        prompt: `Pass now to ${getDisplayPlayerName(nextPlayer, "next player")}.`
-      });
+      if (shouldQueueHandoff) {
+        const nextPlayer = playerById(state.room, nextPlayerId);
+        state.localPrivacy = queueLocalHandoff(state.localPrivacy, {
+          nextViewerPlayerId: nextPlayerId,
+          prompt: `Pass now to ${getDisplayPlayerName(nextPlayer, "next player")}.`
+        });
+      } else if (state.room.game.id === "poker_dice" && state.localPrivacy.stage === "handoff") {
+        state.localPrivacy = confirmLocalHandoff(state.localPrivacy);
+      }
     }
   }
   state.room.updatedAt = Date.now();
@@ -1782,6 +1855,7 @@ function acknowledgeLocalPassHandoff() {
   state.localPrivacy = confirmLocalHandoff(state.localPrivacy);
   state.localBattleshipPendingTargetIndex = null;
   state.pokerDicePendingHolds = [];
+  resetPokerDiceFx();
   state.room.updatedAt = Date.now();
   handleLocalUpdate();
 }
@@ -1809,6 +1883,7 @@ function leaveRoom(options = {}) {
   state.autoJoinCode = null;
   state.pendingDeepLinkJoinCode = null;
   state.joinValidationSource = null;
+  resetPokerDiceFx();
   document.body.removeAttribute("data-theme");
   showScreen("landing", { history: historyMode });
 }
@@ -1832,6 +1907,7 @@ function leaveLocalMatch({ saveForRejoin, history = "push" } = {}) {
   state.localBattleshipPendingTargetIndex = null;
   state.localBattleshipLastPhase = null;
   state.pokerDicePendingHolds = [];
+  resetPokerDiceFx();
   document.body.removeAttribute("data-theme");
   updateLocalRejoinCard();
   showScreen("landing", { history });
@@ -3260,14 +3336,296 @@ function getPokerDiceState(room) {
 }
 
 function getPokerCategoryLabel(category) {
+  if (category === "royal_flush") return "Royal flush";
   if (category === "five_kind") return "Five of a kind";
   if (category === "four_kind") return "Four of a kind";
   if (category === "full_house") return "Full house";
-  if (category === "straight") return "Straight";
+  if (category === "flush") return "Straight flush";
   if (category === "three_kind") return "Three of a kind";
   if (category === "two_pair") return "Two pair";
   if (category === "one_pair") return "One pair";
   return "High card";
+}
+
+function getPokerCategoryPoints(category) {
+  if (category === "royal_flush") return 20;
+  if (category === "flush") return 16;
+  if (category === "five_kind") return 12;
+  if (category === "four_kind") return 10;
+  if (category === "full_house") return 8;
+  if (category === "three_kind") return 4;
+  if (category === "two_pair") return 2;
+  if (category === "one_pair") return 0;
+  return 0;
+}
+
+function getPokerDieFace(value) {
+  const normalized = Number(value);
+  if (!Number.isInteger(normalized)) return null;
+  return POKER_DICE_FACE_ASSETS[normalized] || null;
+}
+
+function getPokerDiceValuesKey(values = []) {
+  if (!Array.isArray(values) || !values.length) return "";
+  return values
+    .map((value) => (Number.isInteger(Number(value)) ? Number(value) : ""))
+    .join(",");
+}
+
+function randomBetween(min, max) {
+  const low = Number(min);
+  const high = Number(max);
+  if (!Number.isFinite(low) || !Number.isFinite(high) || high <= low) return low;
+  return Math.floor(Math.random() * (high - low + 1)) + low;
+}
+
+function randomFloatBetween(min, max) {
+  const low = Number(min);
+  const high = Number(max);
+  if (!Number.isFinite(low) || !Number.isFinite(high) || high <= low) return low;
+  return (Math.random() * (high - low)) + low;
+}
+
+function getPokerInitialFaceForIndex(index) {
+  const normalized = Number(index);
+  if (!Number.isInteger(normalized) || normalized < 0) return POKER_DICE_INITIAL_FACES[0];
+  return POKER_DICE_INITIAL_FACES[normalized % POKER_DICE_INITIAL_FACES.length];
+}
+
+function getPokerPreRollFaces(playerId, handNumber) {
+  const fx = state.pokerDiceFx || createInitialPokerDiceFxState();
+  if (!state.pokerDiceFx) {
+    state.pokerDiceFx = fx;
+  }
+
+  const normalizedPlayerId = String(playerId || "");
+  if (!normalizedPlayerId) {
+    return [...POKER_DICE_INITIAL_FACES];
+  }
+
+  const normalizedHandNumber = Math.max(1, Number(handNumber || 1));
+  const signature = `${normalizedHandNumber}:${normalizedPlayerId}`;
+  const previousSignature = fx.preRollSignatureByPlayer?.[normalizedPlayerId] || null;
+
+  if (!fx.preRollSignatureByPlayer || typeof fx.preRollSignatureByPlayer !== "object") {
+    fx.preRollSignatureByPlayer = {};
+  }
+  if (!fx.preRollFacesByPlayer || typeof fx.preRollFacesByPlayer !== "object") {
+    fx.preRollFacesByPlayer = {};
+  }
+
+  if (previousSignature !== signature || !Array.isArray(fx.preRollFacesByPlayer[normalizedPlayerId])) {
+    fx.preRollSignatureByPlayer[normalizedPlayerId] = signature;
+    fx.preRollFacesByPlayer[normalizedPlayerId] = [...POKER_DICE_INITIAL_FACES];
+  }
+
+  return [...fx.preRollFacesByPlayer[normalizedPlayerId]];
+}
+
+function clearPokerDiceFxIntervals() {
+  if (!(state.pokerDiceFx?.intervalByIndex instanceof Map)) return;
+  state.pokerDiceFx.intervalByIndex.forEach((timerId) => {
+    window.clearInterval(timerId);
+  });
+  state.pokerDiceFx.intervalByIndex.clear();
+  if (Number.isInteger(state.pokerDiceFx.stopTimeoutId)) {
+    window.clearTimeout(state.pokerDiceFx.stopTimeoutId);
+  }
+  state.pokerDiceFx.stopTimeoutId = null;
+}
+
+function resetPokerDiceFx() {
+  clearPokerDiceFxIntervals();
+  state.pokerDiceFx = createInitialPokerDiceFxState();
+}
+
+function getPokerDieElementByIndex(index) {
+  const diceEl = document.getElementById("poker-dice-dice");
+  if (!(diceEl instanceof HTMLElement)) return null;
+  return diceEl.querySelector(`[data-die-index="${index}"]`);
+}
+
+function ensurePokerDieCube(die) {
+  if (!(die instanceof HTMLButtonElement)) return null;
+  let cube = die.querySelector(".poker-cube");
+  if (!(cube instanceof HTMLElement)) {
+    cube = document.createElement("span");
+    cube.className = "poker-cube";
+    die.appendChild(cube);
+  }
+
+  if (cube.querySelectorAll(".poker-cube-face").length !== POKER_DICE_FACE_VALUES.length) {
+    cube.innerHTML = "";
+    for (const faceValue of POKER_DICE_FACE_VALUES) {
+      const face = document.createElement("span");
+      face.className = `poker-cube-face face-${faceValue}`;
+      const faceData = getPokerDieFace(faceValue);
+      if (faceData?.src) {
+        face.style.setProperty("--poker-cube-face-image", `url("${faceData.src}")`);
+      }
+      cube.appendChild(face);
+    }
+  }
+  return cube;
+}
+
+function setPokerDieCubeOrientation(cube, value) {
+  if (!(cube instanceof HTMLElement)) return;
+  for (const faceValue of POKER_DICE_FACE_VALUES) {
+    cube.classList.remove(`show-${faceValue}`);
+  }
+  const normalized = Number(value);
+  const faceValue = Number.isInteger(normalized) && normalized >= 1 && normalized <= 6 ? normalized : 1;
+  cube.classList.add(`show-${faceValue}`);
+}
+
+function setPokerDieFaceElement(die, value) {
+  if (!(die instanceof HTMLButtonElement)) return;
+  const cube = ensurePokerDieCube(die);
+  if (!(cube instanceof HTMLElement)) return;
+
+  const faceData = getPokerDieFace(value);
+  if (!faceData) {
+    setPokerDieCubeOrientation(cube, 1);
+    die.setAttribute("aria-label", "Die value hidden");
+    return;
+  }
+
+  setPokerDieCubeOrientation(cube, Number(value));
+  die.setAttribute("aria-label", `Die value ${faceData.label}`);
+}
+
+function startPokerDiceRollFx({ diceCount, holdIndices = [], baselineDice = [], baselineRollsUsed = 0, viewerPlayerId = null }) {
+  if (!Number.isInteger(diceCount) || diceCount < 1) return;
+  const holds = new Set(
+    Array.isArray(holdIndices)
+      ? holdIndices.filter((value) => Number.isInteger(value) && value >= 0 && value < diceCount)
+      : []
+  );
+
+  resetPokerDiceFx();
+  const fx = state.pokerDiceFx;
+  fx.pendingRollToken += 1;
+  fx.activeRollToken = fx.pendingRollToken;
+  fx.waitingForResolution = true;
+  fx.minEndAt = Date.now() + POKER_DICE_ROLL_DURATION_MS;
+  fx.expectedRollsUsed = Number.isInteger(baselineRollsUsed) ? baselineRollsUsed + 1 : null;
+  fx.viewerPlayerId = viewerPlayerId || null;
+  fx.baselineDiceKey = getPokerDiceValuesKey(baselineDice);
+  const rollToken = fx.activeRollToken;
+  fx.stopTimeoutId = window.setTimeout(() => {
+    const currentFx = state.pokerDiceFx;
+    if (!currentFx || currentFx.activeRollToken !== rollToken) return;
+    finalizePokerDiceRollFx();
+    renderRoom();
+  }, POKER_DICE_ROLL_DURATION_MS);
+
+  for (let index = 0; index < diceCount; index += 1) {
+    if (holds.has(index)) continue;
+    fx.rollingIndices.add(index);
+    const rollProfile = {
+      shuffleOffset: randomBetween(0, POKER_DICE_FACE_VALUES.length - 1),
+      speedMs: randomBetween(480, 620),
+      startDelayMs: randomBetween(0, 140)
+    };
+    fx.rollProfileByIndex.set(index, rollProfile);
+    fx.shuffleCursorByIndex.set(index, rollProfile.shuffleOffset);
+    fx.lastShownFaceByIndex.set(index, POKER_DICE_FACE_VALUES[rollProfile.shuffleOffset]);
+    const tickMs = randomBetween(POKER_DICE_SHUFFLE_MIN_MS, POKER_DICE_SHUFFLE_MAX_MS);
+    const timerId = window.setInterval(() => {
+      const currentFx = state.pokerDiceFx;
+      if (!currentFx || currentFx.activeRollToken !== fx.activeRollToken || !currentFx.rollingIndices.has(index)) {
+        return;
+      }
+      const die = getPokerDieElementByIndex(index);
+      if (!(die instanceof HTMLButtonElement)) return;
+      const currentCursor = Number(currentFx.shuffleCursorByIndex.get(index) || 0);
+      const step = randomBetween(1, 2);
+      let nextCursor = (currentCursor + step) % POKER_DICE_FACE_VALUES.length;
+      let nextFace = POKER_DICE_FACE_VALUES[nextCursor];
+      let retry = 0;
+      while (retry < 2) {
+        const matchingFaceCount = [...currentFx.rollingIndices].reduce((count, dieIndex) => {
+          if (dieIndex === index) return count;
+          return count + (Number(currentFx.lastShownFaceByIndex.get(dieIndex)) === nextFace ? 1 : 0);
+        }, 0);
+        if (matchingFaceCount < 2) break;
+        nextCursor = (nextCursor + 1) % POKER_DICE_FACE_VALUES.length;
+        nextFace = POKER_DICE_FACE_VALUES[nextCursor];
+        retry += 1;
+      }
+      currentFx.shuffleCursorByIndex.set(index, nextCursor);
+      currentFx.lastShownFaceByIndex.set(index, nextFace);
+      setPokerDieFaceElement(die, nextFace);
+    }, tickMs);
+    fx.intervalByIndex.set(index, timerId);
+  }
+}
+
+function finalizePokerDiceRollFx() {
+  const fx = state.pokerDiceFx;
+  if (!fx) return;
+  clearPokerDiceFxIntervals();
+  const settleUntil = Date.now() + POKER_DICE_SETTLE_MS;
+  fx.rollingIndices.forEach((index) => {
+    fx.settleUntilByIndex.set(index, settleUntil);
+  });
+  fx.rollingIndices.clear();
+  fx.activeRollToken = 0;
+  fx.waitingForResolution = false;
+}
+
+function syncPokerDiceFxForFrame({ viewerPlayerId, dice, rollsUsed }) {
+  const fx = state.pokerDiceFx;
+  if (!fx || !fx.waitingForResolution) return;
+
+  if (fx.viewerPlayerId && viewerPlayerId && fx.viewerPlayerId !== viewerPlayerId) {
+    resetPokerDiceFx();
+    return;
+  }
+
+  const hasResolved = (
+    Number.isInteger(fx.expectedRollsUsed) && Number(rollsUsed) >= fx.expectedRollsUsed
+  ) || getPokerDiceValuesKey(dice) !== fx.baselineDiceKey;
+
+  if (!hasResolved) return;
+  if (Date.now() < fx.minEndAt) return;
+  finalizePokerDiceRollFx();
+}
+
+function classifyPokerProjection(diceValues = []) {
+  const dice = Array.isArray(diceValues)
+    ? diceValues.map((value) => Number(value)).filter((value) => Number.isInteger(value) && value >= 1 && value <= 6)
+    : [];
+  if (dice.length < POKER_DICE_PER_HAND) return null;
+
+  const values = [...dice].sort((a, b) => b - a);
+  const counts = new Map();
+  for (const value of values) {
+    counts.set(value, (counts.get(value) || 0) + 1);
+  }
+  const entries = [...counts.entries()]
+    .map(([value, count]) => ({ value: Number(value), count: Number(count) }))
+    .sort((a, b) => {
+      if (a.count !== b.count) return b.count - a.count;
+      return b.value - a.value;
+    });
+  const countPattern = entries.map((entry) => entry.count);
+  const valueSet = new Set(values);
+  const isRoyalFlush = [1, 2, 3, 4, 5].every((value) => valueSet.has(value));
+  const isFlush = [2, 3, 4, 5, 6].every((value) => valueSet.has(value));
+  const triple = entries.find((entry) => entry.count >= 3) || null;
+  const pair = entries.find((entry) => entry.value !== triple?.value && entry.count >= 2) || null;
+
+  if (isRoyalFlush) return "royal_flush";
+  if (isFlush) return "flush";
+  if ((countPattern[0] || 0) >= 5) return "five_kind";
+  if ((countPattern[0] || 0) >= 4) return "four_kind";
+  if (triple && pair) return "full_house";
+  if ((countPattern[0] || 0) >= 3) return "three_kind";
+  if ((countPattern[0] || 0) >= 2 && (countPattern[1] || 0) >= 2) return "two_pair";
+  if ((countPattern[0] || 0) >= 2) return "one_pair";
+  return "high_card";
 }
 
 function sanitizeWordFightGuess(rawGuess) {
@@ -3358,7 +3716,9 @@ function commitWordFightGuess(rawGuess) {
 function commitPokerDiceRoll() {
   if (!state.room?.game || state.room.game.id !== "poker_dice") return false;
   const hold = Array.isArray(state.pokerDicePendingHolds)
-    ? state.pokerDicePendingHolds.map((value) => Number(value)).filter((value) => Number.isInteger(value) && value >= 0 && value < 5)
+    ? state.pokerDicePendingHolds
+      .map((value) => Number(value))
+      .filter((value) => Number.isInteger(value) && value >= 0 && value < POKER_DICE_PER_HAND)
     : [];
   state.pokerDicePendingHolds = [];
   if (isLocalMode()) {
@@ -3377,6 +3737,54 @@ function commitPokerDiceBank() {
   } else {
     send({ type: "move", gameId: state.room.game.id, move: { action: "bank" } });
   }
+  return true;
+}
+
+function commitPokerDicePassPlay() {
+  if (!isLocalMode()) return false;
+  if (!state.room?.game || state.room.game.id !== "poker_dice") return false;
+  if (state.localPrivacy.stage === "handoff") return false;
+
+  const stateGame = getPokerDiceState(state.room);
+  if (!stateGame || stateGame.winnerId || stateGame.draw || stateGame.phase === "finished") {
+    return false;
+  }
+
+  const viewerPlayerId = ensureLocalViewer(state.room);
+  if (!viewerPlayerId) return false;
+
+  const currentHand = stateGame.currentHand || {};
+  const myFinal = currentHand.finalByPlayer?.[viewerPlayerId] || null;
+  const isMyTurn = stateGame.nextPlayerId === viewerPlayerId;
+  const rollsUsed = Number(currentHand.rollsUsedByPlayer?.[viewerPlayerId] || 0);
+
+  if (!myFinal && isMyTurn) {
+    if (rollsUsed < 1) {
+      showToast("Roll at least once before passing.");
+      return false;
+    }
+    const banked = commitPokerDiceBank();
+    if (!banked) return false;
+  }
+
+  const nextStateGame = getPokerDiceState(state.room);
+  const nextPlayerId = nextStateGame?.nextPlayerId || null;
+  const nextPlayer = playerById(state.room, nextPlayerId);
+  if (isHiddenPassGame(state.room.game.id)) {
+    state.localPrivacy = queueLocalHandoff(state.localPrivacy, {
+      nextViewerPlayerId: nextPlayerId,
+      prompt: `Pass now to ${getDisplayPlayerName(nextPlayer, "next player")}.`
+    });
+  } else {
+    state.localPrivacy = {
+      ...state.localPrivacy,
+      viewerPlayerId: nextPlayerId,
+      pendingViewerPlayerId: null,
+      stage: "visible",
+      prompt: ""
+    };
+  }
+  state.room.updatedAt = Date.now();
   return true;
 }
 
@@ -3538,61 +3946,41 @@ function renderWordFight(room) {
 
 function renderPokerDice(room) {
   const layout = document.getElementById("poker-dice-layout");
-  const statusEl = document.getElementById("poker-dice-status");
-  const scoreEl = document.getElementById("poker-dice-score");
   const diceEl = document.getElementById("poker-dice-dice");
+  const roundTitleEl = document.getElementById("poker-dice-round-title");
+  const projectedEl = document.getElementById("poker-dice-projected");
   const rollButton = document.getElementById("poker-dice-roll");
   const bankButton = document.getElementById("poker-dice-bank");
   const clearButton = document.getElementById("poker-dice-clear-hold");
-  const summaryEl = document.getElementById("poker-dice-summary");
+  const passPlayButton = document.getElementById("poker-dice-pass-play");
+  const actionsEl = document.querySelector("#poker-dice-layout .poker-dice-actions");
   const indicatorEl = document.getElementById("turn-indicator");
 
-  if (!(layout instanceof HTMLElement) || !(diceEl instanceof HTMLElement) || !(scoreEl instanceof HTMLElement) || !(summaryEl instanceof HTMLElement)) return;
+  if (!(layout instanceof HTMLElement) || !(diceEl instanceof HTMLElement)) return;
 
   const stateGame = getPokerDiceState(room);
   if (!stateGame) {
+    resetPokerDiceFx();
     layout.classList.add("hidden");
     diceEl.innerHTML = "";
-    scoreEl.innerHTML = "";
-    summaryEl.innerHTML = "";
+    if (roundTitleEl instanceof HTMLElement) roundTitleEl.textContent = "";
+    if (projectedEl instanceof HTMLElement) projectedEl.textContent = "Scoring hand: Roll to reveal.";
     state.pokerDicePendingHolds = [];
     if (rollButton instanceof HTMLButtonElement) rollButton.disabled = true;
     if (bankButton instanceof HTMLButtonElement) bankButton.disabled = true;
     if (clearButton instanceof HTMLButtonElement) clearButton.disabled = true;
+    if (passPlayButton instanceof HTMLButtonElement) {
+      passPlayButton.disabled = true;
+      passPlayButton.classList.add("hidden");
+    }
     return;
   }
 
   layout.classList.remove("hidden");
   const reveal = getWinRevealSnapshot(room);
-  if (indicatorEl instanceof HTMLElement) {
-    if (stateGame.winnerId) {
-      renderTurnIndicatorSplit(indicatorEl, room, stateGame.winnerId, "winner", reveal);
-    } else if (stateGame.draw) {
-      renderTurnIndicatorSplit(indicatorEl, room, null, "draw", reveal);
-    } else {
-      renderTurnIndicatorSplit(indicatorEl, room, stateGame.nextPlayerId || null, "turn", reveal);
-    }
-  }
 
   const viewerPlayerId = isLocalMode() ? ensureLocalViewer(room) : (state.you?.playerId || null);
   const viewer = playerById(room, viewerPlayerId);
-  const opponentId = stateGame.playerOrder?.find((id) => id !== viewerPlayerId) || null;
-  const opponent = playerById(room, opponentId);
-
-  const handWins = stateGame.handWins || {};
-  scoreEl.innerHTML = "";
-  const scoreMine = document.createElement("span");
-  scoreMine.className = "poker-dice-score-chip";
-  scoreMine.textContent = `${getDisplayPlayerName(viewer, "You")}: ${Number(handWins[viewerPlayerId] || 0)}`;
-  const scoreOpp = document.createElement("span");
-  scoreOpp.className = "poker-dice-score-chip";
-  scoreOpp.textContent = `${getDisplayPlayerName(opponent, "Opponent")}: ${Number(handWins[opponentId] || 0)}`;
-  const scoreHand = document.createElement("span");
-  scoreHand.className = "poker-dice-score-chip";
-  scoreHand.textContent = `Hand ${Number(stateGame.currentHandNumber || 1)} · Ties ${Number(stateGame.handTies || 0)}`;
-  scoreEl.appendChild(scoreMine);
-  scoreEl.appendChild(scoreOpp);
-  scoreEl.appendChild(scoreHand);
 
   const isParticipant = Boolean(isLocalMode() || state.you?.role === "host" || state.you?.role === "guest");
   const localBlocked = isLocalMode() && state.localPrivacy.stage === "handoff";
@@ -3601,39 +3989,107 @@ function renderPokerDice(room) {
 
   const currentHand = stateGame.currentHand || {};
   const rollsUsed = Number(currentHand.rollsUsedByPlayer?.[viewerPlayerId] || 0);
+  const diceCount = Math.max(
+    1,
+    Number(Array.isArray(currentHand.diceByPlayer?.[viewerPlayerId]) ? currentHand.diceByPlayer[viewerPlayerId].length : 0)
+      || POKER_DICE_PER_HAND
+  );
   const dice = Array.isArray(currentHand.diceByPlayer?.[viewerPlayerId])
     ? currentHand.diceByPlayer[viewerPlayerId]
-    : [null, null, null, null, null];
+    : Array(diceCount).fill(null);
   const locks = Array.isArray(currentHand.locksByPlayer?.[viewerPlayerId])
     ? currentHand.locksByPlayer[viewerPlayerId]
-    : [false, false, false, false, false];
+    : Array(diceCount).fill(false);
   const myFinal = currentHand.finalByPlayer?.[viewerPlayerId] || null;
-  const oppFinal = currentHand.finalByPlayer?.[opponentId] || null;
+  const hasRolledOnce = rollsUsed >= 1;
+  const currentHandNumber = Math.max(1, Number(stateGame.currentHandNumber || 1));
+  const isPreRollForViewer = Boolean(viewerPlayerId && !myFinal && rollsUsed === 0);
+  const renderedDice = isPreRollForViewer
+    ? getPokerPreRollFaces(viewerPlayerId, currentHandNumber)
+    : (hasRolledOnce
+      ? dice
+      : Array.from({ length: diceCount }, (_, index) => getPokerInitialFaceForIndex(index)));
+  const showPassPlay = isLocalMode() && !isFinished && !localBlocked && (rollsUsed >= 3 || Boolean(myFinal));
+  const showInitialRollOnly = !myFinal && !showPassPlay && !hasRolledOnce;
+  if (roundTitleEl instanceof HTMLElement) {
+    const totalRounds = Number.isInteger(Number(stateGame.bestOfHands)) ? Number(stateGame.bestOfHands) : 3;
+    const currentRound = Math.max(1, Number(stateGame.currentHandNumber || 1));
+    roundTitleEl.textContent = `Round ${currentRound} of ${totalRounds}`;
+  }
+  syncPokerDiceFxForFrame({ viewerPlayerId, dice, rollsUsed });
+  const isFxRolling = Boolean(
+    state.pokerDiceFx?.waitingForResolution &&
+    state.pokerDiceFx.viewerPlayerId === viewerPlayerId &&
+    state.pokerDiceFx.rollingIndices.size > 0
+  );
+  const projectedCategory = myFinal?.category || classifyPokerProjection(dice);
+  if (projectedEl instanceof HTMLElement) {
+    if (isFxRolling) {
+      // Keep current text while dice are rolling so the new hand appears only after settle.
+    } else if (isPreRollForViewer) {
+      projectedEl.textContent = "Scoring hand: Roll to reveal.";
+    } else if (!projectedCategory) {
+      projectedEl.textContent = "Scoring hand: Roll to reveal.";
+    } else {
+      const points = getPokerCategoryPoints(projectedCategory);
+      projectedEl.textContent = `Scoring hand: ${getPokerCategoryLabel(projectedCategory)} (${points} pts)`;
+    }
+  }
+
+  if (indicatorEl instanceof HTMLElement) {
+    if (stateGame.winnerId) {
+      renderTurnIndicatorSplit(indicatorEl, room, stateGame.winnerId, "winner", reveal);
+    } else if (stateGame.draw) {
+      renderTurnIndicatorSplit(indicatorEl, room, null, "draw", reveal);
+    } else {
+      const activeHeaderPlayerId = showPassPlay && viewerPlayerId ? viewerPlayerId : (stateGame.nextPlayerId || null);
+      renderTurnIndicatorSplit(indicatorEl, room, activeHeaderPlayerId, "turn", reveal);
+    }
+  }
 
   if (!Array.isArray(state.pokerDicePendingHolds)) {
     state.pokerDicePendingHolds = [];
   }
-  if (!canInteract || myFinal) {
+  if (!canInteract || myFinal || !hasRolledOnce) {
     state.pokerDicePendingHolds = [];
   } else if (!state.pokerDicePendingHolds.length && rollsUsed > 0) {
     state.pokerDicePendingHolds = locks
       .map((locked, index) => (locked ? index : null))
       .filter((value) => Number.isInteger(value));
   } else {
-    state.pokerDicePendingHolds = state.pokerDicePendingHolds.filter((index) => Number.isInteger(index) && index >= 0 && index < 5);
+    state.pokerDicePendingHolds = state.pokerDicePendingHolds.filter(
+      (index) => Number.isInteger(index) && index >= 0 && index < diceCount
+    );
   }
 
   const holdSet = new Set(state.pokerDicePendingHolds);
 
   diceEl.innerHTML = "";
-  for (let index = 0; index < 5; index += 1) {
+  const now = Date.now();
+  for (let index = 0; index < diceCount; index += 1) {
     const die = document.createElement("button");
     die.type = "button";
     die.className = "poker-die";
-    die.textContent = Number.isInteger(dice[index]) ? String(dice[index]) : "-";
-    die.disabled = !canInteract || rollsUsed < 1 || Boolean(myFinal);
+    die.dataset.dieIndex = String(index);
+    const dieValue = Number.isInteger(renderedDice[index]) ? Number(renderedDice[index]) : null;
+    setPokerDieFaceElement(die, dieValue);
+    die.disabled = !canInteract || !hasRolledOnce || Boolean(myFinal);
+    const rollProfile = state.pokerDiceFx?.rollProfileByIndex?.get(index) || null;
+    if (rollProfile) {
+      die.style.setProperty("--pd-roll-speed-ms", `${Number(rollProfile.speedMs) || 550}ms`);
+      die.style.setProperty("--pd-roll-delay-ms", `${Number(rollProfile.startDelayMs) || 0}ms`);
+    }
     if (holdSet.has(index)) {
       die.classList.add("is-hold");
+    }
+    if (state.pokerDiceFx?.rollingIndices.has(index)) {
+      die.classList.add("is-rolling");
+    }
+    const settleUntil = Number(state.pokerDiceFx?.settleUntilByIndex?.get(index) || 0);
+    if (settleUntil > now) {
+      die.classList.add("is-settling");
+    } else if (state.pokerDiceFx?.settleUntilByIndex instanceof Map) {
+      state.pokerDiceFx.settleUntilByIndex.delete(index);
     }
     if (!die.disabled) {
       die.addEventListener("click", () => {
@@ -3648,8 +4104,8 @@ function renderPokerDice(room) {
     diceEl.appendChild(die);
   }
 
-  const canRoll = canInteract && !myFinal && rollsUsed < 3;
-  const canBank = canInteract && !myFinal && rollsUsed >= 1 && rollsUsed < 3;
+  const canRoll = canInteract && !myFinal && rollsUsed < 3 && !isFxRolling;
+  const canBank = canInteract && !myFinal && rollsUsed >= 1 && !isFxRolling;
   if (rollButton instanceof HTMLButtonElement) {
     rollButton.disabled = !canRoll;
     rollButton.textContent = rollsUsed < 1 ? "Roll" : `Roll (${rollsUsed}/3)`;
@@ -3658,50 +4114,25 @@ function renderPokerDice(room) {
     bankButton.disabled = !canBank;
   }
   if (clearButton instanceof HTMLButtonElement) {
-    clearButton.disabled = !canRoll || state.pokerDicePendingHolds.length === 0;
+    clearButton.disabled = !canRoll || state.pokerDicePendingHolds.length === 0 || isFxRolling;
+  }
+  if (passPlayButton instanceof HTMLButtonElement) {
+    passPlayButton.classList.toggle("hidden", !showPassPlay);
+    passPlayButton.disabled = !showPassPlay;
+  }
+  if (actionsEl instanceof HTMLElement) {
+    actionsEl.classList.toggle("is-pass-only", showPassPlay);
+  }
+  if (rollButton instanceof HTMLButtonElement) {
+    rollButton.classList.toggle("hidden", showPassPlay);
+  }
+  if (bankButton instanceof HTMLButtonElement) {
+    bankButton.classList.toggle("hidden", showPassPlay || showInitialRollOnly);
+  }
+  if (clearButton instanceof HTMLButtonElement) {
+    clearButton.classList.toggle("hidden", showPassPlay || showInitialRollOnly);
   }
 
-  summaryEl.innerHTML = "";
-  if (myFinal) {
-    const row = document.createElement("div");
-    row.className = "poker-dice-summary-row";
-    row.textContent = `${getDisplayPlayerName(viewer, "You")}: ${getPokerCategoryLabel(myFinal.category)} (${myFinal.dice.join(" ")})`;
-    summaryEl.appendChild(row);
-  }
-  if (oppFinal) {
-    const row = document.createElement("div");
-    row.className = "poker-dice-summary-row";
-    row.textContent = `${getDisplayPlayerName(opponent, "Opponent")}: ${getPokerCategoryLabel(oppFinal.category)} (${oppFinal.dice.join(" ")})`;
-    summaryEl.appendChild(row);
-  }
-
-  const lastHistory = Array.isArray(stateGame.history) && stateGame.history.length
-    ? stateGame.history[stateGame.history.length - 1]
-    : null;
-  if (lastHistory?.type === "hand_tie") {
-    const row = document.createElement("div");
-    row.className = "poker-dice-summary-row";
-    row.textContent = "Tie hand. Replay this hand.";
-    summaryEl.appendChild(row);
-  }
-
-  if (statusEl) {
-    if (isFinished) {
-      const winner = playerById(room, stateGame.winnerId);
-      statusEl.textContent = winner
-        ? `${getDisplayPlayerName(winner, "Someone")} wins the match.`
-        : "Match complete.";
-    } else if (myFinal && !oppFinal) {
-      statusEl.textContent = "Hand banked. Waiting for opponent.";
-    } else if (canInteract) {
-      statusEl.textContent = rollsUsed === 0
-        ? "Your turn. Roll to start this hand."
-        : "Choose holds, then roll again or bank.";
-    } else {
-      const active = playerById(room, stateGame.nextPlayerId);
-      statusEl.textContent = `Waiting for ${getDisplayPlayerName(active, "opponent")}.`;
-    }
-  }
 }
 
 function renderPickScreen(room) {
@@ -3872,6 +4303,7 @@ function setup() {
     state.localBattleshipPendingTargetIndex = null;
     state.localBattleshipLastPhase = null;
     state.pokerDicePendingHolds = [];
+    resetPokerDiceFx();
     updateLocalPickers();
     showScreen("local", { history: "push" });
   });
@@ -3902,6 +4334,7 @@ function setup() {
     };
   }
   initSettingsModal();
+  initPokerDiceInfoModal();
   registerServiceWorker();
   initInstallPromptHandling();
   state.localRejoinSnapshot = loadLocalRejoinSnapshot();
@@ -4171,13 +4604,44 @@ function setup() {
   const pokerDiceRollButton = document.getElementById("poker-dice-roll");
   if (pokerDiceRollButton instanceof HTMLButtonElement) {
     pokerDiceRollButton.addEventListener("click", () => {
-      commitPokerDiceRoll();
+      const room = state.room;
+      const gameState = room ? getPokerDiceState(room) : null;
+      const viewerPlayerId = room && isLocalMode() ? ensureLocalViewer(room) : (state.you?.playerId || null);
+      const currentHand = gameState?.currentHand || {};
+      const rollsUsed = Number(currentHand.rollsUsedByPlayer?.[viewerPlayerId] || 0);
+      const dice = Array.isArray(currentHand.diceByPlayer?.[viewerPlayerId])
+        ? currentHand.diceByPlayer[viewerPlayerId]
+        : Array(POKER_DICE_PER_HAND).fill(null);
+      const locks = Array.isArray(currentHand.locksByPlayer?.[viewerPlayerId])
+        ? currentHand.locksByPlayer[viewerPlayerId]
+        : Array(dice.length || POKER_DICE_PER_HAND).fill(false);
+      const hold = Array.isArray(state.pokerDicePendingHolds) && state.pokerDicePendingHolds.length
+        ? state.pokerDicePendingHolds
+        : locks.map((locked, index) => (locked ? index : null)).filter((value) => Number.isInteger(value));
+      const diceCount = Math.max(
+        1,
+        Number(Array.isArray(dice) ? dice.length : 0) || POKER_DICE_PER_HAND
+      );
+      startPokerDiceRollFx({
+        diceCount,
+        holdIndices: hold,
+        baselineDice: dice,
+        baselineRollsUsed: rollsUsed,
+        viewerPlayerId
+      });
+
+      const didCommit = commitPokerDiceRoll();
+      if (!didCommit) {
+        resetPokerDiceFx();
+        return;
+      }
       renderRoom();
     });
   }
   const pokerDiceBankButton = document.getElementById("poker-dice-bank");
   if (pokerDiceBankButton instanceof HTMLButtonElement) {
     pokerDiceBankButton.addEventListener("click", () => {
+      resetPokerDiceFx();
       commitPokerDiceBank();
       renderRoom();
     });
@@ -4187,6 +4651,14 @@ function setup() {
     pokerDiceClearHoldButton.addEventListener("click", () => {
       state.pokerDicePendingHolds = [];
       renderRoom();
+    });
+  }
+  const pokerDicePassPlayButton = document.getElementById("poker-dice-pass-play");
+  if (pokerDicePassPlayButton instanceof HTMLButtonElement) {
+    pokerDicePassPlayButton.addEventListener("click", () => {
+      resetPokerDiceFx();
+      const passed = commitPokerDicePassPlay();
+      if (passed) renderRoom();
     });
   }
 
@@ -4304,6 +4776,38 @@ function initSettingsModal() {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
     if (target.dataset.closeSettings === "true") {
+      closeModal();
+    }
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !modal.classList.contains("hidden")) {
+      closeModal();
+    }
+  });
+}
+
+function initPokerDiceInfoModal() {
+  const openButton = document.getElementById("poker-dice-info");
+  const closeButton = document.getElementById("close-poker-dice-info");
+  const modal = document.getElementById("poker-dice-info-modal");
+  if (!openButton || !closeButton || !modal) return;
+
+  const closeModal = () => {
+    modal.classList.add("hidden");
+  };
+
+  openButton.addEventListener("click", () => {
+    modal.classList.remove("hidden");
+    closeButton.focus();
+  });
+
+  closeButton.addEventListener("click", closeModal);
+
+  modal.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    if (target.dataset.closePokerInfo === "true") {
       closeModal();
     }
   });
@@ -4772,6 +5276,7 @@ function startLocalRoomFromSetupSelections() {
   state.localBattleshipPendingTargetIndex = null;
   state.localBattleshipLastPhase = null;
   state.pokerDicePendingHolds = [];
+  resetPokerDiceFx();
   state.localStep = "p1";
   saveLocalRejoinSnapshot(state.room);
   updateLocalRejoinCard();

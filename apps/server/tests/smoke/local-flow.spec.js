@@ -557,6 +557,69 @@ test("dots and boxes keeps turn on box completion and reaches winner overlay", a
   await expect(page.locator("#turn-indicator .turn-player-score-match")).toHaveCount(0);
 });
 
+test("local poker dice banks points immediately and swaps to pass-only CTA at end of turn", async ({ page }) => {
+  await page.goto("/");
+  await page.waitForFunction(() => window.__multipassLegacyReady === true);
+
+  await page.getByRole("button", { name: "Start" }).click();
+  await expect(page.locator("#screen-local.active")).toBeVisible();
+  await page.locator('#local-avatar-grid .avatar-option[data-avatar="yellow"]').click();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.locator('#local-avatar-grid .avatar-option[data-avatar="green"]').click();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.locator("#screen-lobby.active")).toBeVisible();
+
+  await page.getByRole("button", { name: "Pick a game" }).click();
+  await expect(page.locator("#screen-pick.active")).toBeVisible();
+  await page.getByRole("button", { name: "Play Poker Dice" }).click();
+  await expect(page.locator("#screen-game.active")).toBeVisible();
+  await expect(page.locator("#poker-dice-layout")).not.toHaveClass(/hidden/);
+  await expect(page.locator("#poker-dice-dice .poker-die")).toHaveCount(6);
+
+  await expect(page.locator("#poker-dice-pass-play")).toHaveClass(/hidden/);
+  await expect(page.locator("#poker-dice-roll")).not.toHaveClass(/hidden/);
+  await expect(page.locator("#poker-dice-bank")).not.toHaveClass(/hidden/);
+  await expect(page.locator("#poker-dice-clear-hold")).not.toHaveClass(/hidden/);
+
+  await page.locator("#poker-dice-roll").click();
+  await expect(page.locator("#poker-dice-bank")).toBeEnabled({ timeout: 6000 });
+  await page.locator("#poker-dice-bank").click();
+
+  await expect(page.locator("#poker-dice-pass-play")).not.toHaveClass(/hidden/);
+  await expect(page.locator("#poker-dice-roll")).toHaveClass(/hidden/);
+  await expect(page.locator("#poker-dice-bank")).toHaveClass(/hidden/);
+  await expect(page.locator("#poker-dice-clear-hold")).toHaveClass(/hidden/);
+
+  const bankedSnapshot = await page.evaluate(() => {
+    const appState = window.__multipassStore.getState();
+    const viewerId = appState.localPrivacy.viewerPlayerId;
+    const gameState = appState.room.game.state;
+    const final = gameState.currentHand.finalByPlayer[viewerId];
+    return {
+      viewerId,
+      bankedPoints: final?.bankedPoints ?? null,
+      pointsAfterBank: final?.pointsAfterBank ?? null,
+      pointsByPlayer: gameState.pointsByPlayer?.[viewerId] ?? null,
+      nextPlayerId: gameState.nextPlayerId || null
+    };
+  });
+
+  expect(bankedSnapshot.bankedPoints).not.toBeNull();
+  expect(bankedSnapshot.pointsAfterBank).toBe(bankedSnapshot.pointsByPlayer);
+  expect(bankedSnapshot.pointsAfterBank).toBeGreaterThanOrEqual(0);
+  expect(bankedSnapshot.nextPlayerId).not.toBe(bankedSnapshot.viewerId);
+
+  await page.locator("#poker-dice-pass-play").click();
+  await expect(page.locator("#poker-dice-roll")).not.toHaveClass(/hidden/);
+  await expect(page.locator("#poker-dice-pass-play")).toHaveClass(/hidden/);
+
+  const afterPassViewer = await page.evaluate(() => {
+    const appState = window.__multipassStore.getState();
+    return appState.localPrivacy.viewerPlayerId;
+  });
+  expect(afterPassViewer).toBe(bankedSnapshot.nextPlayerId);
+});
+
 test("local lobby duel sides remain side-by-side on mobile", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
@@ -634,7 +697,8 @@ test("local pick can launch word fight module", async ({ page }) => {
 
   await expect(page.locator("#screen-game.active")).toBeVisible();
   await expect(page.locator("#screen-pass.active")).toHaveCount(0);
-  await expect(page.locator("#word-fight-keyboard")).toHaveClass(/hidden/);
+  await expect(page.locator("#word-fight-keyboard")).toBeVisible();
+  await expect(page.locator('#word-fight-keyboard [data-word-fight-key="T"]')).toBeDisabled();
   await expect(page.locator("#word-fight-actions")).not.toHaveClass(/hidden/);
   await expect(page.locator("#word-fight-pass-turn")).toBeVisible();
   await expect(page.locator("#word-fight-status")).toBeHidden();

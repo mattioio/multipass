@@ -430,8 +430,8 @@ test("online pick can launch poker dice module", async ({ browser }) => {
   await expect(guestPage.locator("#screen-game.active")).toBeVisible();
   await expect(hostPage.locator("#poker-dice-layout")).not.toHaveClass(/hidden/);
   await expect(guestPage.locator("#poker-dice-layout")).not.toHaveClass(/hidden/);
-  await expect(hostPage.locator("#poker-dice-dice .poker-die")).toHaveCount(5);
-  await expect(guestPage.locator("#poker-dice-dice .poker-die")).toHaveCount(5);
+  await expect(hostPage.locator("#poker-dice-dice .poker-die")).toHaveCount(6);
+  await expect(guestPage.locator("#poker-dice-dice .poker-die")).toHaveCount(6);
 
   await hostContext.close();
   await guestContext.close();

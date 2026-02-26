@@ -1,17 +1,17 @@
-const DICE_PER_HAND = 5;
+const DICE_PER_HAND = 6;
 const MAX_ROLLS_PER_PLAYER = 3;
-const HANDS_TO_WIN = 2;
 const MAX_HANDS = 3;
 
 const HAND_RANK = Object.freeze({
   high_card: 0,
   one_pair: 1,
   two_pair: 2,
-  three_kind: 3,
-  straight: 4,
-  full_house: 5,
-  four_kind: 6,
-  five_kind: 7
+  three_kind: 4,
+  full_house: 8,
+  four_kind: 10,
+  five_kind: 12,
+  flush: 16,
+  royal_flush: 20
 });
 
 function rollDie() {
@@ -80,21 +80,28 @@ function classifyHand(dice) {
     });
 
   const countPattern = entries.map((entry) => entry.count);
-  const sortedAsc = [...dice].sort((a, b) => a - b);
-  const isStraight =
-    sortedAsc.join(",") === "1,2,3,4,5" ||
-    sortedAsc.join(",") === "2,3,4,5,6";
+  const valueSet = new Set(values);
+  const isRoyalFlush = [1, 2, 3, 4, 5].every((value) => valueSet.has(value));
+  const isFlush = [2, 3, 4, 5, 6].every((value) => valueSet.has(value));
 
-  if (countPattern[0] === 5) {
+  if (isRoyalFlush) {
     return {
-      rank: HAND_RANK.five_kind,
-      category: "five_kind",
-      tieBreak: [entries[0].value]
+      rank: HAND_RANK.royal_flush,
+      category: "royal_flush",
+      tieBreak: values
     };
   }
 
-  if (countPattern[0] === 4) {
-    const kicker = entries.find((entry) => entry.count === 1)?.value || 0;
+  if (countPattern[0] >= 5) {
+    return {
+      rank: HAND_RANK.five_kind,
+      category: "five_kind",
+      tieBreak: values
+    };
+  }
+
+  if (countPattern[0] >= 4) {
+    const kicker = entries.find((entry) => entry.count < 4)?.value || 0;
     return {
       rank: HAND_RANK.four_kind,
       category: "four_kind",
@@ -102,24 +109,29 @@ function classifyHand(dice) {
     };
   }
 
-  if (countPattern[0] === 3 && countPattern[1] === 2) {
+  const triple = entries.find((entry) => entry.count >= 3) || null;
+  const pair = entries.find((entry) => entry.value !== triple?.value && entry.count >= 2) || null;
+  if (triple && pair) {
     return {
       rank: HAND_RANK.full_house,
       category: "full_house",
-      tieBreak: [entries[0].value, entries[1].value]
+      tieBreak: [triple.value, pair.value]
     };
   }
 
-  if (isStraight) {
+  if (isFlush) {
     return {
-      rank: HAND_RANK.straight,
-      category: "straight",
-      tieBreak: [Math.max(...sortedAsc)]
+      rank: HAND_RANK.flush,
+      category: "flush",
+      tieBreak: values
     };
   }
 
-  if (countPattern[0] === 3) {
-    const kickers = entries.filter((entry) => entry.count === 1).map((entry) => entry.value).sort((a, b) => b - a);
+  if (countPattern[0] >= 3) {
+    const kickers = entries
+      .filter((entry) => entry.value !== entries[0].value)
+      .map((entry) => entry.value)
+      .sort((a, b) => b - a);
     return {
       rank: HAND_RANK.three_kind,
       category: "three_kind",
@@ -127,9 +139,12 @@ function classifyHand(dice) {
     };
   }
 
-  if (countPattern[0] === 2 && countPattern[1] === 2) {
-    const pairs = entries.filter((entry) => entry.count === 2).map((entry) => entry.value).sort((a, b) => b - a);
-    const kicker = entries.find((entry) => entry.count === 1)?.value || 0;
+  if ((countPattern[0] || 0) >= 2 && (countPattern[1] || 0) >= 2) {
+    const pairs = entries
+      .filter((entry) => entry.count >= 2)
+      .map((entry) => entry.value)
+      .sort((a, b) => b - a);
+    const kicker = entries.find((entry) => entry.count < 2)?.value || 0;
     return {
       rank: HAND_RANK.two_pair,
       category: "two_pair",
@@ -137,9 +152,12 @@ function classifyHand(dice) {
     };
   }
 
-  if (countPattern[0] === 2) {
-    const pairValue = entries.find((entry) => entry.count === 2)?.value || 0;
-    const kickers = entries.filter((entry) => entry.count === 1).map((entry) => entry.value).sort((a, b) => b - a);
+  if ((countPattern[0] || 0) >= 2) {
+    const pairValue = entries.find((entry) => entry.count >= 2)?.value || 0;
+    const kickers = entries
+      .filter((entry) => entry.value !== pairValue)
+      .map((entry) => entry.value)
+      .sort((a, b) => b - a);
     return {
       rank: HAND_RANK.one_pair,
       category: "one_pair",
@@ -154,6 +172,18 @@ function classifyHand(dice) {
   };
 }
 
+function getCategoryPoints(category) {
+  if (category === "royal_flush") return 20;
+  if (category === "flush") return 16;
+  if (category === "five_kind") return 12;
+  if (category === "four_kind") return 10;
+  if (category === "full_house") return 8;
+  if (category === "three_kind") return 4;
+  if (category === "two_pair") return 2;
+  if (category === "one_pair") return 0;
+  return 0;
+}
+
 function compareHands(left, right) {
   if (!left || !right) return 0;
   if (left.rank !== right.rank) {
@@ -165,6 +195,8 @@ function compareHands(left, right) {
 function finalizePlayerHand(state, playerId) {
   const dice = state.currentHand.diceByPlayer[playerId];
   const ranking = classifyHand(dice);
+  const bankedPoints = getCategoryPoints(ranking.category);
+  const pointsAfterBank = Number(state.pointsByPlayer?.[playerId] || 0) + bankedPoints;
   const finalByPlayer = {
     ...state.currentHand.finalByPlayer,
     [playerId]: {
@@ -172,16 +204,38 @@ function finalizePlayerHand(state, playerId) {
       dice: [...dice],
       rank: ranking.rank,
       category: ranking.category,
-      tieBreak: ranking.tieBreak
+      tieBreak: ranking.tieBreak,
+      bankedPoints,
+      pointsAfterBank
     }
   };
 
   return {
-    ...state.currentHand,
-    finalByPlayer,
-    locksByPlayer: {
-      ...state.currentHand.locksByPlayer,
-      [playerId]: createLockArray()
+    state: {
+      ...state,
+      pointsByPlayer: {
+        ...state.pointsByPlayer,
+        [playerId]: pointsAfterBank
+      },
+      currentHand: {
+        ...state.currentHand,
+        finalByPlayer,
+        locksByPlayer: {
+          ...state.currentHand.locksByPlayer,
+          [playerId]: createLockArray()
+        }
+      },
+      history: [
+        ...state.history,
+        {
+          type: "bank",
+          playerId,
+          handNumber: state.currentHandNumber,
+          bankedCategory: ranking.category,
+          bankedPoints,
+          pointsAfterBank
+        }
+      ]
     }
   };
 }
@@ -204,34 +258,18 @@ function resolveFinalizedHand(state) {
   if (!left || !right) return state;
 
   const comparison = compareHands(left, right);
-  if (comparison === 0) {
-    return {
-      ...startHand(state, {
-        handNumber: state.currentHandNumber,
-        handStarterId: state.handStarterId
-      }),
-      handTies: state.handTies + 1,
-      history: [
-        ...state.history,
-        {
-          type: "hand_tie",
-          handNumber: state.currentHandNumber,
-          left,
-          right
-        }
-      ]
-    };
-  }
-
-  const handWinnerId = comparison > 0 ? p1 : p2;
+  const handWinnerId = comparison > 0 ? p1 : (comparison < 0 ? p2 : null);
   const nextHandWins = {
-    ...state.handWins,
-    [handWinnerId]: Number(state.handWins[handWinnerId] || 0) + 1
+    ...state.handWins
   };
+  if (handWinnerId) {
+    nextHandWins[handWinnerId] = Number(state.handWins[handWinnerId] || 0) + 1;
+  }
 
   const nextState = {
     ...state,
     handWins: nextHandWins,
+    handTies: state.handTies + (handWinnerId ? 0 : 1),
     history: [
       ...state.history,
       {
@@ -244,12 +282,15 @@ function resolveFinalizedHand(state) {
     ]
   };
 
-  if (nextHandWins[handWinnerId] >= HANDS_TO_WIN) {
+  if (state.currentHandNumber >= MAX_HANDS) {
+    const p1Points = Number(nextState.pointsByPlayer?.[p1] || 0);
+    const p2Points = Number(nextState.pointsByPlayer?.[p2] || 0);
+    const winnerId = p1Points === p2Points ? null : (p1Points > p2Points ? p1 : p2);
     return {
       ...nextState,
       phase: "finished",
-      winnerId: handWinnerId,
-      draw: false,
+      winnerId,
+      draw: !winnerId,
       nextPlayerId: null
     };
   }
@@ -272,13 +313,14 @@ export function createPokerDiceEngine() {
         playerOrder,
         phase: "rolling",
         bestOfHands: MAX_HANDS,
-        handWinsRequired: HANDS_TO_WIN,
+        handWinsRequired: MAX_HANDS,
         currentHandNumber: 1,
         handStarterId: starter,
         nextPlayerId: starter,
         winnerId: null,
         draw: false,
         handWins: buildPlayerMap(playerOrder, () => 0),
+        pointsByPlayer: buildPlayerMap(playerOrder, () => 0),
         handTies: 0,
         currentHand: createHandState(playerOrder),
         history: []
@@ -313,10 +355,7 @@ export function createPokerDiceEngine() {
           return { error: "Roll at least once before banking." };
         }
 
-        const withFinalized = {
-          ...state,
-          currentHand: finalizePlayerHand(state, playerId)
-        };
+        const withFinalized = finalizePlayerHand(state, playerId).state;
 
         const otherId = getOtherPlayerId(state, playerId);
         if (!withFinalized.currentHand.finalByPlayer[otherId]) {
@@ -389,10 +428,7 @@ export function createPokerDiceEngine() {
         };
       }
 
-      const withFinalized = {
-        ...rolledState,
-        currentHand: finalizePlayerHand(rolledState, playerId)
-      };
+      const withFinalized = finalizePlayerHand(rolledState, playerId).state;
 
       const otherId = getOtherPlayerId(state, playerId);
       if (!withFinalized.currentHand.finalByPlayer[otherId]) {

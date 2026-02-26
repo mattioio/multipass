@@ -135,9 +135,8 @@ test("poker dice enforces move gameId, supports hold+bank flow, and completes be
   expect(update.room.game.state.nextPlayerId).toBe(guestId);
 
   let turns = 0;
-  let observedTieReplay = false;
 
-  while (!update.room.game.state.winnerId && turns < 30) {
+  while (update.room.game.state.phase !== "finished" && turns < 30) {
     const gameState = update.room.game.state;
     const activePlayerId = gameState.nextPlayerId;
     const activeWs = activePlayerId === hostId ? host : guest;
@@ -166,7 +165,7 @@ test("poker dice enforces move gameId, supports hold+bank flow, and completes be
       (message) => {
         const next = message.room?.game?.state;
         if (message.type !== "room_state" || !next) return false;
-        if (next.winnerId) return true;
+        if (next.phase === "finished") return true;
         if (Number(next.handTies || 0) > handTies) return true;
         if (Number(next.currentHandNumber || 1) !== handNumber) return true;
         return next.nextPlayerId !== activePlayerId;
@@ -179,21 +178,23 @@ test("poker dice enforces move gameId, supports hold+bank flow, and completes be
 
     const nextState = update.room.game.state;
     if (Number(nextState.handTies || 0) > handTies) {
-      observedTieReplay = true;
-      expect(Number(nextState.currentHandNumber || 1)).toBe(handNumber);
-      expect(nextState.currentHand.finalByPlayer[hostId]).toBeNull();
-      expect(nextState.currentHand.finalByPlayer[guestId]).toBeNull();
+      expect(Number(nextState.currentHandNumber || 1)).toBe(handNumber + 1);
     }
 
     turns += 1;
   }
 
-  expect(update.room.game.state.winnerId === hostId || update.room.game.state.winnerId === guestId).toBe(true);
+  expect(update.room.game.state.phase).toBe("finished");
+  expect(Number(update.room.game.state.currentHandNumber || 1)).toBe(3);
   const winnerId = update.room.game.state.winnerId;
-  expect(update.room.game.state.handWins[winnerId]).toBeGreaterThanOrEqual(2);
-
-  if (!observedTieReplay) {
-    test.info().annotations.push({ type: "note", description: "No tie replay observed in this randomized run." });
+  if (winnerId) {
+    const hostPoints = Number(update.room.game.state.pointsByPlayer?.[hostId] || 0);
+    const guestPoints = Number(update.room.game.state.pointsByPlayer?.[guestId] || 0);
+    expect(hostPoints === guestPoints).toBe(false);
+    const expectedWinnerId = hostPoints > guestPoints ? hostId : guestId;
+    expect(winnerId).toBe(expectedWinnerId);
+  } else {
+    expect(update.room.game.state.draw).toBe(true);
   }
 
   host.close();
