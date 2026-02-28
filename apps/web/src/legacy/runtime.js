@@ -79,9 +79,7 @@ const ROOM_REQUIRED_SCREENS = new Set(["lobby", "pick", "wait", "game", "pass", 
 const ONLINE_HERO_ROOM_SCREENS = new Set(["lobby", "pick", "wait", "game", "winner"]);
 const LEGACY_BOOTSTRAP_FLAG = "__multipassLegacyInitialized";
 const PROD_WS_FALLBACK_URLS = Object.freeze([
-  "wss://api.loreandorder.com",
-  "wss://multipass-api.onrender.com",
-  "wss://multipass-server.onrender.com"
+  "wss://api.loreandorder.com"
 ]);
 const WS_CONNECT_ATTEMPT_TIMEOUT_MS = 2600;
 const IS_DEV_BUILD = Boolean(typeof import.meta !== "undefined" && import.meta.env?.DEV);

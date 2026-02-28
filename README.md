@@ -53,8 +53,7 @@ Run this full suite before merging major backend/protocol work:
 ## Production WebSocket endpoint
 - GitHub Pages production builds inject a prioritized list in `VITE_WS_URL`.
 - Canonical primary endpoint: `wss://api.loreandorder.com`.
-- Backup failover endpoints: `wss://multipass-api.onrender.com`, `wss://multipass-server.onrender.com`.
-- Current production list (priority order): `wss://api.loreandorder.com,wss://multipass-api.onrender.com,wss://multipass-server.onrender.com`.
+- Current production list (priority order): `wss://api.loreandorder.com`.
 - The app retries the next endpoint only if the current candidate fails.
 
 ## Smart invite links

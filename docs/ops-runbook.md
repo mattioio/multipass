@@ -2,8 +2,8 @@
 
 ## Endpoint policy
 - Canonical primary WebSocket endpoint: `wss://api.loreandorder.com`
-- Backup failover endpoints: `wss://multipass-api.onrender.com`, `wss://multipass-server.onrender.com`
-- Client failover order follows `VITE_WS_URL` left-to-right.
+- No active backup endpoints are configured right now.
+- Client endpoint order follows `VITE_WS_URL` left-to-right.
 
 ## Health probes
 - Liveness: `GET /healthz`
@@ -24,7 +24,7 @@
    - `ws.rate_limited`
    - `ws.message_too_large`
    - `ws.socket_error`
-5. If primary is degraded, verify that backups are reachable and serving compatible protocol.
+5. If primary is degraded, restore service or publish a verified backup endpoint in `VITE_WS_URL`.
 6. If clients still fail, verify `VITE_WS_URL` in latest deploy artifact and clear browser local override:
    - `localStorage.removeItem("multipass_ws_url")`
 
