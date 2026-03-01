@@ -295,7 +295,10 @@ function resolveFinalizedHand(state) {
     };
   }
 
-  const nextStarter = getOtherPlayerId(state, state.handStarterId) || state.handStarterId;
+  // Strict alternation across the entire match: the next hand starts with the
+  // opposite of the player who just finished this hand.
+  const previousTurnPlayerId = state.nextPlayerId || state.handStarterId;
+  const nextStarter = getOtherPlayerId(state, previousTurnPlayerId) || previousTurnPlayerId;
   return startHand(nextState, {
     handNumber: state.currentHandNumber + 1,
     handStarterId: nextStarter

@@ -4,8 +4,6 @@ export { JoinCodeForm } from "./JoinCodeForm";
 export type { JoinCodeFormProps } from "./JoinCodeForm";
 export { PlayerStatusStrip } from "./PlayerStatusStrip";
 export type { PlayerStatusStripProps } from "./PlayerStatusStrip";
-export { LobbyActions } from "./LobbyActions";
-export type { LobbyActionsProps } from "./LobbyActions";
 export { ScreenGuardBoundary } from "./ScreenGuardBoundary";
 export type { ScreenGuardBoundaryProps } from "./ScreenGuardBoundary";
 export { GameSurfaceShell } from "./GameSurfaceShell";

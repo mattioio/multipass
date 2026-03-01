@@ -62,6 +62,7 @@ export function createWsHandler({
   validateOutgoing = false
 }) {
   const clients = new Map();
+  const countdownTimers = new Map();
   const normalizedAllowedOrigins = new Set(
     (allowedOrigins || []).map((origin) => normalizeOrigin(origin)).filter(Boolean)
   );
@@ -81,7 +82,52 @@ export function createWsHandler({
     send(ws, createErrorPayload(code, message));
   }
 
+  function clearCountdownTimer(roomCode) {
+    const timer = countdownTimers.get(roomCode);
+    if (!timer) return;
+    clearTimeout(timer.timeoutId);
+    countdownTimers.delete(roomCode);
+  }
+
+  function syncCountdownTimer(room) {
+    const roomCode = room?.code;
+    if (!roomCode) return;
+
+    const endsAt = Number(room?.round?.countdownEndsAt) || null;
+    const isCountdownActive = room?.round?.status === "countdown" && Boolean(endsAt);
+
+    if (!isCountdownActive) {
+      clearCountdownTimer(roomCode);
+      return;
+    }
+
+    const currentTimer = countdownTimers.get(roomCode);
+    if (currentTimer && currentTimer.endsAt === endsAt) {
+      return;
+    }
+
+    clearCountdownTimer(roomCode);
+    const timeoutMs = Math.max(0, endsAt - Date.now());
+    const timeoutId = setTimeout(() => {
+      countdownTimers.delete(roomCode);
+      const liveRoom = roomService.getRoom(roomCode);
+      if (!liveRoom) return;
+
+      const finalized = roomService.finalizeCountdownStart(liveRoom, Date.now());
+      if (finalized.ok || finalized.waitingForPeerChoice) {
+        broadcastRoom(liveRoom);
+      }
+    }, timeoutMs);
+
+    if (typeof timeoutId.unref === "function") {
+      timeoutId.unref();
+    }
+
+    countdownTimers.set(roomCode, { timeoutId, endsAt });
+  }
+
   function broadcastRoom(room) {
+    syncCountdownTimer(room);
     for (const [ws, client] of clients.entries()) {
       if (client.roomCode !== room.code) continue;
       send(ws, {
@@ -301,6 +347,7 @@ export function createWsHandler({
         room.endRequest = null;
         roomService.touchRoom(room);
         clients.delete(ws);
+        syncCountdownTimer(room);
         broadcastRoom(room);
         logger.info("room.left", { roomCode: room.code, playerId: client.playerId, ip });
         return;
@@ -414,8 +461,12 @@ export function createWsHandler({
       const room = roomService.getRoom(client.roomCode);
       if (room) {
         roomService.markPlayerDisconnected(room, client.playerId);
+        room.endRequest = null;
         roomService.touchRoom(room);
+        syncCountdownTimer(room);
         broadcastRoom(room);
+      } else {
+        clearCountdownTimer(client.roomCode);
       }
 
       clients.delete(ws);

@@ -111,6 +111,8 @@ export const CONTRACT_EXAMPLES = Object.freeze({
           hostGameId: null,
           guestGameId: null,
           resolvedGameId: null,
+          countdownStartedAt: null,
+          countdownEndsAt: null,
           hasPickedStarter: false
         },
         endRequest: null,

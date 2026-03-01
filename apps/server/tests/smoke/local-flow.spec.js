@@ -13,12 +13,10 @@ async function getPseudoRotationDegrees(locator, pseudo = "::before") {
   return ((Math.round(rawAngle) % 360) + 360) % 360;
 }
 
-test("local happy path: setup -> lobby -> pick -> game", async ({ page }) => {
+test("local happy path: setup -> lobby -> game", async ({ page }) => {
   await page.goto("/");
   await page.waitForFunction(() => window.__multipassLegacyReady === true);
 
-  const landingStartCta = page.getByRole("button", { name: "Start" });
-  const landingCtaBg = await landingStartCta.evaluate((node) => getComputedStyle(node).backgroundColor);
   const landingDevTagStyles = await page.evaluate(() => {
     const tag = document.getElementById("dev-build-tag");
     if (!(tag instanceof HTMLElement)) return null;
@@ -88,9 +86,6 @@ test("local happy path: setup -> lobby -> pick -> game", async ({ page }) => {
 
   await expect(page.locator("#screen-lobby.active")).toBeVisible();
   await expect.poll(async () => page.evaluate(() => document.body.getAttribute("data-theme"))).toBeNull();
-  const lobbyPickGameCta = page.getByRole("button", { name: "Pick a game" });
-  const lobbyCtaBg = await lobbyPickGameCta.evaluate((node) => getComputedStyle(node).backgroundColor);
-  expect(lobbyCtaBg).toBe(landingCtaBg);
   const lobbyDevTagStyles = await page.evaluate(() => {
     const tag = document.getElementById("dev-build-tag");
     if (!(tag instanceof HTMLElement)) return null;
@@ -124,16 +119,13 @@ test("local happy path: setup -> lobby -> pick -> game", async ({ page }) => {
     };
   });
   expect(guestScoreLowerThirdStyle.right).toBe("0px");
-  expect(guestScoreLowerThirdStyle.borderTopLeftRadius).toBe("14px");
+  expect(guestScoreLowerThirdStyle.borderTopLeftRadius).toBe("10px");
   expect(guestScoreLowerThirdStyle.borderTopRightRadius).toBe("0px");
   expect(guestScoreLowerThirdStyle.textAlign).toBe("right");
   const lobbyScoreNameWeight = await page.locator("#score-columns .player-card-name--score").first().evaluate((node) => {
     return getComputedStyle(node).fontWeight;
   });
   expect(lobbyScoreNameWeight).toBe(pickerAvatarNameWeight);
-  await page.getByRole("button", { name: "Pick a game" }).click();
-
-  await expect(page.locator("#screen-pick.active")).toBeVisible();
   await page.getByRole("button", { name: "Play Tic Tac Toe", exact: true }).click();
 
   await expect(page.locator("#screen-game.active")).toBeVisible();
@@ -171,7 +163,7 @@ test("local happy path: setup -> lobby -> pick -> game", async ({ page }) => {
   await expect(page.locator("#ttt-board .ttt-cell.is-winning")).toHaveCount(3);
 
   await page.locator("#winner-play-again").click();
-  await expect(page.locator("#screen-pick.active")).toBeVisible();
+  await expect(page.locator("#screen-lobby.active")).toBeVisible();
   const secondRoundStarter = await page.evaluate(() => {
     const room = window.__multipassStore.getState().room;
     return {
@@ -194,9 +186,6 @@ test("local tic-tac-toe supports touch drag preview + release, tap, and cancel",
   await page.locator('#local-avatar-grid .avatar-option[data-avatar="green"]').click();
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.locator("#screen-lobby.active")).toBeVisible();
-
-  await page.getByRole("button", { name: "Pick a game" }).click();
-  await expect(page.locator("#screen-pick.active")).toBeVisible();
   await page.getByRole("button", { name: "Play Tic Tac Toe", exact: true }).click();
   await expect(page.locator("#screen-game.active")).toBeVisible();
 
@@ -425,9 +414,6 @@ test("battleships uses a single board with tap-then-confirm fire", async ({ page
   await page.locator('#local-avatar-grid .avatar-option[data-avatar="green"]').click();
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.locator("#screen-lobby.active")).toBeVisible();
-
-  await page.getByRole("button", { name: "Pick a game" }).click();
-  await expect(page.locator("#screen-pick.active")).toBeVisible();
   await page.getByRole("button", { name: "Play Battleships" }).click();
   await expect(page.locator("#screen-game.active")).toBeVisible();
   await expect(page.locator("#screen-game .game-surface-head")).toHaveCount(0);
@@ -490,9 +476,6 @@ test("dots and boxes keeps turn on box completion and reaches winner overlay", a
   await page.locator('#local-avatar-grid .avatar-option[data-avatar="green"]').click();
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.locator("#screen-lobby.active")).toBeVisible();
-
-  await page.getByRole("button", { name: "Pick a game" }).click();
-  await expect(page.locator("#screen-pick.active")).toBeVisible();
   await page.getByRole("button", { name: "Play Dots & Boxes" }).click();
   await expect(page.locator("#screen-game.active")).toBeVisible();
   await expect(page.locator("#dots-layout")).not.toHaveClass(/hidden/);
@@ -568,21 +551,30 @@ test("local poker dice banks points immediately and swaps to pass-only CTA at en
   await page.locator('#local-avatar-grid .avatar-option[data-avatar="green"]').click();
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.locator("#screen-lobby.active")).toBeVisible();
-
-  await page.getByRole("button", { name: "Pick a game" }).click();
-  await expect(page.locator("#screen-pick.active")).toBeVisible();
   await page.getByRole("button", { name: "Play Poker Dice" }).click();
   await expect(page.locator("#screen-game.active")).toBeVisible();
   await expect(page.locator("#poker-dice-layout")).not.toHaveClass(/hidden/);
   await expect(page.locator("#poker-dice-dice .poker-die")).toHaveCount(6);
+  await expect(page.locator("#poker-dice-layout .poker-dice-score-guide")).toBeVisible();
+  await expect(page.locator("#poker-dice-layout .poker-dice-score-row")).toHaveCount(9);
+  await expect(page.locator('#poker-dice-layout [data-poker-category="one_pair"]')).toContainText("0 pts");
+  await expect(page.locator('#poker-dice-layout [data-poker-category="high_card"]')).toContainText("0 pts");
+  await expect(page.locator("#poker-dice-info")).toHaveCount(0);
+  await expect(page.locator("#poker-dice-info-modal")).toHaveCount(0);
 
   await expect(page.locator("#poker-dice-pass-play")).toHaveClass(/hidden/);
   await expect(page.locator("#poker-dice-roll")).not.toHaveClass(/hidden/);
-  await expect(page.locator("#poker-dice-bank")).not.toHaveClass(/hidden/);
-  await expect(page.locator("#poker-dice-clear-hold")).not.toHaveClass(/hidden/);
+  await expect(page.locator("#poker-dice-bank")).toHaveClass(/hidden/);
+  await expect(page.locator("#poker-dice-clear-hold")).toHaveClass(/hidden/);
 
   await page.locator("#poker-dice-roll").click();
   await expect(page.locator("#poker-dice-bank")).toBeEnabled({ timeout: 6000 });
+  await expect(page.locator("#poker-dice-layout .poker-dice-score-row.is-projected")).toHaveCount(1);
+  const projectedCategoryAfterRoll = await page
+    .locator("#poker-dice-layout .poker-dice-score-row.is-projected")
+    .first()
+    .getAttribute("data-poker-category");
+  expect(projectedCategoryAfterRoll).toBeTruthy();
   await page.locator("#poker-dice-bank").click();
 
   await expect(page.locator("#poker-dice-pass-play")).not.toHaveClass(/hidden/);
@@ -633,8 +625,7 @@ test("local lobby duel sides remain side-by-side on mobile", async ({ page }) =>
   await expect(page.locator("#screen-lobby.active")).toBeVisible();
 
   await expect(page.locator("#score-columns .score-duel-side")).toHaveCount(2);
-  await expect(page.locator("#app-fixed-footer")).not.toHaveClass(/hidden/);
-  await expect(page.locator("#app-dock-slot-lobby")).not.toHaveClass(/hidden/);
+  await expect(page.locator("#app-fixed-footer")).toHaveClass(/hidden/);
   const heroPosition = await page.locator(".hero").evaluate((node) => getComputedStyle(node).position);
   expect(heroPosition).toBe("sticky");
 
@@ -650,9 +641,24 @@ test("local lobby duel sides remain side-by-side on mobile", async ({ page }) =>
   expect(layout.sameRow).toBeTruthy();
   expect(layout.separated).toBeTruthy();
 
-  await page.locator("#app-dock-lobby-ready").click();
-  await expect(page.locator("#screen-pick.active")).toBeVisible();
-  await expect(page.locator("#app-fixed-footer")).toHaveClass(/hidden/);
+  const scoreAvatarShapes = await page.locator("#score-columns .score-duel-top .player-card-shell--score").evaluateAll((nodes) => {
+    return nodes.map((node) => {
+      const rect = node.getBoundingClientRect();
+      return {
+        width: rect.width,
+        height: rect.height,
+        ratio: rect.height ? rect.width / rect.height : 0
+      };
+    });
+  });
+  expect(scoreAvatarShapes.length).toBe(2);
+  for (const shape of scoreAvatarShapes) {
+    expect(shape.width).toBeGreaterThan(0);
+    expect(shape.height).toBeGreaterThan(0);
+    expect(Math.abs(shape.ratio - 1)).toBeLessThan(0.03);
+  }
+
+  await expect(page.locator("#screen-lobby #game-list .game-card")).toHaveCount(5);
 });
 
 test("local pick can launch word fight module", async ({ page }) => {
@@ -665,9 +671,6 @@ test("local pick can launch word fight module", async ({ page }) => {
   await page.locator('#local-avatar-grid .avatar-option[data-avatar="green"]').click();
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.locator("#screen-lobby.active")).toBeVisible();
-
-  await page.getByRole("button", { name: "Pick a game" }).click();
-  await expect(page.locator("#screen-pick.active")).toBeVisible();
   await page.getByRole("button", { name: "Play Word Fight", exact: true }).click();
 
   await expect(page.locator("#screen-game.active")).toBeVisible();
@@ -697,7 +700,7 @@ test("local pick can launch word fight module", async ({ page }) => {
 
   await expect(page.locator("#screen-game.active")).toBeVisible();
   await expect(page.locator("#screen-pass.active")).toHaveCount(0);
-  await expect(page.locator("#word-fight-keyboard")).toBeVisible();
+  await expect(page.locator("#word-fight-keyboard")).toHaveClass(/hidden/);
   await expect(page.locator('#word-fight-keyboard [data-word-fight-key="T"]')).toBeDisabled();
   await expect(page.locator("#word-fight-actions")).not.toHaveClass(/hidden/);
   await expect(page.locator("#word-fight-pass-turn")).toBeVisible();

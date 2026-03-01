@@ -14,7 +14,8 @@ describe("App inline CTA layout", () => {
     expect(document.getElementById("local-continue")).toBeInTheDocument();
     expect(document.getElementById("create-room")).toBeInTheDocument();
     expect(document.getElementById("join-room")).toBeInTheDocument();
-    expect(document.getElementById("ready-cta")).toBeInTheDocument();
+    expect(document.getElementById("game-list")).toBeInTheDocument();
+    expect(document.getElementById("pick-status")).toBeInTheDocument();
     expect(document.getElementById("winner-play-again")).toBeInTheDocument();
   });
 });

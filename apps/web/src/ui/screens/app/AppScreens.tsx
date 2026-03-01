@@ -12,7 +12,6 @@ import {
   GameActionRow,
   GameSurfaceShell,
   JoinCodeForm,
-  LobbyActions,
   PlayerStatusStrip,
   ResultBanner,
   ScreenGuardBoundary,
@@ -162,20 +161,26 @@ export function AppScreens({ isDevBuild }: AppScreensProps) {
       </Screen>
 
       <Screen id="screen-lobby">
-        <div className="panel lobby-panel">
+        <div className="lobby-panel">
           <ScoreColumns id="score-columns" />
-          <LobbyActions />
+          <section className="lobby-games-panel" aria-labelledby="lobby-games-title">
+            <div className="screen-head pick-head lobby-pick-head">
+              <div>
+                <h2 id="lobby-games-title">Pick a game</h2>
+                <p id="pick-status" className="pick-status hidden" aria-live="polite"></p>
+              </div>
+            </div>
+            <div id="game-list" className="game-grid"></div>
+          </section>
         </div>
       </Screen>
 
       <Screen id="screen-pick">
-        <div className="screen-head pick-head">
+        <div className="screen-head pick-head pick-legacy-note">
           <div>
             <h2>Pick a game</h2>
-            <p id="pick-status" className="pick-status hidden" aria-live="polite"></p>
           </div>
         </div>
-        <div id="game-list" className="game-grid"></div>
       </Screen>
 
       <Screen id="screen-wait">
@@ -198,133 +203,129 @@ export function AppScreens({ isDevBuild }: AppScreensProps) {
       </Screen>
 
       <Screen id="screen-game">
-        <GameSurfaceShell
-          showHead={false}
-          state="active"
-          topStrip={<TurnStatusBar />}
-          actions={(
-            <GameActionRow>
-              <Button id="end-game-game" variant="ghost" className="hidden">End game</Button>
-              <Button id="new-round" variant="ghost" className="hidden">New round</Button>
-            </GameActionRow>
-          )}
-        >
-          <div id="ttt-board" className="ttt-board"></div>
-          <div id="dots-layout" className="dots-layout hidden">
-            <div id="dots-board" className="dots-board"></div>
-          </div>
-          <div id="battleship-layout" className="battleship-layout hidden">
-            <div className="battleship-controls">
-              <p id="battleship-phase-label" className="subtext battleship-phase-label"></p>
-              <div className="battleship-control-actions">
-                <Button id="battleship-orientation" variant="ghost" className="compact-action">
-                  Orientation: Horizontal
-                </Button>
+        <div className="game-screen-layout">
+          <GameSurfaceShell
+            showHead={false}
+            state="active"
+            actions={(
+              <GameActionRow>
+                <Button id="end-game-game" variant="ghost" className="hidden">End game</Button>
+                <Button id="new-round" variant="ghost" className="hidden">New round</Button>
+              </GameActionRow>
+            )}
+          >
+            <div id="ttt-board" className="ttt-board"></div>
+            <div id="dots-layout" className="dots-layout hidden">
+              <div id="dots-board" className="dots-board"></div>
+            </div>
+            <div id="battleship-layout" className="battleship-layout hidden">
+              <div className="battleship-controls">
+                <p id="battleship-phase-label" className="subtext battleship-phase-label"></p>
+                <div className="battleship-control-actions">
+                  <Button id="battleship-orientation" variant="ghost" className="compact-action">
+                    Orientation: Horizontal
+                  </Button>
+                </div>
+              </div>
+              <div className="battleship-boards">
+                <section id="battleship-own-card" className="battleship-board-card">
+                  <h3 id="battleship-own-title">Your waters</h3>
+                  <div id="battleship-own-board" className="battleship-board"></div>
+                </section>
+              </div>
+              <div id="battleship-action-row" className="battleship-action-row hidden">
+                <Button id="battleship-clear-target" variant="ghost" className="compact-action">Clear</Button>
+                <Button id="battleship-fire-target" className="compact-action">Fire</Button>
               </div>
             </div>
-            <div className="battleship-boards">
-              <section id="battleship-own-card" className="battleship-board-card">
-                <h3 id="battleship-own-title">Your waters</h3>
-                <div id="battleship-own-board" className="battleship-board"></div>
+            <div id="word-fight-layout" className="word-fight-layout hidden">
+              <div className="word-fight-controls">
+                <div id="word-fight-actions" className="word-fight-actions hidden">
+                  <Button id="word-fight-pass-turn" variant="ghost" className="compact-action hidden">Pass turn</Button>
+                </div>
+                <div id="word-fight-keyboard" className="word-fight-keyboard" aria-label="Word Fight keyboard">
+                  <div className="word-fight-keyboard-row">
+                    <button type="button" className="word-fight-key" data-word-fight-key="Q">Q</button>
+                    <button type="button" className="word-fight-key" data-word-fight-key="W">W</button>
+                    <button type="button" className="word-fight-key" data-word-fight-key="E">E</button>
+                    <button type="button" className="word-fight-key" data-word-fight-key="R">R</button>
+                    <button type="button" className="word-fight-key" data-word-fight-key="T">T</button>
+                    <button type="button" className="word-fight-key" data-word-fight-key="Y">Y</button>
+                    <button type="button" className="word-fight-key" data-word-fight-key="U">U</button>
+                    <button type="button" className="word-fight-key" data-word-fight-key="I">I</button>
+                    <button type="button" className="word-fight-key" data-word-fight-key="O">O</button>
+                    <button type="button" className="word-fight-key" data-word-fight-key="P">P</button>
+                  </div>
+                  <div className="word-fight-keyboard-row">
+                    <button type="button" className="word-fight-key" data-word-fight-key="A">A</button>
+                    <button type="button" className="word-fight-key" data-word-fight-key="S">S</button>
+                    <button type="button" className="word-fight-key" data-word-fight-key="D">D</button>
+                    <button type="button" className="word-fight-key" data-word-fight-key="F">F</button>
+                    <button type="button" className="word-fight-key" data-word-fight-key="G">G</button>
+                    <button type="button" className="word-fight-key" data-word-fight-key="H">H</button>
+                    <button type="button" className="word-fight-key" data-word-fight-key="J">J</button>
+                    <button type="button" className="word-fight-key" data-word-fight-key="K">K</button>
+                    <button type="button" className="word-fight-key" data-word-fight-key="L">L</button>
+                  </div>
+                  <div className="word-fight-keyboard-row">
+                    <button type="button" className="word-fight-key is-action" data-word-fight-key="ENTER">ENTER</button>
+                    <button type="button" className="word-fight-key" data-word-fight-key="Z">Z</button>
+                    <button type="button" className="word-fight-key" data-word-fight-key="X">X</button>
+                    <button type="button" className="word-fight-key" data-word-fight-key="C">C</button>
+                    <button type="button" className="word-fight-key" data-word-fight-key="V">V</button>
+                    <button type="button" className="word-fight-key" data-word-fight-key="B">B</button>
+                    <button type="button" className="word-fight-key" data-word-fight-key="N">N</button>
+                    <button type="button" className="word-fight-key" data-word-fight-key="M">M</button>
+                    <button type="button" className="word-fight-key is-action" data-word-fight-key="BACKSPACE">⌫</button>
+                  </div>
+                </div>
+                <p id="word-fight-status" className="subtext word-fight-status">Take turns to crack your own word.</p>
+              </div>
+              <section className="word-fight-board-card word-fight-board-card-single">
+                <h3 id="word-fight-active-title">Your Board</h3>
+                <div id="word-fight-active-board" className="word-fight-board-grid"></div>
               </section>
             </div>
-            <div id="battleship-action-row" className="battleship-action-row hidden">
-              <Button id="battleship-clear-target" variant="ghost" className="compact-action">Clear</Button>
-              <Button id="battleship-fire-target" className="compact-action">Fire</Button>
-            </div>
-          </div>
-          <div id="word-fight-layout" className="word-fight-layout hidden">
-            <div className="word-fight-controls">
-              <div id="word-fight-actions" className="word-fight-actions hidden">
-                <Button id="word-fight-pass-turn" variant="ghost" className="compact-action hidden">Pass turn</Button>
+            <div id="poker-dice-layout" className="poker-dice-layout hidden">
+              <p id="poker-dice-round-title" className="poker-dice-round-title">Round 1 of 3</p>
+              <div id="poker-dice-dice" className="poker-dice-dice"></div>
+              <div className="poker-dice-actions">
+                <Button id="poker-dice-roll" className="compact-action">Roll</Button>
+                <Button id="poker-dice-bank" variant="ghost" className="compact-action">Bank</Button>
+                <Button id="poker-dice-pass-play" variant="ghost" className="compact-action hidden">Pass play</Button>
+                <Button id="poker-dice-clear-hold" variant="ghost" className="compact-action">Clear holds</Button>
               </div>
-              <div id="word-fight-keyboard" className="word-fight-keyboard" aria-label="Word Fight keyboard">
-                <div className="word-fight-keyboard-row">
-                  <button type="button" className="word-fight-key" data-word-fight-key="Q">Q</button>
-                  <button type="button" className="word-fight-key" data-word-fight-key="W">W</button>
-                  <button type="button" className="word-fight-key" data-word-fight-key="E">E</button>
-                  <button type="button" className="word-fight-key" data-word-fight-key="R">R</button>
-                  <button type="button" className="word-fight-key" data-word-fight-key="T">T</button>
-                  <button type="button" className="word-fight-key" data-word-fight-key="Y">Y</button>
-                  <button type="button" className="word-fight-key" data-word-fight-key="U">U</button>
-                  <button type="button" className="word-fight-key" data-word-fight-key="I">I</button>
-                  <button type="button" className="word-fight-key" data-word-fight-key="O">O</button>
-                  <button type="button" className="word-fight-key" data-word-fight-key="P">P</button>
+              <section className="poker-dice-score-guide" aria-label="Poker hand scores">
+                <h3 className="poker-dice-score-guide-title">Poker hand scores</h3>
+                <div className="poker-dice-score-rows">
+                  <div className="poker-dice-score-row" data-poker-category="royal_flush"><strong>Royal flush</strong><span>20 pts</span></div>
+                  <div className="poker-dice-score-row" data-poker-category="flush"><strong>Straight flush</strong><span>16 pts</span></div>
+                  <div className="poker-dice-score-row" data-poker-category="five_kind"><strong>Five of a kind</strong><span>12 pts</span></div>
+                  <div className="poker-dice-score-row" data-poker-category="four_kind"><strong>Four of a kind</strong><span>10 pts</span></div>
+                  <div className="poker-dice-score-row" data-poker-category="full_house"><strong>Full house</strong><span>8 pts</span></div>
+                  <div className="poker-dice-score-row" data-poker-category="three_kind"><strong>Three of a kind</strong><span>4 pts</span></div>
+                  <div className="poker-dice-score-row" data-poker-category="two_pair"><strong>Two pair</strong><span>2 pts</span></div>
+                  <div className="poker-dice-score-row" data-poker-category="one_pair"><strong>One pair</strong><span>0 pts</span></div>
+                  <div className="poker-dice-score-row" data-poker-category="high_card"><strong>High card</strong><span>0 pts</span></div>
                 </div>
-                <div className="word-fight-keyboard-row">
-                  <button type="button" className="word-fight-key" data-word-fight-key="A">A</button>
-                  <button type="button" className="word-fight-key" data-word-fight-key="S">S</button>
-                  <button type="button" className="word-fight-key" data-word-fight-key="D">D</button>
-                  <button type="button" className="word-fight-key" data-word-fight-key="F">F</button>
-                  <button type="button" className="word-fight-key" data-word-fight-key="G">G</button>
-                  <button type="button" className="word-fight-key" data-word-fight-key="H">H</button>
-                  <button type="button" className="word-fight-key" data-word-fight-key="J">J</button>
-                  <button type="button" className="word-fight-key" data-word-fight-key="K">K</button>
-                  <button type="button" className="word-fight-key" data-word-fight-key="L">L</button>
-                </div>
-                <div className="word-fight-keyboard-row">
-                  <button type="button" className="word-fight-key is-action" data-word-fight-key="ENTER">ENTER</button>
-                  <button type="button" className="word-fight-key" data-word-fight-key="Z">Z</button>
-                  <button type="button" className="word-fight-key" data-word-fight-key="X">X</button>
-                  <button type="button" className="word-fight-key" data-word-fight-key="C">C</button>
-                  <button type="button" className="word-fight-key" data-word-fight-key="V">V</button>
-                  <button type="button" className="word-fight-key" data-word-fight-key="B">B</button>
-                  <button type="button" className="word-fight-key" data-word-fight-key="N">N</button>
-                  <button type="button" className="word-fight-key" data-word-fight-key="M">M</button>
-                  <button type="button" className="word-fight-key is-action" data-word-fight-key="BACKSPACE">⌫</button>
+              </section>
+            </div>
+            <div id="game-result-panel" className="game-result-panel game-result-overlay hidden" aria-live="polite">
+              <div className="game-result-sheet">
+                <ResultBanner emojiId="game-result-emoji" titleId="winner-title" title="Winner" />
+                <div id="winner-hero" className="game-result-hero hidden"></div>
+                <div className="button-row winner-actions game-result-actions">
+                  <Button id="winner-play-again" className="cta-main">
+                    Next game
+                  </Button>
                 </div>
               </div>
-              <p id="word-fight-status" className="subtext word-fight-status">Take turns to crack your own word.</p>
             </div>
-            <section className="word-fight-board-card word-fight-board-card-single">
-              <h3 id="word-fight-active-title">Your Board</h3>
-              <div id="word-fight-active-board" className="word-fight-board-grid"></div>
-            </section>
+          </GameSurfaceShell>
+          <div className="game-turn-footer">
+            <TurnStatusBar />
           </div>
-          <div id="poker-dice-layout" className="poker-dice-layout hidden">
-            <p id="poker-dice-round-title" className="poker-dice-round-title">Round 1 of 3</p>
-            <div id="poker-dice-dice" className="poker-dice-dice"></div>
-            <div className="poker-dice-mini-card">
-              <p id="poker-dice-projected" className="poker-dice-projected">Scoring hand: Roll to reveal.</p>
-              <Button id="poker-dice-info" variant="ghost" className="compact-action">Info</Button>
-            </div>
-            <div className="poker-dice-actions">
-              <Button id="poker-dice-roll" className="compact-action">Roll</Button>
-              <Button id="poker-dice-bank" variant="ghost" className="compact-action">Bank</Button>
-              <Button id="poker-dice-pass-play" variant="ghost" className="compact-action hidden">Pass play</Button>
-              <Button id="poker-dice-clear-hold" variant="ghost" className="compact-action">Clear holds</Button>
-            </div>
-          </div>
-          <div id="poker-dice-info-modal" className="modal hidden" role="dialog" aria-modal="true" aria-labelledby="poker-dice-info-title">
-            <div className="modal-backdrop" data-close-poker-info="true"></div>
-            <div className="modal-content poker-dice-help-content">
-              <div className="modal-head">
-                <h2 id="poker-dice-info-title">Poker hand scores</h2>
-                <button id="close-poker-dice-info" className="ghost" type="button" aria-label="Close poker dice hand guide">✕</button>
-              </div>
-              <div className="poker-dice-help-list">
-                <div className="poker-dice-help-row"><strong>Royal flush</strong><span>20 pts</span></div>
-                <div className="poker-dice-help-row"><strong>Straight flush</strong><span>16 pts</span></div>
-                <div className="poker-dice-help-row"><strong>Five of a kind</strong><span>12 pts</span></div>
-                <div className="poker-dice-help-row"><strong>Four of a kind</strong><span>10 pts</span></div>
-                <div className="poker-dice-help-row"><strong>Full house</strong><span>8 pts</span></div>
-                <div className="poker-dice-help-row"><strong>Three of a kind</strong><span>4 pts</span></div>
-                <div className="poker-dice-help-row"><strong>Two pair</strong><span>2 pts</span></div>
-              </div>
-            </div>
-          </div>
-          <div id="game-result-panel" className="game-result-panel game-result-overlay hidden" aria-live="polite">
-            <div className="game-result-sheet">
-              <ResultBanner emojiId="game-result-emoji" titleId="winner-title" title="Winner" />
-              <div id="winner-hero" className="game-result-hero hidden"></div>
-              <div className="button-row winner-actions game-result-actions">
-                <Button id="winner-play-again" className="cta-main">
-                  Next game
-                </Button>
-              </div>
-            </div>
-          </div>
-        </GameSurfaceShell>
+        </div>
       </Screen>
 
       <Screen id="screen-pass">

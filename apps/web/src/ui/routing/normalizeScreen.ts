@@ -11,6 +11,7 @@ export interface NormalizeScreenState {
 
 export function normalizeTargetScreen(target: ScreenKey | null | undefined, state: NormalizeScreenState): ScreenKey {
   if (!target) return "landing";
+  if (target === "pick") return state.hasRoom ? "lobby" : "landing";
   if (ROOM_REQUIRED_SCREENS.has(target) && !state.hasRoom) return "landing";
 
   if (target === "game" && !state.hasGame) {

@@ -22,10 +22,6 @@ export function AppActionDock() {
         <Button id="app-dock-join-room" className="app-dock-btn" type="button">Continue</Button>
       </div>
 
-      <div id="app-dock-slot-lobby" className="app-fixed-footer-slot app-dock-slot hidden">
-        <Button id="app-dock-lobby-ready" className="app-dock-btn" type="button">Pick a game</Button>
-      </div>
-
       <div id="app-dock-slot-winner" className="app-fixed-footer-slot app-dock-slot hidden">
         <Button id="app-dock-winner-next" className="app-dock-btn" type="button">Next game</Button>
       </div>

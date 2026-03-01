@@ -12,7 +12,7 @@ async function fillJoinCodeSlots(page, rawCode) {
   }
 }
 
-test("local browser navigation: pick -> lobby -> local-or-landing", async ({ page }) => {
+test("local browser navigation: lobby -> local-or-landing", async ({ page }) => {
   await page.goto("/");
   await page.waitForFunction(() => window.__multipassLegacyReady === true);
   await expect(page).toHaveURL(/\/$/);
@@ -30,14 +30,6 @@ test("local browser navigation: pick -> lobby -> local-or-landing", async ({ pag
   await page.locator('#local-avatar-grid .avatar-option[data-avatar="green"]').click();
   await expect(page.getByRole("button", { name: "Continue" })).toBeEnabled();
   await page.getByRole("button", { name: "Continue" }).click();
-  await expect(page.locator("#screen-lobby.active")).toBeVisible();
-  await expect(page).toHaveURL(/#lobby$/);
-
-  await page.getByRole("button", { name: "Pick a game" }).click();
-  await expect(page.locator("#screen-pick.active")).toBeVisible();
-  await expect(page).toHaveURL(/#pick$/);
-
-  await page.goBack();
   await expect(page.locator("#screen-lobby.active")).toBeVisible();
   await expect(page).toHaveURL(/#lobby$/);
 
@@ -74,19 +66,7 @@ test("online browser back exits room flow from lobby to landing", async ({ brows
   await guestPage.getByRole("button", { name: "Join room" }).click();
   await expect(guestPage.locator("#screen-lobby.active")).toBeVisible();
 
-  await hostPage.getByRole("button", { name: "Pick a game" }).click();
-  await expect(hostPage.locator("#screen-pick.active")).toBeVisible();
-  await expect(hostPage).toHaveURL(/#pick$/);
-
   await hostPage.goBack();
-  await expect(hostPage.locator("#screen-lobby.active")).toBeVisible();
-  await expect(hostPage).toHaveURL(/#lobby$/);
-
-  await hostPage.goBack();
-  const hashAfterSecondBack = new URL(hostPage.url()).hash;
-  if (hashAfterSecondBack === "#pick") {
-    await hostPage.goBack();
-  }
   await expect.poll(() => new URL(hostPage.url()).hash).toMatch(/^(|#host|#landing)$/);
 
   await hostContext.close();
@@ -95,6 +75,10 @@ test("online browser back exits room flow from lobby to landing", async ({ brows
 
 test("hash guards: invalid deep link normalizes and join route survives refresh", async ({ page }) => {
   await page.goto("/#game");
+  await expect(page.locator("#screen-landing.active")).toBeVisible();
+  await expect(page).toHaveURL(/\/$/);
+
+  await page.goto("/#pick");
   await expect(page.locator("#screen-landing.active")).toBeVisible();
   await expect(page).toHaveURL(/\/$/);
 

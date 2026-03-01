@@ -5,23 +5,28 @@ import { GameActionRow, GameSurfaceShell, ResultBanner, TurnStatusBar } from "..
 describe("game host patterns", () => {
   it("renders shell state and status with actions", () => {
     render(
-      <GameSurfaceShell
-        title="Tic Tac Toe"
-        status="Waiting"
-        state="waiting"
-        topStrip={<TurnStatusBar id="turn-indicator-test" />}
-        actions={(
-          <GameActionRow>
-            <Button type="button">Primary</Button>
-          </GameActionRow>
-        )}
-      />
+      <div className="game-screen-layout">
+        <GameSurfaceShell
+          title="Tic Tac Toe"
+          status="Waiting"
+          state="waiting"
+          actions={(
+            <GameActionRow>
+              <Button type="button">Primary</Button>
+            </GameActionRow>
+          )}
+        />
+        <div className="game-turn-footer">
+          <TurnStatusBar id="turn-indicator-test" />
+        </div>
+      </div>
     );
 
     expect(screen.getByText("Tic Tac Toe")).toBeInTheDocument();
     expect(screen.getByText("Waiting")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Primary" })).toBeInTheDocument();
-    expect(document.querySelector(".game-surface-strip #turn-indicator-test")).toBeInTheDocument();
+    expect(document.querySelector(".game-turn-footer #turn-indicator-test")).toBeInTheDocument();
+    expect(document.querySelector(".game-surface-strip #turn-indicator-test")).not.toBeInTheDocument();
     expect(document.getElementById("turn-indicator-test")).toBeInTheDocument();
   });
 

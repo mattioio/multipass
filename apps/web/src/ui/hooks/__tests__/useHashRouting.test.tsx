@@ -25,4 +25,10 @@ describe("useHashRouting", () => {
     expect(result.current.route.screen).toBe("join");
     expect(result.current.route.join.code).toBe("FVBJ");
   });
+
+  it("maps #pick hash to lobby route", () => {
+    window.history.replaceState({}, "", "/#pick");
+    const { result } = renderHook(() => useHashRouting());
+    expect(result.current.route.screen).toBe("lobby");
+  });
 });

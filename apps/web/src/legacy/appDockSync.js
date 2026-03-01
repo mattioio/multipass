@@ -2,7 +2,6 @@ const DOCK_SOURCE_BUTTON_MAP = Object.freeze([
   { sourceButtonId: "local-continue", dockButtonId: "app-dock-local-continue" },
   { sourceButtonId: "create-room", dockButtonId: "app-dock-host-create" },
   { sourceButtonId: "join-room", dockButtonId: "app-dock-join-room" },
-  { sourceButtonId: "ready-cta", dockButtonId: "app-dock-lobby-ready" },
   { sourceButtonId: "winner-play-again", dockButtonId: "app-dock-winner-next" }
 ]);
 

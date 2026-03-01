@@ -17,6 +17,17 @@ async function fillJoinCodeSlots(page, rawCode) {
   }
 }
 
+function gameCard(page, gameName) {
+  return page
+    .locator("#screen-lobby #game-list .game-card")
+    .filter({ has: page.locator(".game-name", { hasText: gameName }) })
+    .first();
+}
+
+function gameCta(page, gameName) {
+  return gameCard(page, gameName).locator(".game-cta");
+}
+
 test("online happy path: host + guest choose game -> game", async ({ browser }) => {
   const hostContext = await browser.newContext();
   const guestContext = await browser.newContext();
@@ -69,14 +80,32 @@ test("online happy path: host + guest choose game -> game", async ({ browser }) 
   expect(guestLobbyHostScoreRotationVar).toBe("0deg");
   expect(guestLobbyGuestScoreRotationVar).toBe("180deg");
 
-  await hostPage.getByRole("button", { name: "Pick a game" }).click();
-  await guestPage.getByRole("button", { name: "Pick a game" }).click();
+  await expect(hostPage.locator("#screen-lobby #game-list .game-card")).toHaveCount(4);
+  await expect(guestPage.locator("#screen-lobby #game-list .game-card")).toHaveCount(4);
+  await hostPage.evaluate(() => {
+    window.location.hash = "#pick";
+  });
+  await expect(hostPage.locator("#screen-lobby.active")).toBeVisible();
+  await expect.poll(() => new URL(hostPage.url()).hash).toBe("#lobby");
 
-  await expect(hostPage.locator("#screen-pick.active")).toBeVisible();
-  await expect(guestPage.locator("#screen-pick.active")).toBeVisible();
+  const hostTicTacToeCta = gameCta(hostPage, "Tic Tac Toe");
+  const guestTicTacToeCta = gameCta(guestPage, "Tic Tac Toe");
 
-  await hostPage.getByRole("button", { name: "Play Tic Tac Toe" }).click();
-  await guestPage.getByRole("button", { name: "Play Tic Tac Toe" }).click();
+  await expect(hostTicTacToeCta).toHaveText("Play");
+  await expect(guestTicTacToeCta).toHaveText("Play");
+
+  await hostTicTacToeCta.click();
+  await expect(hostTicTacToeCta).toHaveText("Selected");
+  await expect(guestTicTacToeCta).toHaveText("Agree");
+  await expect(gameCard(guestPage, "Tic Tac Toe").locator(".agree-chip")).toHaveText("Teammate picked this");
+
+  await guestTicTacToeCta.click();
+  await expect(hostPage.locator("#screen-lobby.active")).toBeVisible();
+  await expect(guestPage.locator("#screen-lobby.active")).toBeVisible();
+  await expect(hostTicTacToeCta).toHaveText(/Starting in [1-3]/, { timeout: 1500 });
+  await expect(guestTicTacToeCta).toHaveText(/Starting in [1-3]/, { timeout: 1500 });
+  await expect(hostPage.locator("#pick-status")).toContainText(/Starting in [1-3]/);
+  await expect(guestPage.locator("#pick-status")).toContainText(/Starting in [1-3]/);
 
   await expect(hostPage.locator("#screen-game.active")).toBeVisible();
   await expect(guestPage.locator("#screen-game.active")).toBeVisible();
@@ -108,6 +137,69 @@ test("online happy path: host + guest choose game -> game", async ({ browser }) 
   await guestContext.close();
 });
 
+test("online agreement countdown cancels when a player changes game before start", async ({ browser }) => {
+  const hostContext = await browser.newContext();
+  const guestContext = await browser.newContext();
+  const hostPage = await hostContext.newPage();
+  const guestPage = await guestContext.newPage();
+
+  await gotoApp(hostPage);
+  await hostPage.getByRole("tab", { name: "Online" }).click();
+  await hostPage.getByRole("button", { name: "Host a room" }).click();
+  await hostPage.locator('#host-avatar-picker .avatar-option[data-avatar="yellow"]').click();
+  await hostPage.getByRole("button", { name: "Continue" }).click();
+  await expect(hostPage.locator("#screen-lobby.active")).toBeVisible();
+  const roomCode = (await hostPage.locator("#room-code").textContent())?.trim() || "";
+
+  await gotoApp(guestPage);
+  await guestPage.getByRole("tab", { name: "Online" }).click();
+  await guestPage.getByRole("button", { name: "Join a room" }).click();
+  await fillJoinCodeSlots(guestPage, roomCode);
+  await expect(guestPage.locator("#join-avatar-picker:not(.hidden)")).toBeVisible();
+  await guestPage.locator('#join-avatar-picker .avatar-option[data-avatar="green"]').click();
+  await guestPage.getByRole("button", { name: "Join room" }).click();
+
+  await expect(hostPage.locator("#screen-lobby.active")).toBeVisible();
+  await expect(guestPage.locator("#screen-lobby.active")).toBeVisible();
+
+  const hostTicTacToeCta = gameCta(hostPage, "Tic Tac Toe");
+  const guestTicTacToeCta = gameCta(guestPage, "Tic Tac Toe");
+  const hostDotsCta = gameCta(hostPage, "Dots & Boxes");
+  const guestDotsCta = gameCta(guestPage, "Dots & Boxes");
+
+  await hostTicTacToeCta.click();
+  await expect(hostTicTacToeCta).toHaveText("Selected");
+  await expect(guestTicTacToeCta).toHaveText("Agree");
+
+  await guestTicTacToeCta.click();
+  await expect(hostTicTacToeCta).toHaveText(/Starting in [1-3]/, { timeout: 1500 });
+  await expect(guestTicTacToeCta).toHaveText(/Starting in [1-3]/, { timeout: 1500 });
+
+  await hostDotsCta.click();
+  await expect(hostPage.locator("#screen-lobby.active")).toBeVisible();
+  await expect(guestPage.locator("#screen-lobby.active")).toBeVisible();
+  await expect(hostTicTacToeCta).toHaveText("Agree");
+  await expect(guestTicTacToeCta).toHaveText("Selected");
+  await expect(guestDotsCta).toHaveText("Agree");
+
+  await hostPage.waitForTimeout(3400);
+  await expect(hostPage.locator("#screen-lobby.active")).toBeVisible();
+  await expect(guestPage.locator("#screen-lobby.active")).toBeVisible();
+  await expect(hostPage.locator("#screen-game.active")).toHaveCount(0);
+  await expect(guestPage.locator("#screen-game.active")).toHaveCount(0);
+
+  await guestDotsCta.click();
+  await expect(hostDotsCta).toHaveText(/Starting in [1-3]/, { timeout: 1500 });
+  await expect(guestDotsCta).toHaveText(/Starting in [1-3]/, { timeout: 1500 });
+  await expect(hostPage.locator("#screen-game.active")).toBeVisible();
+  await expect(guestPage.locator("#screen-game.active")).toBeVisible();
+  await expect(hostPage.locator("#dots-layout")).not.toHaveClass(/hidden/);
+  await expect(guestPage.locator("#dots-layout")).not.toHaveClass(/hidden/);
+
+  await hostContext.close();
+  await guestContext.close();
+});
+
 test("online dots and boxes syncs edge moves across host and guest", async ({ browser }) => {
   const hostContext = await browser.newContext();
   const guestContext = await browser.newContext();
@@ -133,10 +225,8 @@ test("online dots and boxes syncs edge moves across host and guest", async ({ br
   await expect(hostPage.locator("#screen-lobby.active")).toBeVisible();
   await expect(guestPage.locator("#screen-lobby.active")).toBeVisible();
 
-  await hostPage.getByRole("button", { name: "Pick a game" }).click();
-  await guestPage.getByRole("button", { name: "Pick a game" }).click();
-  await hostPage.getByRole("button", { name: "Play Dots & Boxes" }).click();
-  await guestPage.getByRole("button", { name: "Play Dots & Boxes" }).click();
+  await gameCta(hostPage, "Dots & Boxes").click();
+  await gameCta(guestPage, "Dots & Boxes").click();
 
   await expect(hostPage.locator("#screen-game.active")).toBeVisible();
   await expect(guestPage.locator("#screen-game.active")).toBeVisible();
@@ -313,10 +403,8 @@ test("online game Exit leaves on first click and stays on landing", async ({ bro
   await guestPage.getByRole("button", { name: "Join room" }).click();
   await expect(guestPage.locator("#screen-lobby.active")).toBeVisible();
 
-  await hostPage.getByRole("button", { name: "Pick a game" }).click();
-  await guestPage.getByRole("button", { name: "Pick a game" }).click();
-  await hostPage.getByRole("button", { name: "Play Tic Tac Toe" }).click();
-  await guestPage.getByRole("button", { name: "Play Tic Tac Toe" }).click();
+  await gameCta(hostPage, "Tic Tac Toe").click();
+  await gameCta(guestPage, "Tic Tac Toe").click();
   await expect(hostPage.locator("#screen-game.active")).toBeVisible();
 
   await hostPage.getByRole("button", { name: "Exit" }).click();
@@ -421,10 +509,8 @@ test("online pick can launch poker dice module", async ({ browser }) => {
   await guestPage.getByRole("button", { name: "Join room" }).click();
   await expect(guestPage.locator("#screen-lobby.active")).toBeVisible();
 
-  await hostPage.getByRole("button", { name: "Pick a game" }).click();
-  await guestPage.getByRole("button", { name: "Pick a game" }).click();
-  await hostPage.getByRole("button", { name: "Play Poker Dice", exact: true }).click();
-  await guestPage.getByRole("button", { name: "Play Poker Dice", exact: true }).click();
+  await gameCta(hostPage, "Poker Dice").click();
+  await gameCta(guestPage, "Poker Dice").click();
 
   await expect(hostPage.locator("#screen-game.active")).toBeVisible();
   await expect(guestPage.locator("#screen-game.active")).toBeVisible();
@@ -432,6 +518,14 @@ test("online pick can launch poker dice module", async ({ browser }) => {
   await expect(guestPage.locator("#poker-dice-layout")).not.toHaveClass(/hidden/);
   await expect(hostPage.locator("#poker-dice-dice .poker-die")).toHaveCount(6);
   await expect(guestPage.locator("#poker-dice-dice .poker-die")).toHaveCount(6);
+  await expect(hostPage.locator("#poker-dice-layout .poker-dice-score-guide")).toBeVisible();
+  await expect(guestPage.locator("#poker-dice-layout .poker-dice-score-guide")).toBeVisible();
+  await expect(hostPage.locator("#poker-dice-layout .poker-dice-score-row")).toHaveCount(9);
+  await expect(guestPage.locator("#poker-dice-layout .poker-dice-score-row")).toHaveCount(9);
+  await expect(hostPage.locator("#poker-dice-info")).toHaveCount(0);
+  await expect(guestPage.locator("#poker-dice-info")).toHaveCount(0);
+  await expect(hostPage.locator("#poker-dice-info-modal")).toHaveCount(0);
+  await expect(guestPage.locator("#poker-dice-info-modal")).toHaveCount(0);
 
   await hostContext.close();
   await guestContext.close();

@@ -42,6 +42,25 @@ function waitForMessage(ws, predicate, timeoutMs = 8000, label = "message") {
   });
 }
 
+function waitForNoMessage(ws, predicate, timeoutMs = 1200, label = "message") {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      ws.off("message", onMessage);
+      resolve();
+    }, timeoutMs);
+
+    function onMessage(raw) {
+      const parsed = JSON.parse(raw.toString());
+      if (!predicate(parsed)) return;
+      clearTimeout(timeout);
+      ws.off("message", onMessage);
+      reject(new Error(`Unexpected websocket message (${label}).`));
+    }
+
+    ws.on("message", onMessage);
+  });
+}
+
 test("starter is host in round 1, then alternates to guest in round 2", async () => {
   const host = await connectSocket();
   const hostSession = waitForMessage(host, (message) => message.type === "session", 8000, "host session");
@@ -157,6 +176,136 @@ test("starter is host in round 1, then alternates to guest in round 2", async ()
   expect(roundTwoStarted.room.round.firstPlayerId).toBe(roundOneGuestId);
   expect(roundTwoStarted.room.round.status).toBe("playing");
   expect(roundTwoStarted.room.game.state.nextPlayerId).toBe(roundOneGuestId);
+
+  host.close();
+  guest.close();
+});
+
+test("game selection requires explicit agreement and countdown cancels on changed choice", async () => {
+  const host = await connectSocket();
+  const hostSession = waitForMessage(host, (message) => message.type === "session", 8000, "host session");
+  const hostRoomCreated = waitForMessage(
+    host,
+    (message) => message.type === "room_state" && Boolean(message.room?.code),
+    8000,
+    "host room created"
+  );
+
+  host.send(JSON.stringify({ type: "create_room", avatar: "yellow", honorific: "mr" }));
+  await hostSession;
+  const hostRoom = await hostRoomCreated;
+  const roomCode = hostRoom.room.code;
+
+  const guest = await connectSocket();
+  const guestSession = waitForMessage(guest, (message) => message.type === "session", 8000, "guest session");
+  const guestJoined = waitForMessage(
+    guest,
+    (message) => message.type === "room_state" && Boolean(message.room?.players?.guest?.id),
+    8000,
+    "guest joined"
+  );
+
+  guest.send(JSON.stringify({ type: "join_room", code: roomCode, avatar: "green", honorific: "mr" }));
+  await guestSession;
+  await guestJoined;
+
+  const hostPickedTtt = waitForMessage(
+    host,
+    (message) => message.type === "room_state"
+      && message.room?.round?.hostGameId === "tic_tac_toe"
+      && message.room?.round?.guestGameId === null
+      && message.room?.round?.status === "waiting_game"
+      && message.room?.round?.resolvedGameId === null
+      && message.room?.game === null,
+    8000,
+    "host picked ttt"
+  );
+  host.send(JSON.stringify({ type: "select_game", gameId: "tic_tac_toe" }));
+  await hostPickedTtt;
+
+  const mismatchState = waitForMessage(
+    host,
+    (message) => message.type === "room_state"
+      && message.room?.round?.hostGameId === "tic_tac_toe"
+      && message.room?.round?.guestGameId === "dots_and_boxes"
+      && message.room?.round?.status === "waiting_game"
+      && message.room?.round?.resolvedGameId === null
+      && message.room?.round?.countdownStartedAt === null
+      && message.room?.round?.countdownEndsAt === null
+      && message.room?.game === null,
+    8000,
+    "mismatch state"
+  );
+  guest.send(JSON.stringify({ type: "select_game", gameId: "dots_and_boxes" }));
+  await mismatchState;
+
+  await waitForNoMessage(
+    host,
+    (message) => message.type === "room_state" && Boolean(message.room?.game),
+    3400,
+    "game should not start on mismatch"
+  );
+
+  const countdownStarted = waitForMessage(
+    host,
+    (message) => message.type === "room_state"
+      && message.room?.round?.status === "countdown"
+      && message.room?.round?.resolvedGameId === "dots_and_boxes"
+      && Number(message.room?.round?.countdownEndsAt) > Number(message.room?.round?.countdownStartedAt)
+      && message.room?.game === null,
+    8000,
+    "countdown started"
+  );
+  host.send(JSON.stringify({ type: "select_game", gameId: "dots_and_boxes" }));
+  const countdownState = await countdownStarted;
+  expect(countdownState.room.round.countdownStartedAt).toEqual(expect.any(Number));
+  expect(countdownState.room.round.countdownEndsAt).toEqual(expect.any(Number));
+
+  const countdownCanceled = waitForMessage(
+    host,
+    (message) => message.type === "room_state"
+      && message.room?.round?.status === "waiting_game"
+      && message.room?.round?.hostGameId === "tic_tac_toe"
+      && message.room?.round?.guestGameId === "dots_and_boxes"
+      && message.room?.round?.resolvedGameId === null
+      && message.room?.round?.countdownStartedAt === null
+      && message.room?.round?.countdownEndsAt === null
+      && message.room?.game === null,
+    8000,
+    "countdown canceled by host change"
+  );
+  host.send(JSON.stringify({ type: "select_game", gameId: "tic_tac_toe" }));
+  await countdownCanceled;
+
+  await waitForNoMessage(
+    host,
+    (message) => message.type === "room_state" && Boolean(message.room?.game),
+    3400,
+    "game should stay stopped after countdown cancel"
+  );
+
+  const secondCountdownStarted = waitForMessage(
+    host,
+    (message) => message.type === "room_state"
+      && message.room?.round?.status === "countdown"
+      && message.room?.round?.resolvedGameId === "tic_tac_toe"
+      && message.room?.game === null,
+    8000,
+    "second countdown started"
+  );
+  guest.send(JSON.stringify({ type: "select_game", gameId: "tic_tac_toe" }));
+  await secondCountdownStarted;
+
+  const gameStarted = await waitForMessage(
+    host,
+    (message) => message.type === "room_state"
+      && message.room?.game?.id === "tic_tac_toe"
+      && message.room?.round?.status === "playing",
+    8000,
+    "game started after second agreement"
+  );
+  expect(gameStarted.room.round.countdownStartedAt).toBeNull();
+  expect(gameStarted.room.round.countdownEndsAt).toBeNull();
 
   host.close();
   guest.close();

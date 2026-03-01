@@ -8,7 +8,7 @@ const HASH_TO_SCREEN: Record<string, ScreenKey> = {
   "#host": "host",
   "#join": "join",
   "#lobby": "lobby",
-  "#pick": "pick",
+  "#pick": "lobby",
   "#wait": "wait",
   "#game": "game",
   "#pass": "pass",

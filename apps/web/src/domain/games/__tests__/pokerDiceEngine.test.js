@@ -75,7 +75,7 @@ describe("poker dice engine", () => {
 
     expect(state4.handTies).toBe(1);
     expect(state4.currentHandNumber).toBe(2);
-    expect(state4.nextPlayerId).toBe("p2");
+    expect(state4.nextPlayerId).toBe("p1");
     expect(state4.currentHand.finalByPlayer.p1).toBeNull();
     expect(state4.currentHand.finalByPlayer.p2).toBeNull();
     const lastResult = state4.history[state4.history.length - 1];
@@ -100,21 +100,21 @@ describe("poker dice engine", () => {
     expect(state.currentHandNumber).toBe(2);
     expect(state.pointsByPlayer.p1).toBe(16);
     expect(state.pointsByPlayer.p2).toBe(0);
-    expect(state.nextPlayerId).toBe("p2");
+    expect(state.nextPlayerId).toBe("p1");
 
     state = withMockRandom(randomSequenceFromDice([2, 3, 4, 5, 6, 2]), () => {
-      return engine.applyMove(state, { action: "roll" }, "p2").state;
-    });
-    state = engine.applyMove(state, { action: "bank" }, "p2").state;
-
-    state = withMockRandom(randomSequenceFromDice([1, 1, 3, 4, 5, 6]), () => {
       return engine.applyMove(state, { action: "roll" }, "p1").state;
     });
     state = engine.applyMove(state, { action: "bank" }, "p1").state;
 
+    state = withMockRandom(randomSequenceFromDice([1, 1, 3, 4, 5, 6]), () => {
+      return engine.applyMove(state, { action: "roll" }, "p2").state;
+    });
+    state = engine.applyMove(state, { action: "bank" }, "p2").state;
+
     expect(state.currentHandNumber).toBe(3);
-    expect(state.pointsByPlayer.p1).toBe(16);
-    expect(state.pointsByPlayer.p2).toBe(16);
+    expect(state.pointsByPlayer.p1).toBe(32);
+    expect(state.pointsByPlayer.p2).toBe(0);
     expect(state.nextPlayerId).toBe("p1");
 
     state = withMockRandom(randomSequenceFromDice([1, 1, 2, 3, 4, 5]), () => {
@@ -131,8 +131,8 @@ describe("poker dice engine", () => {
     expect(state.phase).toBe("finished");
     expect(state.nextPlayerId).toBeNull();
     expect(state.currentHandNumber).toBe(3);
-    expect(state.pointsByPlayer.p1).toBe(36);
-    expect(state.pointsByPlayer.p2).toBe(16);
+    expect(state.pointsByPlayer.p1).toBe(52);
+    expect(state.pointsByPlayer.p2).toBe(0);
     expect(state.draw).toBeFalsy();
   });
 

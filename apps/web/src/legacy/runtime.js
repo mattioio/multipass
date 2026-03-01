@@ -22,7 +22,6 @@ import { reducer } from "../state/reducer.js";
 import { getLeaderId } from "../state/selectors.js";
 import { createStore } from "../state/store.js";
 import { renderLocalSetupScreen } from "../ui/screens/localSetup.js";
-import { renderPickHint } from "../ui/screens/pickHint.js";
 import { setupAvatarPicker, updateAvatarPicker } from "../ui/shared/avatarPicker.js";
 import { PLAYER_CARD_VARIANTS } from "../ui/shared/playerCardContract.js";
 import { createPlayerCardElement } from "../ui/shared/playerCardDom.js";
@@ -65,18 +64,28 @@ const SCREEN_TO_HASH = Object.freeze({
   host: "#host",
   join: "#join",
   lobby: "#lobby",
-  pick: "#pick",
+  pick: "#lobby",
   wait: "#wait",
   game: "#game",
   pass: "#pass",
   winner: "#winner",
   devkit: "#devkit"
 });
-const HASH_TO_SCREEN = Object.freeze(
-  Object.fromEntries(Object.entries(SCREEN_TO_HASH).map(([screen, hash]) => [hash, screen]))
-);
-const ROOM_REQUIRED_SCREENS = new Set(["lobby", "pick", "wait", "game", "pass", "winner"]);
-const ONLINE_HERO_ROOM_SCREENS = new Set(["lobby", "pick", "wait", "game", "winner"]);
+const HASH_TO_SCREEN = Object.freeze({
+  "": "landing",
+  "#local": "local",
+  "#host": "host",
+  "#join": "join",
+  "#lobby": "lobby",
+  "#pick": "lobby",
+  "#wait": "wait",
+  "#game": "game",
+  "#pass": "pass",
+  "#winner": "winner",
+  "#devkit": "devkit"
+});
+const ROOM_REQUIRED_SCREENS = new Set(["lobby", "wait", "game", "pass", "winner"]);
+const ONLINE_HERO_ROOM_SCREENS = new Set(["lobby", "wait", "game", "winner"]);
 const LEGACY_BOOTSTRAP_FLAG = "__multipassLegacyInitialized";
 const PROD_WS_FALLBACK_URLS = Object.freeze([
   "wss://api.loreandorder.com"
@@ -116,7 +125,6 @@ const FIXED_FOOTER_SCREEN_SLOT_MAP = Object.freeze({
   local: "app-dock-slot-local",
   host: "app-dock-slot-host",
   join: "app-dock-slot-join",
-  lobby: "app-dock-slot-lobby",
   winner: "app-dock-slot-winner"
 });
 const HERO_ACTION_BUTTON_IDS = ["hero-left-action", "hero-left-action-2", "hero-left-action-3"];
@@ -711,6 +719,7 @@ function shouldIgnoreRoomState(roomCode) {
 }
 
 function normalizeTargetScreen(screen) {
+  if (screen === "pick") return state.room ? "lobby" : "landing";
   if (!screen || !(screen in screens) || !screens[screen]) return "landing";
   if (ROOM_REQUIRED_SCREENS.has(screen) && !state.room) return "landing";
   if (screen === "game" && !state.room?.game) {
@@ -862,7 +871,6 @@ function getPrimaryHeroActionConfig() {
   }
   if (isLocalMode() && state.room && (
     state.activeScreen === "lobby" ||
-    state.activeScreen === "pick" ||
     state.activeScreen === "game" ||
     state.activeScreen === "pass" ||
     state.activeScreen === "winner"
@@ -871,19 +879,6 @@ function getPrimaryHeroActionConfig() {
   }
   if (!isLocalMode() && state.room && state.activeScreen === "lobby") {
     return { label: "Exit", action: () => leaveRoom() };
-  }
-  if (state.activeScreen === "pick") {
-    return { label: "Back", action: () => {
-      state.keepPickOpen = false;
-      if (isLocalMode()) {
-        showScreen("lobby", { history: "push" });
-        return;
-      }
-      if (state.room?.code) {
-        setPreferredRoomScreen(state.room.code, "lobby");
-      }
-      showScreen("lobby", { history: "push" });
-    } };
   }
   if (state.activeScreen === "game") {
     return { label: "Exit", action: () => leaveRoom() };
@@ -1448,7 +1443,7 @@ function updateRoomUiPrefs(roomCode, patch) {
 
 function setPreferredRoomScreen(roomCode, screen) {
   if (!roomCode) return;
-  if (screen !== "lobby" && screen !== "pick") return;
+  if (screen !== "lobby") return;
   updateRoomUiPrefs(roomCode, { preferredRoomScreen: screen });
 }
 
@@ -1465,7 +1460,7 @@ function clearDismissedWinnerSignature(roomCode) {
 function getPreferredRoomScreen(roomCode) {
   const roomPrefs = getRoomUiPrefs(roomCode);
   const preferred = roomPrefs?.preferredRoomScreen;
-  if (preferred === "pick" || preferred === "lobby") return preferred;
+  if (preferred === "lobby") return preferred;
   return "lobby";
 }
 
@@ -1651,6 +1646,8 @@ function createLocalRoom(avatarOne, avatarTwo, honorificOne = "mr", honorificTwo
       hostGameId: null,
       guestGameId: null,
       resolvedGameId: null,
+      countdownStartedAt: null,
+      countdownEndsAt: null,
       hasPickedStarter: false
     },
     game: null,
@@ -1684,6 +1681,8 @@ function advanceLocalRoundByAlternation() {
     hostGameId: null,
     guestGameId: null,
     resolvedGameId: null,
+    countdownStartedAt: null,
+    countdownEndsAt: null,
     hasPickedStarter: Boolean(next)
   };
   state.room.game = null;
@@ -1744,6 +1743,8 @@ function startLocalGame(gameId) {
     state.room.round.resolvedGameId = game.id;
     state.room.round.hasPickedStarter = true;
     state.room.round.status = "playing";
+    state.room.round.countdownStartedAt = null;
+    state.room.round.countdownEndsAt = null;
   }
   state.room.updatedAt = Date.now();
   handleLocalUpdate();
@@ -1765,6 +1766,8 @@ function startLocalRoundFromChoice(gameId) {
       hostGameId: null,
       guestGameId: null,
       resolvedGameId: null,
+      countdownStartedAt: null,
+      countdownEndsAt: null,
       hasPickedStarter: false
     };
   }
@@ -1860,6 +1863,7 @@ function acknowledgeLocalPassHandoff() {
 
 function leaveRoom(options = {}) {
   const historyMode = options.history || "push";
+  clearLobbyCountdownRenderTicker();
   if (isLocalMode()) {
     leaveLocalMatch({ saveForRejoin: false, history: historyMode });
     return;
@@ -1888,9 +1892,11 @@ function leaveRoom(options = {}) {
 
 function leaveLocalMatch({ saveForRejoin, history = "push" } = {}) {
   if (!isLocalMode() || !state.room) {
+    clearLobbyCountdownRenderTicker();
     showScreen("landing", { history });
     return;
   }
+  clearLobbyCountdownRenderTicker();
   resetWinReveal();
   if (saveForRejoin) {
     saveLocalRejoinSnapshot(state.room);
@@ -1929,7 +1935,6 @@ function renderRoom(options = {}) {
   renderLobby(room);
   renderScoreboard(room, leaderId);
   renderWinner(room, leaderId);
-  renderPickScreen(room);
   renderWaitScreen(room);
   renderGame(room);
   renderGameList(room);
@@ -1947,51 +1952,7 @@ function renderRoom(options = {}) {
 }
 
 function renderLobby(room) {
-  const cta = document.getElementById("ready-cta");
-  if (!cta) return;
-  if (!room.players.guest) {
-    cta.disabled = true;
-    cta.textContent = "Waiting for second player";
-    cta.classList.add("is-waiting-copy");
-    cta.dataset.action = "none";
-    syncDockFromSourceButtons({ landingMode: state.landingMode });
-    return;
-  }
-  cta.classList.remove("is-waiting-copy");
-
-  const gameActive = Boolean(room.game && !room.game.state?.winnerId && !room.game.state?.draw);
-
-  if (isLocalMode()) {
-    if (gameActive) {
-      cta.disabled = true;
-      cta.textContent = "Finish current game";
-      cta.classList.remove("is-waiting-copy");
-      cta.dataset.action = "none";
-      syncDockFromSourceButtons({ landingMode: state.landingMode });
-      return;
-    }
-    cta.disabled = false;
-    cta.textContent = "Pick a game";
-    cta.classList.remove("is-waiting-copy");
-    cta.dataset.action = "pick";
-    syncDockFromSourceButtons({ landingMode: state.landingMode });
-    return;
-  }
-
-  if (state.you?.role !== "host" && state.you?.role !== "guest") {
-    cta.disabled = true;
-    cta.textContent = "Waiting for players...";
-    cta.classList.remove("is-waiting-copy");
-    cta.dataset.action = "none";
-    syncDockFromSourceButtons({ landingMode: state.landingMode });
-    return;
-  }
-
-  cta.disabled = false;
-  cta.textContent = "Pick a game";
-  cta.classList.remove("is-waiting-copy");
-  cta.dataset.action = "pick";
-  syncDockFromSourceButtons({ landingMode: state.landingMode });
+  void room;
 }
 
 function renderScoreboard(room, leaderId) {
@@ -2019,12 +1980,8 @@ function buildScoreDuelPanel(host, guest, leaderId, options = {}) {
   const guestSide = buildScoreDuelSide(guest, "Guest", leaderId, {
     isWaiting: Boolean(options.guestWaiting)
   });
-  const divider = document.createElement("div");
-  divider.className = "score-duel-divider";
-  divider.setAttribute("aria-hidden", "true");
 
   sides.appendChild(hostSide);
-  sides.appendChild(divider);
   sides.appendChild(guestSide);
   panel.appendChild(sides);
 
@@ -2133,8 +2090,47 @@ function buildSharedScoreBroadcastRow(options = {}) {
   return row;
 }
 
+let lobbyCountdownRenderTicker = null;
+
+function clearLobbyCountdownRenderTicker() {
+  if (lobbyCountdownRenderTicker === null) return;
+  window.clearInterval(lobbyCountdownRenderTicker);
+  lobbyCountdownRenderTicker = null;
+}
+
+function syncLobbyCountdownRenderTicker(room) {
+  const shouldTick = Boolean(
+    !isLocalMode() &&
+    state.activeScreen === "lobby" &&
+    room?.round?.status === "countdown" &&
+    Number(room?.round?.countdownEndsAt) > Date.now()
+  );
+
+  if (!shouldTick) {
+    clearLobbyCountdownRenderTicker();
+    return;
+  }
+
+  if (lobbyCountdownRenderTicker !== null) return;
+  lobbyCountdownRenderTicker = window.setInterval(() => {
+    if (!state.room || state.activeScreen !== "lobby") {
+      clearLobbyCountdownRenderTicker();
+      return;
+    }
+    renderGameList(state.room);
+  }, 250);
+}
+
+function getCountdownSecondsRemaining(countdownEndsAt) {
+  if (!countdownEndsAt) return null;
+  const msLeft = Math.max(0, Number(countdownEndsAt) - Date.now());
+  if (!msLeft) return 0;
+  return Math.max(1, Math.ceil(msLeft / 1000));
+}
+
 function renderGameList(room) {
   const list = document.getElementById("game-list");
+  if (!list) return;
   const statusEl = document.getElementById("pick-status");
   list.innerHTML = "";
 
@@ -2153,26 +2149,49 @@ function renderGameList(room) {
     : null;
   const picksMatch = Boolean(hostChoiceId && guestChoiceId && hostChoiceId === guestChoiceId);
   const picksMismatch = Boolean(hostChoiceId && guestChoiceId && hostChoiceId !== guestChoiceId);
-  const waitingForOther = Boolean(!isLocalMode() && myChoiceId && !otherChoiceId && !resolvedGameId);
+  const countdownActive = Boolean(
+    !isLocalMode() &&
+    room.round?.status === "countdown" &&
+    resolvedGameId &&
+    room.round?.countdownEndsAt
+  );
+  const countdownSeconds = countdownActive
+    ? getCountdownSecondsRemaining(room.round?.countdownEndsAt)
+    : null;
+
+  syncLobbyCountdownRenderTicker(room);
 
   if (statusEl) {
     if (isLocalMode()) {
       statusEl.textContent = "";
       statusEl.classList.add("hidden");
-    } else if (waitingForOther) {
-      statusEl.textContent = "Waiting for other player...";
+    } else if (gameActive) {
+      statusEl.textContent = "Finish current game before picking another.";
       statusEl.classList.remove("hidden");
-    } else if (picksMismatch && resolvedGameId) {
-      statusEl.textContent = "Different picks — host choice selected";
+    } else if (!room.players.host || !room.players.guest) {
+      statusEl.textContent = "Waiting for both players to join.";
       statusEl.classList.remove("hidden");
-    } else if (picksMatch && resolvedGameId) {
-      statusEl.textContent = "Both picked the same game";
+    } else if (countdownActive && resolvedGameId) {
+      statusEl.textContent = `Both agreed on ${getGameName(room, resolvedGameId)}. Starting in ${countdownSeconds}...`;
+      statusEl.classList.remove("hidden");
+    } else if (myChoiceId && !otherChoiceId) {
+      statusEl.textContent = `You chose ${getGameName(room, myChoiceId)}. Waiting for teammate to agree.`;
+      statusEl.classList.remove("hidden");
+    } else if (!myChoiceId && otherChoiceId) {
+      statusEl.textContent = `Teammate picked ${getGameName(room, otherChoiceId)}. Tap Agree to start.`;
+      statusEl.classList.remove("hidden");
+    } else if (picksMismatch) {
+      statusEl.textContent = "Different picks. Choose the same game to start.";
+      statusEl.classList.remove("hidden");
+    } else if (picksMatch && myChoiceId) {
+      statusEl.textContent = `Matched on ${getGameName(room, myChoiceId)}.`;
       statusEl.classList.remove("hidden");
     } else {
-      statusEl.textContent = "";
-      statusEl.classList.add("hidden");
+      statusEl.textContent = "Choose a game to start.";
+      statusEl.classList.remove("hidden");
     }
   }
+
   const sortedGames = resolvePickerGames(room.games || []).sort((a, b) => {
     const aSoon = Boolean(a.comingSoon);
     const bSoon = Boolean(b.comingSoon);
@@ -2182,15 +2201,19 @@ function renderGameList(room) {
 
   sortedGames.forEach((game) => {
     const comingSoon = Boolean(game.comingSoon);
+    const isMyChoice = myChoiceId === game.id;
+    const isPeerChoice = otherChoiceId === game.id;
+    const isCountdownTarget = Boolean(countdownActive && resolvedGameId === game.id);
+
     const card = document.createElement("article");
     card.className = "game-card";
-    if (comingSoon) {
-      card.classList.add("coming-soon");
-    }
-    if (room.game?.id === game.id || myChoiceId === game.id || room.round?.resolvedGameId === game.id) {
+    if (comingSoon) card.classList.add("coming-soon");
+    if (isMyChoice || room.game?.id === game.id || isCountdownTarget) {
       card.classList.add("active");
     }
-    const canPlayThis = canPick && !comingSoon;
+    if (isPeerChoice && !isMyChoice) {
+      card.classList.add("awaiting-agree");
+    }
     card.setAttribute("aria-label", comingSoon ? `${game.name}, coming soon` : game.name);
 
     const banner = document.createElement("div");
@@ -2212,7 +2235,12 @@ function renderGameList(room) {
       tag.className = "game-chip";
       tag.textContent = "Coming soon";
       titleRow.appendChild(tag);
-    } else if (!isLocalMode() && myChoiceId === game.id) {
+    } else if (!isLocalMode() && isPeerChoice && !isMyChoice) {
+      const tag = document.createElement("span");
+      tag.className = "game-chip agree-chip";
+      tag.textContent = "Teammate picked this";
+      titleRow.appendChild(tag);
+    } else if (!isLocalMode() && isMyChoice && !isCountdownTarget) {
       const tag = document.createElement("span");
       tag.className = "game-chip choice-chip";
       tag.textContent = "Your choice";
@@ -2225,9 +2253,22 @@ function renderGameList(room) {
     const cta = document.createElement("button");
     cta.type = "button";
     cta.className = "game-cta";
-    cta.textContent = "Play";
-    cta.disabled = !canPlayThis;
-    cta.setAttribute("aria-label", comingSoon ? `${game.name} coming soon` : `Play ${game.name}`);
+    cta.disabled = !canPick || comingSoon;
+
+    let ctaText = "Play";
+    if (!canPick) {
+      ctaText = "Play";
+    } else if (isCountdownTarget) {
+      ctaText = `Starting in ${countdownSeconds ?? 0}`;
+    } else if (!isLocalMode() && isPeerChoice && !isMyChoice) {
+      ctaText = "Agree";
+      cta.classList.add("is-agree");
+    } else if (!isLocalMode() && isMyChoice) {
+      ctaText = "Selected";
+    }
+
+    cta.textContent = ctaText;
+    cta.setAttribute("aria-label", comingSoon ? `${game.name} coming soon` : `${ctaText} ${game.name}`);
 
     ctaRow.appendChild(cta);
     meta.appendChild(titleRow);
@@ -2236,8 +2277,7 @@ function renderGameList(room) {
     card.appendChild(meta);
 
     cta.addEventListener("click", () => {
-      if (comingSoon) return;
-      state.keepPickOpen = false;
+      if (comingSoon || !canPick) return;
       if (isLocalMode()) {
         startLocalRoundFromChoice(game.id);
         return;
@@ -2248,6 +2288,7 @@ function renderGameList(room) {
   });
 
   const newRound = document.getElementById("new-round");
+  if (!(newRound instanceof HTMLElement)) return;
   if (isLocalMode()) {
     newRound.classList.add("hidden");
   } else if (finished && isPlayer) {
@@ -3333,28 +3374,16 @@ function getPokerDiceState(room) {
   return getDisplayStateForRoomGame(room) || room.game.state;
 }
 
-function getPokerCategoryLabel(category) {
-  if (category === "royal_flush") return "Royal flush";
-  if (category === "five_kind") return "Five of a kind";
-  if (category === "four_kind") return "Four of a kind";
-  if (category === "full_house") return "Full house";
-  if (category === "flush") return "Straight flush";
-  if (category === "three_kind") return "Three of a kind";
-  if (category === "two_pair") return "Two pair";
-  if (category === "one_pair") return "One pair";
-  return "High card";
-}
-
-function getPokerCategoryPoints(category) {
-  if (category === "royal_flush") return 20;
-  if (category === "flush") return 16;
-  if (category === "five_kind") return 12;
-  if (category === "four_kind") return 10;
-  if (category === "full_house") return 8;
-  if (category === "three_kind") return 4;
-  if (category === "two_pair") return 2;
-  if (category === "one_pair") return 0;
-  return 0;
+function updatePokerScoreGuideProjection(rows, category, options = {}) {
+  const rowElements = Array.from(rows || []).filter((row) => row instanceof HTMLElement);
+  if (!rowElements.length) return;
+  if (options.preserve) return;
+  rowElements.forEach((row) => row.classList.remove("is-projected"));
+  if (!category) return;
+  const projectedRow = rowElements.find((row) => row.dataset.pokerCategory === category);
+  if (projectedRow) {
+    projectedRow.classList.add("is-projected");
+  }
 }
 
 function getPokerDieFace(value) {
@@ -3946,7 +3975,6 @@ function renderPokerDice(room) {
   const layout = document.getElementById("poker-dice-layout");
   const diceEl = document.getElementById("poker-dice-dice");
   const roundTitleEl = document.getElementById("poker-dice-round-title");
-  const projectedEl = document.getElementById("poker-dice-projected");
   const rollButton = document.getElementById("poker-dice-roll");
   const bankButton = document.getElementById("poker-dice-bank");
   const clearButton = document.getElementById("poker-dice-clear-hold");
@@ -3955,6 +3983,7 @@ function renderPokerDice(room) {
   const indicatorEl = document.getElementById("turn-indicator");
 
   if (!(layout instanceof HTMLElement) || !(diceEl instanceof HTMLElement)) return;
+  const scoreGuideRows = layout.querySelectorAll(".poker-dice-score-row[data-poker-category]");
 
   const stateGame = getPokerDiceState(room);
   if (!stateGame) {
@@ -3962,7 +3991,7 @@ function renderPokerDice(room) {
     layout.classList.add("hidden");
     diceEl.innerHTML = "";
     if (roundTitleEl instanceof HTMLElement) roundTitleEl.textContent = "";
-    if (projectedEl instanceof HTMLElement) projectedEl.textContent = "Scoring hand: Roll to reveal.";
+    updatePokerScoreGuideProjection(scoreGuideRows, null);
     state.pokerDicePendingHolds = [];
     if (rollButton instanceof HTMLButtonElement) rollButton.disabled = true;
     if (bankButton instanceof HTMLButtonElement) bankButton.disabled = true;
@@ -4021,17 +4050,13 @@ function renderPokerDice(room) {
     state.pokerDiceFx.rollingIndices.size > 0
   );
   const projectedCategory = myFinal?.category || classifyPokerProjection(dice);
-  if (projectedEl instanceof HTMLElement) {
-    if (isFxRolling) {
-      // Keep current text while dice are rolling so the new hand appears only after settle.
-    } else if (isPreRollForViewer) {
-      projectedEl.textContent = "Scoring hand: Roll to reveal.";
-    } else if (!projectedCategory) {
-      projectedEl.textContent = "Scoring hand: Roll to reveal.";
-    } else {
-      const points = getPokerCategoryPoints(projectedCategory);
-      projectedEl.textContent = `Scoring hand: ${getPokerCategoryLabel(projectedCategory)} (${points} pts)`;
-    }
+  if (isFxRolling) {
+    // Keep current projection highlight while dice are rolling so it updates after settle.
+    updatePokerScoreGuideProjection(scoreGuideRows, null, { preserve: true });
+  } else if (isPreRollForViewer || !projectedCategory) {
+    updatePokerScoreGuideProjection(scoreGuideRows, null);
+  } else {
+    updatePokerScoreGuideProjection(scoreGuideRows, projectedCategory);
   }
 
   if (indicatorEl instanceof HTMLElement) {
@@ -4131,15 +4156,6 @@ function renderPokerDice(room) {
     clearButton.classList.toggle("hidden", showPassPlay || showInitialRollOnly);
   }
 
-}
-
-function renderPickScreen(room) {
-  renderPickHint({
-    room,
-    state,
-    isLocalMode,
-    getGameName
-  });
 }
 
 function renderWaitScreen(room) {
@@ -4332,7 +4348,6 @@ function setup() {
     };
   }
   initSettingsModal();
-  initPokerDiceInfoModal();
   registerServiceWorker();
   initInstallPromptHandling();
   state.localRejoinSnapshot = loadLocalRejoinSnapshot();
@@ -4474,31 +4489,17 @@ function setup() {
   const winnerAgain = document.getElementById("winner-play-again");
   if (winnerAgain) {
     winnerAgain.addEventListener("click", () => {
-      state.keepPickOpen = true;
+      state.keepPickOpen = false;
       if (isLocalMode()) {
         advanceLocalRoundByAlternation();
-        showScreen("pick", { history: "push" });
+        showScreen("lobby", { history: "push" });
         return;
       }
       if (state.room?.code) {
-        setPreferredRoomScreen(state.room.code, "pick");
+        setPreferredRoomScreen(state.room.code, "lobby");
         clearDismissedWinnerSignature(state.room.code);
       }
       send({ type: "new_round" });
-    });
-  }
-
-  const readyCta = document.getElementById("ready-cta");
-  if (readyCta) {
-    readyCta.addEventListener("click", () => {
-      if (!state.room) return;
-      const action = readyCta.dataset.action;
-      if (action !== "pick") return;
-      state.keepPickOpen = true;
-      if (!isLocalMode() && state.room?.code) {
-        setPreferredRoomScreen(state.room.code, "pick");
-      }
-      showScreen("pick", { history: "push" });
     });
   }
 
@@ -4774,38 +4775,6 @@ function initSettingsModal() {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
     if (target.dataset.closeSettings === "true") {
-      closeModal();
-    }
-  });
-
-  document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && !modal.classList.contains("hidden")) {
-      closeModal();
-    }
-  });
-}
-
-function initPokerDiceInfoModal() {
-  const openButton = document.getElementById("poker-dice-info");
-  const closeButton = document.getElementById("close-poker-dice-info");
-  const modal = document.getElementById("poker-dice-info-modal");
-  if (!openButton || !closeButton || !modal) return;
-
-  const closeModal = () => {
-    modal.classList.add("hidden");
-  };
-
-  openButton.addEventListener("click", () => {
-    modal.classList.remove("hidden");
-    closeButton.focus();
-  });
-
-  closeButton.addEventListener("click", closeModal);
-
-  modal.addEventListener("click", (event) => {
-    const target = event.target;
-    if (!(target instanceof HTMLElement)) return;
-    if (target.dataset.closePokerInfo === "true") {
       closeModal();
     }
   });

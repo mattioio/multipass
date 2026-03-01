@@ -11,6 +11,7 @@ const AVATARS = Object.freeze({
 const ROOM_CODE_LENGTH = 4;
 const ROOM_CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ";
 const DEFAULT_ROOM_TTL_MS = 90 * 60 * 1000;
+const GAME_START_COUNTDOWN_MS = 3000;
 
 function now() {
   return Date.now();
@@ -161,6 +162,8 @@ export function createRoomService({ store, gameService, roomTtlMs = DEFAULT_ROOM
             hostGameId: room.round.hostGameId ?? null,
             guestGameId: room.round.guestGameId ?? null,
             resolvedGameId: room.round.resolvedGameId ?? null,
+            countdownStartedAt: room.round.countdownStartedAt ?? null,
+            countdownEndsAt: room.round.countdownEndsAt ?? null,
             hasPickedStarter: Boolean(room.round.hasPickedStarter)
           }
         : null,
@@ -216,6 +219,8 @@ export function createRoomService({ store, gameService, roomTtlMs = DEFAULT_ROOM
         hostGameId: null,
         guestGameId: null,
         resolvedGameId: null,
+        countdownStartedAt: null,
+        countdownEndsAt: null,
         hasPickedStarter: false
       },
       endRequest: null,
@@ -266,6 +271,8 @@ export function createRoomService({ store, gameService, roomTtlMs = DEFAULT_ROOM
       hostGameId: null,
       guestGameId: null,
       resolvedGameId: null,
+      countdownStartedAt: null,
+      countdownEndsAt: null,
       hasPickedStarter: resetStarter ? false : Boolean(previous.hasPickedStarter)
     };
   }
@@ -335,6 +342,10 @@ export function createRoomService({ store, gameService, roomTtlMs = DEFAULT_ROOM
       room.round.resolvedGameId = null;
       return null;
     }
+    if (hostChoice !== guestChoice) {
+      room.round.resolvedGameId = null;
+      return null;
+    }
     room.round.resolvedGameId = hostChoice;
     return room.round.resolvedGameId;
   }
@@ -374,7 +385,53 @@ export function createRoomService({ store, gameService, roomTtlMs = DEFAULT_ROOM
     room.round.hasPickedStarter = true;
     room.round.status = "playing";
     room.round.shuffleAt = null;
+    room.round.countdownStartedAt = null;
+    room.round.countdownEndsAt = null;
 
+    return { ok: true };
+  }
+
+  function beginCountdownFromResolvedGame(room) {
+    const resolvedGameId = room.round?.resolvedGameId;
+    if (!resolvedGameId) {
+      room.round.status = "waiting_game";
+      room.round.countdownStartedAt = null;
+      room.round.countdownEndsAt = null;
+      return { ok: false, waitingForPeerChoice: true };
+    }
+
+    const startedAt = now();
+    room.round.status = "countdown";
+    room.round.countdownStartedAt = startedAt;
+    room.round.countdownEndsAt = startedAt + GAME_START_COUNTDOWN_MS;
+    return { ok: true, countdownStarted: true };
+  }
+
+  function finalizeCountdownStart(room, at = now()) {
+    if (!room?.round) {
+      return fail(ERROR_CODES.UNKNOWN_GAME, "Room round is not ready.");
+    }
+
+    if (room.round.status !== "countdown") {
+      return { ok: false, skipped: true };
+    }
+
+    const resolvedGameId = resolveGameChoice(room);
+    if (!resolvedGameId) {
+      room.round.status = "waiting_game";
+      room.round.countdownStartedAt = null;
+      room.round.countdownEndsAt = null;
+      touchRoom(room);
+      return { ok: false, waitingForPeerChoice: true };
+    }
+
+    if (!room.round.countdownEndsAt || at < room.round.countdownEndsAt) {
+      return { ok: false, waitingForCountdown: true };
+    }
+
+    const started = startRoundFromResolvedGame(room);
+    if (!started.ok) return started;
+    touchRoom(room);
     return { ok: true };
   }
 
@@ -397,17 +454,19 @@ export function createRoomService({ store, gameService, roomTtlMs = DEFAULT_ROOM
 
     setPlayerGameChoice(room, role, gameId);
     room.round.status = "waiting_game";
+    room.round.countdownStartedAt = null;
+    room.round.countdownEndsAt = null;
     const resolvedGameId = resolveGameChoice(room);
     if (!resolvedGameId) {
       touchRoom(room);
       return { ok: true, waitingForPeerChoice: true };
     }
 
-    const started = startRoundFromResolvedGame(room);
-    if (!started.ok) return started;
+    const countdown = beginCountdownFromResolvedGame(room);
+    if (!countdown.ok) return countdown;
 
     touchRoom(room);
-    return { ok: true };
+    return { ok: true, countdownStarted: true };
   }
 
   function startNewRound(room) {
@@ -510,6 +569,7 @@ export function createRoomService({ store, gameService, roomTtlMs = DEFAULT_ROOM
     addGuestToRoom,
     touchRoom,
     selectGame,
+    finalizeCountdownStart,
     startNewRound,
     requestEndGame,
     agreeEndGame,

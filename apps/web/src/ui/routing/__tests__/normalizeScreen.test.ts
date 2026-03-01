@@ -17,6 +17,15 @@ describe("normalizeTargetScreen", () => {
     ).toBe("landing");
   });
 
+  it("aliases pick route to lobby when room exists", () => {
+    expect(
+      normalizeTargetScreen("pick", {
+        ...baseState,
+        hasRoom: true
+      })
+    ).toBe("lobby");
+  });
+
   it("normalizes invalid game route", () => {
     expect(
       normalizeTargetScreen("game", {

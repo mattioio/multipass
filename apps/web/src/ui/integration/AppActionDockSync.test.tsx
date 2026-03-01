@@ -3,11 +3,11 @@ import { syncDockFromSourceButtons } from "../../legacy/appDockSync.js";
 import { App } from "../App";
 
 describe("App action dock sync", () => {
-  it("mirrors lobby CTA state and forwards dock clicks to the source CTA", () => {
+  it("mirrors host CTA state and forwards dock clicks to the source CTA", () => {
     render(<App />);
 
-    const source = document.getElementById("ready-cta") as HTMLButtonElement | null;
-    const dock = document.getElementById("app-dock-lobby-ready") as HTMLButtonElement | null;
+    const source = document.getElementById("create-room") as HTMLButtonElement | null;
+    const dock = document.getElementById("app-dock-host-create") as HTMLButtonElement | null;
     expect(source).toBeTruthy();
     expect(dock).toBeTruthy();
     if (!source || !dock) return;
@@ -19,7 +19,7 @@ describe("App action dock sync", () => {
     expect(dock.textContent).toBe("Waiting for second player");
     expect(dock.disabled).toBe(true);
 
-    source.textContent = "Pick a game";
+    source.textContent = "Continue";
     source.disabled = false;
     syncDockFromSourceButtons({ landingMode: "local" });
 
