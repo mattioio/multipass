@@ -14,14 +14,14 @@ describe("App action dock sync", () => {
 
     source.textContent = "Waiting for second player";
     source.disabled = true;
-    syncDockFromSourceButtons({ landingMode: "local" });
+    syncDockFromSourceButtons();
 
     expect(dock.textContent).toBe("Waiting for second player");
     expect(dock.disabled).toBe(true);
 
     source.textContent = "Continue";
     source.disabled = false;
-    syncDockFromSourceButtons({ landingMode: "local" });
+    syncDockFromSourceButtons();
 
     let clickCount = 0;
     source.addEventListener("click", () => {

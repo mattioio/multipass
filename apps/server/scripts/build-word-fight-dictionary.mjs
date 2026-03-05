@@ -8,13 +8,14 @@ const repoRoot = path.resolve(__dirname, "../../..");
 
 const sourcePath = path.join(repoRoot, "apps", "server", "src", "games", "wordFightWords.source.uk-us.txt");
 const blocklistPath = path.join(repoRoot, "apps", "server", "src", "games", "wordFightWords.blocklist.txt");
+const secretCategoriesPath = path.join(repoRoot, "apps", "server", "src", "games", "wordFightSecretCategories.source.json");
 const serverOutputPath = path.join(repoRoot, "apps", "server", "src", "games", "wordFightWords.js");
 const webOutputPath = path.join(repoRoot, "apps", "web", "src", "domain", "games", "engines", "wordFightWords.js");
 
 const checkOnly = process.argv.includes("--check");
+const MIN_SECRET_WORDS_PER_CATEGORY = 3;
 
 const GUESS_TIERS = Object.freeze([10, 20, 35, 40, 50, 55, 60, 70]);
-const SECRET_TIERS = Object.freeze([10, 20, 35, 40]);
 const DIALECTS = Object.freeze(["english", "english/american", "english/british"]);
 
 function normalizeWord(rawWord) {
@@ -32,22 +33,39 @@ function parseWordLines(rawText) {
     .filter((line) => line && !line.startsWith("#"));
 }
 
-function formatWords(words) {
+function formatWords(words, options = {}) {
   const rows = [];
-  const perRow = 10;
+  const perRow = Number(options.perRow || 10);
+  const indent = String(options.indent || "  ");
   for (let index = 0; index < words.length; index += perRow) {
     const chunk = words.slice(index, index + perRow);
-    rows.push(`  ${chunk.map((word) => `"${word}"`).join(", ")}`);
+    rows.push(`${indent}${chunk.map((word) => JSON.stringify(word)).join(", ")}`);
   }
   return rows.join(",\n");
 }
 
-function renderServerModule(guessWords, secretWords) {
-  return `// AUTO-GENERATED FILE. DO NOT EDIT DIRECTLY.\n// Source: wordlist-english (fallback: apps/server/src/games/wordFightWords.source.uk-us.txt)\n// Filter: /^[A-Z]{4}$/ + blocklist exclusions\n\nconst WORD_FIGHT_GUESS_WORDS = Object.freeze([\n${formatWords(guessWords)}\n]);\n\nconst WORD_FIGHT_SECRET_WORDS = Object.freeze([\n${formatWords(secretWords)}\n]);\n\nconst WORD_FIGHT_WORD_SET = new Set(WORD_FIGHT_GUESS_WORDS);\n\nexport const WORD_FIGHT_WORDS = WORD_FIGHT_GUESS_WORDS;\n\nexport function listWordFightWords() {\n  return WORD_FIGHT_GUESS_WORDS;\n}\n\nexport function isWordFightWord(word) {\n  return WORD_FIGHT_WORD_SET.has(String(word || "").toUpperCase());\n}\n\nexport { WORD_FIGHT_GUESS_WORDS, WORD_FIGHT_SECRET_WORDS };\n\nexport default WORD_FIGHT_GUESS_WORDS;\n`;
+function formatSecretCategories(secretCategories) {
+  const categoryNames = Object.keys(secretCategories || {}).sort((a, b) => a.localeCompare(b));
+  const rows = [];
+  for (const category of categoryNames) {
+    const words = Array.isArray(secretCategories[category]) ? secretCategories[category] : [];
+    rows.push(`${JSON.stringify(category)}: Object.freeze([\n${formatWords(words, { indent: "    ", perRow: 8 })}\n  ])`);
+  }
+  return rows.join(",\n  ");
 }
 
-function renderWebModule(guessWords, secretWords) {
-  return `// AUTO-GENERATED FILE. DO NOT EDIT DIRECTLY.\n// Source: wordlist-english (fallback: apps/server/src/games/wordFightWords.source.uk-us.txt)\n// Filter: /^[A-Z]{4}$/ + blocklist exclusions\n\nexport const WORD_FIGHT_GUESS_WORDS = Object.freeze([\n${formatWords(guessWords)}\n]);\n\nexport const WORD_FIGHT_SECRET_WORDS = Object.freeze([\n${formatWords(secretWords)}\n]);\n\nexport const WORD_FIGHT_WORDS = WORD_FIGHT_GUESS_WORDS;\n\nconst WORD_FIGHT_WORD_SET = new Set(WORD_FIGHT_GUESS_WORDS);\n\nexport function isWordFightWord(word) {\n  return WORD_FIGHT_WORD_SET.has(String(word || "").toUpperCase());\n}\n`;
+function formatWordToCategory(secretWordToCategory) {
+  const words = Object.keys(secretWordToCategory || {}).sort((a, b) => a.localeCompare(b));
+  const rows = words.map((word) => `  ${JSON.stringify(word)}: ${JSON.stringify(secretWordToCategory[word])}`);
+  return rows.join(",\n");
+}
+
+function renderServerModule(guessWords, secretWords, secretCategories, secretWordToCategory) {
+  return `// AUTO-GENERATED FILE. DO NOT EDIT DIRECTLY.\n// Source: wordlist-english (fallback: apps/server/src/games/wordFightWords.source.uk-us.txt)\n// Secret categories: apps/server/src/games/wordFightSecretCategories.source.json\n// Filter: /^[A-Z]{4}$/ + blocklist exclusions\n\nconst WORD_FIGHT_GUESS_WORDS = Object.freeze([\n${formatWords(guessWords)}\n]);\n\nconst WORD_FIGHT_SECRET_WORDS = Object.freeze([\n${formatWords(secretWords)}\n]);\n\nconst WORD_FIGHT_SECRET_CATEGORIES = Object.freeze({\n  ${formatSecretCategories(secretCategories)}\n});\n\nconst WORD_FIGHT_SECRET_WORD_TO_CATEGORY = Object.freeze({\n${formatWordToCategory(secretWordToCategory)}\n});\n\nconst WORD_FIGHT_WORD_SET = new Set(WORD_FIGHT_GUESS_WORDS);\n\nexport const WORD_FIGHT_WORDS = WORD_FIGHT_GUESS_WORDS;\n\nexport function listWordFightWords() {\n  return WORD_FIGHT_GUESS_WORDS;\n}\n\nexport function isWordFightWord(word) {\n  return WORD_FIGHT_WORD_SET.has(String(word || "").toUpperCase());\n}\n\nexport {\n  WORD_FIGHT_GUESS_WORDS,\n  WORD_FIGHT_SECRET_WORDS,\n  WORD_FIGHT_SECRET_CATEGORIES,\n  WORD_FIGHT_SECRET_WORD_TO_CATEGORY\n};\n\nexport default WORD_FIGHT_GUESS_WORDS;\n`;
+}
+
+function renderWebModule(guessWords, secretWords, secretCategories, secretWordToCategory) {
+  return `// AUTO-GENERATED FILE. DO NOT EDIT DIRECTLY.\n// Source: wordlist-english (fallback: apps/server/src/games/wordFightWords.source.uk-us.txt)\n// Secret categories: apps/server/src/games/wordFightSecretCategories.source.json\n// Filter: /^[A-Z]{4}$/ + blocklist exclusions\n\nexport const WORD_FIGHT_GUESS_WORDS = Object.freeze([\n${formatWords(guessWords)}\n]);\n\nexport const WORD_FIGHT_SECRET_WORDS = Object.freeze([\n${formatWords(secretWords)}\n]);\n\nexport const WORD_FIGHT_SECRET_CATEGORIES = Object.freeze({\n  ${formatSecretCategories(secretCategories)}\n});\n\nexport const WORD_FIGHT_SECRET_WORD_TO_CATEGORY = Object.freeze({\n${formatWordToCategory(secretWordToCategory)}\n});\n\nexport const WORD_FIGHT_WORDS = WORD_FIGHT_GUESS_WORDS;\n\nconst WORD_FIGHT_WORD_SET = new Set(WORD_FIGHT_GUESS_WORDS);\n\nexport function isWordFightWord(word) {\n  return WORD_FIGHT_WORD_SET.has(String(word || "").toUpperCase());\n}\n`;
 }
 
 function buildNormalizedSet(rawWords, blocklist) {
@@ -63,7 +81,6 @@ async function loadSourceWords(blocklist) {
   const normalized = buildNormalizedSet(sourceWords, blocklist);
   return {
     guessWords: normalized,
-    secretWords: normalized,
     source: "fallback_source_file"
   };
 }
@@ -92,15 +109,10 @@ async function loadWordlistEnglishWords(blocklist) {
     }
 
     const rawGuessWords = collectTierWords(wordlists, DIALECTS, GUESS_TIERS);
-    const rawSecretWords = collectTierWords(wordlists, DIALECTS, SECRET_TIERS);
-
     const guessWords = buildNormalizedSet(rawGuessWords, blocklist);
-    const secretWordSet = new Set(buildNormalizedSet(rawSecretWords, blocklist));
-    const secretWords = guessWords.filter((word) => secretWordSet.has(word));
 
     return {
       guessWords,
-      secretWords,
       source: "wordlist_english"
     };
   } catch (error) {
@@ -111,20 +123,68 @@ async function loadWordlistEnglishWords(blocklist) {
   }
 }
 
-async function loadWords() {
-  const blocklistRaw = await fs.readFile(blocklistPath, "utf8");
-  const blocklist = new Set(
-    parseWordLines(blocklistRaw)
-      .map(normalizeWord)
-      .filter(isValidWord)
-  );
-
-  const fromPackage = await loadWordlistEnglishWords(blocklist);
-  if (fromPackage) return fromPackage;
-  return loadSourceWords(blocklist);
+function normalizeCategoryName(rawCategory) {
+  return String(rawCategory || "").trim();
 }
 
-async function assertIncludesRequiredWords({ guessWords, secretWords }) {
+async function loadSecretCategories(blocklist) {
+  const raw = await fs.readFile(secretCategoriesPath, "utf8");
+  const parsed = JSON.parse(raw);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("Secret categories source must be a JSON object keyed by category name.");
+  }
+
+  const secretCategories = {};
+  const secretWordToCategory = {};
+  for (const [rawCategory, rawWords] of Object.entries(parsed)) {
+    const category = normalizeCategoryName(rawCategory);
+    if (!category) {
+      throw new Error("Secret category names must be non-empty.");
+    }
+    if (!Array.isArray(rawWords)) {
+      throw new Error(`Secret category "${category}" must be an array of words.`);
+    }
+
+    const normalizedWords = buildNormalizedSet(rawWords, blocklist);
+    if (normalizedWords.length < MIN_SECRET_WORDS_PER_CATEGORY) {
+      throw new Error(`Secret category "${category}" must contain at least ${MIN_SECRET_WORDS_PER_CATEGORY} valid words.`);
+    }
+
+    for (const word of normalizedWords) {
+      const existingCategory = secretWordToCategory[word];
+      if (existingCategory) {
+        throw new Error(`Secret word "${word}" is duplicated across categories (${existingCategory}, ${category}).`);
+      }
+      secretWordToCategory[word] = category;
+    }
+
+    secretCategories[category] = normalizedWords;
+  }
+
+  const secretWords = Object.keys(secretWordToCategory).sort((a, b) => a.localeCompare(b));
+  return {
+    secretCategories,
+    secretWordToCategory,
+    secretWords
+  };
+}
+
+async function loadDictionary() {
+  const blocklistRaw = await fs.readFile(blocklistPath, "utf8");
+  const blocklist = new Set(parseWordLines(blocklistRaw).map(normalizeWord).filter(isValidWord));
+
+  const fromPackage = await loadWordlistEnglishWords(blocklist);
+  const baseWords = fromPackage || await loadSourceWords(blocklist);
+  const categoryData = await loadSecretCategories(blocklist);
+
+  return {
+    guessWords: baseWords.guessWords,
+    source: baseWords.source,
+    ...categoryData
+  };
+}
+
+async function assertIncludesRequiredWords({ guessWords, secretWords, secretWordToCategory }) {
   const requiredGuessWords = ["TIME", "GOOD", "SEEN", "RAGS", "WORM"];
   const missingGuess = requiredGuessWords.filter((word) => !guessWords.includes(word));
   if (missingGuess.length) {
@@ -134,14 +194,34 @@ async function assertIncludesRequiredWords({ guessWords, secretWords }) {
   if (!secretWords.length) {
     throw new Error("Secret dictionary is empty after filtering.");
   }
+
+  const missingSecretGuessWords = secretWords.filter((word) => !guessWords.includes(word));
+  if (missingSecretGuessWords.length) {
+    throw new Error(`Secret dictionary contains words not present in guess dictionary: ${missingSecretGuessWords.join(", ")}`);
+  }
+
+  const missingCategoryMapping = secretWords.filter((word) => !secretWordToCategory[word]);
+  if (missingCategoryMapping.length) {
+    throw new Error(`Secret words missing category mapping: ${missingCategoryMapping.join(", ")}`);
+  }
 }
 
 async function main() {
-  const dictionary = await loadWords();
+  const dictionary = await loadDictionary();
   await assertIncludesRequiredWords(dictionary);
 
-  const serverModule = renderServerModule(dictionary.guessWords, dictionary.secretWords);
-  const webModule = renderWebModule(dictionary.guessWords, dictionary.secretWords);
+  const serverModule = renderServerModule(
+    dictionary.guessWords,
+    dictionary.secretWords,
+    dictionary.secretCategories,
+    dictionary.secretWordToCategory
+  );
+  const webModule = renderWebModule(
+    dictionary.guessWords,
+    dictionary.secretWords,
+    dictionary.secretCategories,
+    dictionary.secretWordToCategory
+  );
 
   if (checkOnly) {
     const [currentServer, currentWeb] = await Promise.all([

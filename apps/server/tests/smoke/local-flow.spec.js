@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+const WORD_FIGHT_GUESS_CANDIDATES = ["ABLE", "BARK", "CAMP", "DOVE", "FIRM", "GLAD", "HUNT", "JUMP", "LAMP", "MINT"];
+
 async function getPseudoRotationDegrees(locator, pseudo = "::before") {
   const transform = await locator.evaluate((node, targetPseudo) => getComputedStyle(node, targetPseudo).transform, pseudo);
   if (!transform || transform === "none") return 0;
@@ -13,6 +15,14 @@ async function getPseudoRotationDegrees(locator, pseudo = "::before") {
   return ((Math.round(rawAngle) % 360) + 360) % 360;
 }
 
+async function enterWordFightGuess(page, guess) {
+  const normalized = String(guess || "").toUpperCase();
+  for (const letter of normalized) {
+    await page.locator(`#word-fight-keyboard [data-word-fight-key="${letter}"]`).click();
+  }
+  await page.locator('#word-fight-keyboard [data-word-fight-key="ENTER"]').click();
+}
+
 test("local happy path: setup -> lobby -> game", async ({ page }) => {
   await page.goto("/");
   await page.waitForFunction(() => window.__multipassLegacyReady === true);
@@ -24,11 +34,8 @@ test("local happy path: setup -> lobby -> game", async ({ page }) => {
     return { color: styles.color, backgroundColor: styles.backgroundColor };
   });
 
-  await page.getByRole("button", { name: "Start" }).click();
+  await page.getByRole("button", { name: "Local" }).click();
   await expect(page.locator("#screen-local.active")).toBeVisible();
-  const pickerAvatarNameWeight = await page.locator('#local-avatar-grid .avatar-option[data-avatar="yellow"] .avatar-name').evaluate((node) => {
-    return getComputedStyle(node).fontWeight;
-  });
   const pickerYellowRotation = await getPseudoRotationDegrees(
     page.locator('#local-avatar-grid .avatar-option[data-avatar="yellow"] .avatar-shell')
   );
@@ -97,8 +104,11 @@ test("local happy path: setup -> lobby -> game", async ({ page }) => {
   }
   await expect(page.locator("#score-columns .score-duel-panel")).toHaveCount(1);
   await expect(page.locator("#score-columns .score-duel-side")).toHaveCount(2);
-  await expect(page.locator("#score-columns .score-duel-scorebar-wrap")).toHaveCount(1);
-  await expect(page.locator("#score-columns .score-broadcast-row")).toHaveCount(1);
+  await expect(page.locator("#score-columns .score-duel-meta")).toHaveCount(2);
+  await expect(page.locator("#score-columns .score-duel-name")).toHaveCount(2);
+  await expect(page.locator("#score-columns .score-duel-points")).toHaveCount(2);
+  await expect(page.locator("#score-columns .score-duel-scorebar-wrap")).toHaveCount(0);
+  await expect(page.locator("#score-columns .score-broadcast-row")).toHaveCount(0);
   await expect(page.locator("#score-columns .score-role")).toHaveCount(0);
   await expect(page.locator("#score-columns .score-column")).toHaveCount(0);
   const lobbyHostScoreRotationVar = await page
@@ -109,32 +119,21 @@ test("local happy path: setup -> lobby -> game", async ({ page }) => {
     .evaluate((node) => getComputedStyle(node).getPropertyValue("--avatar-pattern-rotation").trim());
   expect(lobbyHostScoreRotationVar).toBe("0deg");
   expect(lobbyGuestScoreRotationVar).toBe("180deg");
-  const guestScoreLowerThirdStyle = await page.locator("#score-columns .score-duel-side-guest .player-card-lower-third--score").first().evaluate((node) => {
-    const styles = getComputedStyle(node);
-    return {
-      right: styles.right,
-      borderTopLeftRadius: styles.borderTopLeftRadius,
-      borderTopRightRadius: styles.borderTopRightRadius,
-      textAlign: styles.textAlign
-    };
-  });
-  expect(guestScoreLowerThirdStyle.right).toBe("0px");
-  expect(guestScoreLowerThirdStyle.borderTopLeftRadius).toBe("10px");
-  expect(guestScoreLowerThirdStyle.borderTopRightRadius).toBe("0px");
-  expect(guestScoreLowerThirdStyle.textAlign).toBe("right");
-  const lobbyScoreNameWeight = await page.locator("#score-columns .player-card-name--score").first().evaluate((node) => {
-    return getComputedStyle(node).fontWeight;
-  });
-  expect(lobbyScoreNameWeight).toBe(pickerAvatarNameWeight);
+  await expect(page.locator("#score-columns .score-duel-side:not(.score-duel-side-guest) .score-duel-points")).toHaveText("0");
+  await expect(page.locator("#score-columns .score-duel-side-guest .score-duel-points")).toHaveText("0");
   await page.getByRole("button", { name: "Play Tic Tac Toe", exact: true }).click();
 
   await expect(page.locator("#screen-game.active")).toBeVisible();
   await expect(page.locator("#screen-game .game-surface-head")).toHaveCount(0);
   await expect(page.locator("#screen-game .game-surface-title")).toHaveCount(0);
   await expect(page.locator("#screen-game .game-surface-status")).toHaveCount(0);
-  await expect(page.locator("#turn-indicator .turn-player")).toHaveCount(2);
-  await expect(page.locator("#turn-indicator .turn-player-score-match")).toHaveCount(0);
-  await expect(page.locator("#turn-indicator .turn-player-score-game")).toHaveCount(0);
+  await expect(page.locator("#turn-indicator .turn-pane")).toHaveCount(2);
+  await expect(page.locator('#turn-indicator .turn-pane[data-side="host"] .turn-avatar')).toHaveCount(1);
+  await expect(page.locator('#turn-indicator .turn-pane[data-side="guest"] .turn-avatar')).toHaveCount(1);
+  await expect(page.locator("#turn-indicator .turn-meta")).toHaveCount(2);
+  await expect(page.locator("#turn-indicator .turn-state")).toHaveCount(2);
+  await expect(page.locator("#turn-indicator .turn-score-match")).toHaveCount(0);
+  await expect(page.locator("#turn-indicator .turn-score-game")).toHaveCount(0);
   const firstRoundStarter = await page.evaluate(() => {
     const room = window.__multipassStore.getState().room;
     return {
@@ -154,15 +153,16 @@ test("local happy path: setup -> lobby -> game", async ({ page }) => {
   await page.locator("#ttt-board .ttt-cell").nth(2).click();
 
   await expect(page.locator("#screen-game.active")).toBeVisible();
-  await expect(page.locator("#game-result-panel")).toHaveClass(/hidden/);
   await expect(page.locator("#ttt-board .ttt-cell.is-win-reason")).toHaveCount(3);
-  await expect(page.locator("#game-result-panel:not(.hidden)")).toBeVisible({ timeout: 6000 });
-  await expect(page.locator("#winner-hero .player-card-shell--score")).toHaveCount(1);
-  await expect(page.locator("#winner-score-columns")).toHaveCount(0);
+  await expect(page.locator("#turn-indicator")).toHaveAttribute("data-mode", "winner");
+  await expect(page.locator('#turn-indicator [data-side="host"]')).toHaveAttribute("data-active", "true");
+  await expect(page.locator('#turn-indicator [data-side="guest"]')).toHaveAttribute("data-active", "false");
+  await expect(page.locator("#turn-indicator .turn-player-cta")).toHaveCount(0);
+  await expect(page.locator("#new-round")).toBeVisible();
   await expect(page.locator("#ttt-board .ttt-cell.is-win-reason")).toHaveCount(0);
   await expect(page.locator("#ttt-board .ttt-cell.is-winning")).toHaveCount(3);
 
-  await page.locator("#winner-play-again").click();
+  await page.locator("#new-round").click();
   await expect(page.locator("#screen-lobby.active")).toBeVisible();
   const secondRoundStarter = await page.evaluate(() => {
     const room = window.__multipassStore.getState().room;
@@ -179,7 +179,7 @@ test("local tic-tac-toe supports touch drag preview + release, tap, and cancel",
   await page.goto("/");
   await page.waitForFunction(() => window.__multipassLegacyReady === true);
 
-  await page.getByRole("button", { name: "Start" }).click();
+  await page.getByRole("button", { name: "Local" }).click();
   await expect(page.locator("#screen-local.active")).toBeVisible();
   await page.locator('#local-avatar-grid .avatar-option[data-avatar="yellow"]').click();
   await page.getByRole("button", { name: "Continue" }).click();
@@ -273,83 +273,169 @@ test("local tic-tac-toe supports touch drag preview + release, tap, and cancel",
   await expect(cells.nth(3).locator(".ttt-mark")).toHaveCount(1);
 });
 
-test("landing supports swipe between local and online modes", async ({ page }) => {
+test("setup sheets and game sheet dismiss back to the expected layer", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
   await page.waitForFunction(() => window.__multipassLegacyReady === true);
 
-  const carousel = page.locator(".landing-carousel");
-  const box = await carousel.boundingBox();
-  if (!box) throw new Error("Landing carousel is not visible");
+  const readHomeChromeState = async () => page.evaluate(() => {
+    const settings = document.getElementById("open-settings");
+    const logoImage = document.querySelector(".logo-image");
+    const centerTitle = document.getElementById("lobby-games-title");
+    const logoContainer = document.querySelector(".logo");
+    const leftAction = document.getElementById("hero-left-action");
+    const isVisible = (node) => {
+      if (!(node instanceof HTMLElement)) return false;
+      const styles = window.getComputedStyle(node);
+      return styles.display !== "none" && styles.visibility !== "hidden" && styles.opacity !== "0";
+    };
+    const getCenterX = (node) => {
+      if (!(node instanceof HTMLElement)) return null;
+      const rect = node.getBoundingClientRect();
+      return rect.left + (rect.width / 2);
+    };
+    return {
+      settingsVisible: isVisible(settings),
+      logoWidth: logoImage instanceof HTMLElement ? window.getComputedStyle(logoImage).width : "",
+      leftActionVisible: isVisible(leftAction),
+      leftActionLabel: leftAction instanceof HTMLElement ? leftAction.textContent?.trim() || "" : "",
+      settingsX: getCenterX(settings),
+      leftActionX: getCenterX(leftAction),
+      centerTitleVisible: isVisible(centerTitle),
+      centerLogoVisible: isVisible(logoImage),
+      centerHasAction: Boolean(logoContainer?.querySelector("button")),
+      viewportWidth: window.innerWidth
+    };
+  });
 
-  const startX = box.x + box.width * 0.78;
-  const endLeftX = box.x + box.width * 0.2;
-  const endRightX = box.x + box.width * 0.8;
-  const centerY = box.y + box.height * 0.5;
+  const landingChrome = await readHomeChromeState();
 
-  await carousel.dispatchEvent("pointerdown", {
+  await page.getByRole("button", { name: "Online" }).click();
+  await expect(page.locator("#screen-online.active")).toBeVisible();
+  await expect(page.locator("#screen-landing.active")).toBeVisible();
+  const onlineChrome = await readHomeChromeState();
+  expect(onlineChrome.settingsVisible).toBe(landingChrome.settingsVisible);
+  expect(onlineChrome.logoWidth).toBe(landingChrome.logoWidth);
+  expect(Math.abs((onlineChrome.settingsX ?? 0) - (landingChrome.settingsX ?? 0))).toBeLessThanOrEqual(1);
+  if (onlineChrome.leftActionVisible) {
+    expect(onlineChrome.leftActionLabel).not.toMatch(/close|back/i);
+  }
+  await page.locator("#screen-online .setup-header-close").click();
+  await expect(page.locator("#screen-online.is-closing")).toBeVisible();
+  await expect(page.locator("#screen-online.active")).toHaveCount(0);
+  await expect(page.locator("#screen-landing.active")).toBeVisible();
+
+  await page.getByRole("button", { name: "Online" }).click();
+  await expect(page.locator("#screen-online.active")).toBeVisible();
+  await page.locator("#screen-online .sheet-backdrop").click();
+  await expect(page.locator("#screen-online.is-closing")).toBeVisible();
+  await expect(page.locator("#screen-online.active")).toHaveCount(0);
+  await expect(page.locator("#screen-landing.active")).toBeVisible();
+
+  await page.getByRole("button", { name: "Local" }).click();
+  await expect(page.locator("#screen-local.active")).toBeVisible();
+  const localChrome = await readHomeChromeState();
+  expect(localChrome.settingsVisible).toBe(landingChrome.settingsVisible);
+  expect(localChrome.logoWidth).toBe(landingChrome.logoWidth);
+  expect(Math.abs((localChrome.settingsX ?? 0) - (landingChrome.settingsX ?? 0))).toBeLessThanOrEqual(1);
+  if (localChrome.leftActionVisible) {
+    expect(localChrome.leftActionLabel).not.toMatch(/close|back/i);
+  }
+
+  const localHandle = page.locator("#screen-local [data-sheet-handle='true']");
+  const localHandleBox = await localHandle.boundingBox();
+  if (!localHandleBox) throw new Error("Local sheet handle is not visible");
+  const handleX = localHandleBox.x + localHandleBox.width / 2;
+  const handleY = localHandleBox.y + localHandleBox.height / 2;
+
+  await localHandle.dispatchEvent("pointerdown", {
+    pointerId: 1100,
+    pointerType: "touch",
+    isPrimary: true,
+    button: 0,
+    buttons: 1,
+    clientX: handleX,
+    clientY: handleY
+  });
+  await page.locator("#screen-local").dispatchEvent("pointermove", {
+    pointerId: 1100,
+    pointerType: "touch",
+    isPrimary: true,
+    buttons: 1,
+    clientX: handleX,
+    clientY: handleY + 36
+  });
+  await page.waitForTimeout(220);
+  await page.locator("#screen-local").dispatchEvent("pointerup", {
+    pointerId: 1100,
+    pointerType: "touch",
+    isPrimary: true,
+    clientX: handleX,
+    clientY: handleY + 36
+  });
+  await expect(page.locator("#screen-local.active")).toBeVisible();
+
+  await localHandle.dispatchEvent("pointerdown", {
     pointerId: 1101,
     pointerType: "touch",
     isPrimary: true,
     button: 0,
     buttons: 1,
-    clientX: startX,
-    clientY: centerY
+    clientX: handleX,
+    clientY: handleY
   });
-  await carousel.dispatchEvent("pointermove", {
+  await page.locator("#screen-local .sheet-panel").dispatchEvent("pointermove", {
     pointerId: 1101,
     pointerType: "touch",
     isPrimary: true,
     buttons: 1,
-    clientX: endLeftX,
-    clientY: centerY
+    clientX: handleX,
+    clientY: handleY + 180
   });
-  await carousel.dispatchEvent("pointerup", {
+  await page.locator("#screen-local .sheet-panel").dispatchEvent("pointerup", {
     pointerId: 1101,
     pointerType: "touch",
     isPrimary: true,
-    clientX: endLeftX,
-    clientY: centerY
+    clientX: handleX,
+    clientY: handleY + 180
   });
-  await expect(page.locator("#landing-tab-online")).toHaveAttribute("aria-selected", "true");
+  await expect(page.locator("#screen-local.is-closing")).toBeVisible();
+  await expect(page.locator("#screen-local.active")).toHaveCount(0);
+  await expect(page.locator("#screen-local.is-closing")).toHaveCount(0);
+  await expect(page.locator("#screen-landing.active")).toBeVisible();
 
-  await carousel.dispatchEvent("pointerdown", {
-    pointerId: 1102,
-    pointerType: "touch",
-    isPrimary: true,
-    button: 0,
-    buttons: 1,
-    clientX: endLeftX,
-    clientY: centerY
-  });
-  await carousel.dispatchEvent("pointermove", {
-    pointerId: 1102,
-    pointerType: "touch",
-    isPrimary: true,
-    buttons: 1,
-    clientX: endRightX,
-    clientY: centerY
-  });
-  await carousel.dispatchEvent("pointerup", {
-    pointerId: 1102,
-    pointerType: "touch",
-    isPrimary: true,
-    clientX: endRightX,
-    clientY: centerY
-  });
-  await expect(page.locator("#landing-tab-local")).toHaveAttribute("aria-selected", "true");
+  await page.getByRole("button", { name: "Local" }).click();
+  await page.locator('#local-avatar-grid .avatar-option[data-avatar="yellow"]').click();
+  const localContinueDock = page.locator("#app-dock-local-continue");
+  await expect(localContinueDock).toBeVisible();
+  await expect(localContinueDock).toBeEnabled();
+  await localContinueDock.click();
+  await page.locator('#local-avatar-grid .avatar-option[data-avatar="green"]').click();
+  await expect(localContinueDock).toBeEnabled();
+  await localContinueDock.click();
+  await expect(page.locator("#screen-lobby.active")).toBeVisible();
+  const lobbyChrome = await readHomeChromeState();
+  expect(lobbyChrome.leftActionVisible).toBe(true);
+  expect(lobbyChrome.settingsVisible).toBe(true);
+  expect(lobbyChrome.centerTitleVisible).toBe(false);
+  expect(lobbyChrome.centerLogoVisible).toBe(false);
+  expect(lobbyChrome.centerHasAction).toBe(false);
+  expect((lobbyChrome.leftActionX ?? 0) < ((lobbyChrome.viewportWidth ?? 0) / 3)).toBe(true);
+  expect((lobbyChrome.settingsX ?? 0) > (((lobbyChrome.viewportWidth ?? 0) * 2) / 3)).toBe(true);
+  await page.getByRole("button", { name: "Play Tic Tac Toe", exact: true }).click();
+  await expect(page.locator("#screen-game.active")).toBeVisible();
+  await expect(page.locator("#open-settings")).toBeHidden();
+  await expect(page.locator("#screen-game #game-close-board")).toBeVisible();
 
-  await page.waitForTimeout(320);
-  await page.getByRole("tab", { name: "Online" }).click();
-  await expect(page.locator("#landing-tab-online")).toHaveAttribute("aria-selected", "true");
-  await page.getByRole("tab", { name: "Local" }).click();
-  await expect(page.locator("#landing-tab-local")).toHaveAttribute("aria-selected", "true");
+  await page.locator("#screen-game #game-close-board").click();
+  await expect(page.locator("#screen-lobby.active")).toBeVisible();
+  await expect(page.locator("#screen-game.active")).toHaveCount(0);
 });
 
 test("local honorific picker is per-player", async ({ page }) => {
   await page.goto("/");
   await page.waitForFunction(() => window.__multipassLegacyReady === true);
-  await page.getByRole("button", { name: "Start" }).click();
+  await page.getByRole("button", { name: "Local" }).click();
   await expect(page.locator("#screen-local.active")).toBeVisible();
 
   await page.locator("#local-honorific-toolbar .switch").click();
@@ -403,73 +489,30 @@ test("local honorific picker is per-player", async ({ page }) => {
   await expect(page.locator("#score-columns")).toContainText("Mr Green");
 });
 
-test("battleships uses a single board with tap-then-confirm fire", async ({ page }) => {
+test("battleships is removed from picker and unsupported layout contract exists", async ({ page }) => {
   await page.goto("/");
   await page.waitForFunction(() => window.__multipassLegacyReady === true);
 
-  await page.getByRole("button", { name: "Start" }).click();
+  await page.getByRole("button", { name: "Local" }).click();
   await expect(page.locator("#screen-local.active")).toBeVisible();
   await page.locator('#local-avatar-grid .avatar-option[data-avatar="yellow"]').click();
   await page.getByRole("button", { name: "Continue" }).click();
   await page.locator('#local-avatar-grid .avatar-option[data-avatar="green"]').click();
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.locator("#screen-lobby.active")).toBeVisible();
-  await page.getByRole("button", { name: "Play Battleships" }).click();
-  await expect(page.locator("#screen-game.active")).toBeVisible();
-  await expect(page.locator("#screen-game .game-surface-head")).toHaveCount(0);
-  await expect(page.locator("#screen-game .game-surface-title")).toHaveCount(0);
-  await expect(page.locator("#screen-game .game-surface-status")).toHaveCount(0);
-  await expect(page.locator("#turn-indicator .turn-player")).toHaveCount(2);
 
-  await expect(page.locator("#battleship-layout")).not.toHaveClass(/hidden/);
-  await expect(page.locator("#battleship-own-board .battleship-cell")).toHaveCount(36);
-  await expect(page.locator("#battleship-target-board")).toHaveCount(0);
-  await expect(page.locator("#battleship-view-own")).toHaveCount(0);
-  await expect(page.locator("#battleship-view-target")).toHaveCount(0);
-  await expect(page.locator("#battleship-own-card")).toHaveClass(/game-board-highlight/);
-  await expect(page.locator("#battleship-action-row")).toHaveClass(/hidden/);
-
-  const placeShipAndPass = async (index) => {
-    await page.locator(`#battleship-own-board .battleship-cell[data-index="${index}"]`).click();
-    await expect(page.locator("#screen-pass.active")).toBeVisible();
-    await page.locator("#pass-ready").click();
-    await expect(page.locator("#screen-game.active")).toBeVisible();
-  };
-
-  await placeShipAndPass(0);
-  await placeShipAndPass(12);
-  await placeShipAndPass(6);
-  await placeShipAndPass(18);
-
-  await expect(page.locator("#battleship-action-row")).not.toHaveClass(/hidden/);
-  const historyBefore = await page.evaluate(() => window.__multipassStore.getState().room.game.state.shotHistory.length);
-
-  await page.locator('#battleship-own-board .battleship-cell[data-index="5"]').click();
-  await expect(page.locator('#battleship-own-board .battleship-cell[data-index="5"]')).toHaveClass(/is-pending-target/);
-  await expect(page.locator("#battleship-fire-target")).toHaveText(/Fire at [A-F][1-6]/);
-  await expect(page.locator("#screen-game.active")).toBeVisible();
-  const historyAfterStage = await page.evaluate(() => window.__multipassStore.getState().room.game.state.shotHistory.length);
-  expect(historyAfterStage).toBe(historyBefore);
-
-  await page.locator("#battleship-clear-target").click();
-  await expect(page.locator('#battleship-own-board .battleship-cell[data-index="5"]')).not.toHaveClass(/is-pending-target/);
-  await expect(page.locator("#battleship-fire-target")).toHaveText("Fire");
-  const historyAfterClear = await page.evaluate(() => window.__multipassStore.getState().room.game.state.shotHistory.length);
-  expect(historyAfterClear).toBe(historyBefore);
-
-  await page.locator('#battleship-own-board .battleship-cell[data-index="7"]').click();
-  await expect(page.locator('#battleship-own-board .battleship-cell[data-index="7"]')).toHaveClass(/is-pending-target/);
-  await page.locator("#battleship-fire-target").click();
-  await expect(page.locator("#screen-pass.active")).toBeVisible();
-  const historyAfterFire = await page.evaluate(() => window.__multipassStore.getState().room.game.state.shotHistory.length);
-  expect(historyAfterFire).toBe(historyBefore + 1);
+  await expect(page.getByRole("button", { name: "Play Battleships" })).toHaveCount(0);
+  await expect(page.locator("#game-list")).not.toContainText("Battleships");
+  await expect(page.locator("#unsupported-game-layout")).toHaveCount(1);
+  await expect(page.locator("#unsupported-game-title")).toHaveCount(1);
+  await expect(page.locator("#unsupported-game-message")).toHaveCount(1);
 });
 
 test("dots and boxes keeps turn on box completion and reaches winner overlay", async ({ page }) => {
   await page.goto("/");
   await page.waitForFunction(() => window.__multipassLegacyReady === true);
 
-  await page.getByRole("button", { name: "Start" }).click();
+  await page.getByRole("button", { name: "Local" }).click();
   await expect(page.locator("#screen-local.active")).toBeVisible();
   await page.locator('#local-avatar-grid .avatar-option[data-avatar="yellow"]').click();
   await page.getByRole("button", { name: "Continue" }).click();
@@ -482,20 +525,20 @@ test("dots and boxes keeps turn on box completion and reaches winner overlay", a
   await expect(page.locator("#dots-board .dots-edge")).toHaveCount(60);
   await expect(page.locator("#dots-board .dots-box")).toHaveCount(25);
   await expect(page.locator("#dots-board .dots-edge.is-playable")).toHaveCount(60);
-  await expect(page.locator("#turn-indicator .turn-player-score-match")).toHaveCount(0);
-  await expect(page.locator("#turn-indicator .turn-player-score-game")).toHaveCount(2);
+  await expect(page.locator("#turn-indicator .turn-score-match")).toHaveCount(0);
+  await expect(page.locator("#turn-indicator .turn-score-game")).toHaveCount(2);
   const mirrorLayout = await page.evaluate(() => {
-    const guestPane = document.querySelector("#turn-indicator .turn-player-guest");
-    const guestMeta = document.querySelector("#turn-indicator .turn-player-guest .turn-player-meta");
-    if (!(guestPane instanceof HTMLElement) || !(guestMeta instanceof HTMLElement)) return null;
+    const guestPane = document.querySelector('#turn-indicator [data-side="guest"]');
+    const guestMeta = document.querySelector('#turn-indicator [data-side="guest"] .turn-meta');
+    if (!(guestPane instanceof HTMLElement)) return null;
     return {
       guestFlexDirection: getComputedStyle(guestPane).flexDirection,
-      guestMetaTextAlign: getComputedStyle(guestMeta).textAlign
+      guestMetaExists: guestMeta instanceof HTMLElement
     };
   });
   expect(mirrorLayout).not.toBeNull();
   expect(mirrorLayout?.guestFlexDirection).toBe("row-reverse");
-  expect(mirrorLayout?.guestMetaTextAlign).toBe("right");
+  expect(mirrorLayout?.guestMetaExists).toBe(true);
 
   const [hostId, guestId] = await page.evaluate(() => {
     const room = window.__multipassStore.getState().room;
@@ -528,7 +571,7 @@ test("dots and boxes keeps turn on box completion and reaches winner overlay", a
   expect(afterScoringMove.boxOwner).toBe(hostId);
   expect(afterScoringMove.scores[hostId]).toBe(1);
   expect(afterScoringMove.scores[guestId]).toBe(0);
-  await expect(page.locator("#turn-indicator .turn-player-host .turn-player-score-game")).toHaveText("1");
+  await expect(page.locator('#turn-indicator [data-side="host"] .turn-score-game')).toHaveText("1");
 
   const prePlayedEdges = new Set([0, 10, 30, 11, 5, 12, 31]);
   for (let edgeIndex = 0; edgeIndex < 60; edgeIndex += 1) {
@@ -536,15 +579,16 @@ test("dots and boxes keeps turn on box completion and reaches winner overlay", a
     await clickEdge(edgeIndex);
   }
 
-  await expect(page.locator("#game-result-panel:not(.hidden)")).toBeVisible({ timeout: 9000 });
-  await expect(page.locator("#turn-indicator .turn-player-score-match")).toHaveCount(0);
+  await expect(page.locator("#new-round")).toBeVisible({ timeout: 9000 });
+  await expect(page.locator("#turn-indicator .turn-player-cta")).toHaveCount(0);
+  await expect(page.locator("#turn-indicator .turn-score-match")).toHaveCount(0);
 });
 
 test("local poker dice banks points immediately and swaps to pass-only CTA at end of turn", async ({ page }) => {
   await page.goto("/");
   await page.waitForFunction(() => window.__multipassLegacyReady === true);
 
-  await page.getByRole("button", { name: "Start" }).click();
+  await page.getByRole("button", { name: "Local" }).click();
   await expect(page.locator("#screen-local.active")).toBeVisible();
   await page.locator('#local-avatar-grid .avatar-option[data-avatar="yellow"]').click();
   await page.getByRole("button", { name: "Continue" }).click();
@@ -617,7 +661,7 @@ test("local lobby duel sides remain side-by-side on mobile", async ({ page }) =>
   await page.goto("/");
   await page.waitForFunction(() => window.__multipassLegacyReady === true);
 
-  await page.getByRole("button", { name: "Start" }).click();
+  await page.getByRole("button", { name: "Local" }).click();
   await page.locator('#local-avatar-grid .avatar-option[data-avatar="yellow"]').click();
   await page.getByRole("button", { name: "Continue" }).click();
   await page.locator('#local-avatar-grid .avatar-option[data-avatar="blue"]').click();
@@ -658,14 +702,14 @@ test("local lobby duel sides remain side-by-side on mobile", async ({ page }) =>
     expect(Math.abs(shape.ratio - 1)).toBeLessThan(0.03);
   }
 
-  await expect(page.locator("#screen-lobby #game-list .game-card")).toHaveCount(5);
+  await expect(page.locator("#screen-lobby #game-list .game-card")).toHaveCount(4);
 });
 
 test("local pick can launch word fight module", async ({ page }) => {
   await page.goto("/");
   await page.waitForFunction(() => window.__multipassLegacyReady === true);
 
-  await page.getByRole("button", { name: "Start" }).click();
+  await page.getByRole("button", { name: "Local" }).click();
   await page.locator('#local-avatar-grid .avatar-option[data-avatar="yellow"]').click();
   await page.getByRole("button", { name: "Continue" }).click();
   await page.locator('#local-avatar-grid .avatar-option[data-avatar="green"]').click();
@@ -681,12 +725,23 @@ test("local pick can launch word fight module", async ({ page }) => {
   await expect(page.locator('#word-fight-keyboard [data-word-fight-key="T"]')).toBeVisible();
   await expect(page.locator("#word-fight-status")).toBeHidden();
   await expect(page.locator("#word-fight-active-board .word-fight-row")).toHaveCount(5);
+  const hintTitle = page.locator("#word-fight-active-title");
+  await expect(hintTitle).toContainText("Hint:");
+  await expect(hintTitle).not.toContainText("Board");
+  const expectedOpeningHint = await page.evaluate(() => {
+    const room = window.__multipassStore.getState().room;
+    const gameState = room?.game?.state;
+    const activePlayerId = gameState?.nextPlayerId;
+    return activePlayerId ? gameState?.categoryByPlayer?.[activePlayerId] || null : null;
+  });
+  expect(expectedOpeningHint).toBeTruthy();
+  await expect(hintTitle).toHaveText(`Hint: ${expectedOpeningHint}`);
   await expect(page.locator("#word-fight-you-board")).toHaveCount(0);
   await expect(page.locator("#word-fight-opponent-board")).toHaveCount(0);
-  await expect(page.locator("#turn-indicator .turn-player-host")).toHaveClass(/is-active/);
-  await expect(page.locator("#turn-indicator .turn-player-guest")).toHaveClass(/is-inactive/);
-  await expect(page.locator("#turn-indicator .turn-player-host .turn-player-score-game")).toHaveText("0");
-  await expect(page.locator("#turn-indicator .turn-player-guest .turn-player-score-game")).toHaveText("0");
+  await expect(page.locator('#turn-indicator [data-side="host"]')).toHaveAttribute("data-active", "true");
+  await expect(page.locator('#turn-indicator [data-side="guest"]')).toHaveAttribute("data-active", "false");
+  await expect(page.locator('#turn-indicator [data-side="host"] .turn-score-game')).toHaveText("0");
+  await expect(page.locator('#turn-indicator [data-side="guest"] .turn-score-game')).toHaveText("0");
 
   await page.locator('#word-fight-keyboard [data-word-fight-key="T"]').click();
   await page.locator('#word-fight-keyboard [data-word-fight-key="I"]').click();
@@ -705,17 +760,96 @@ test("local pick can launch word fight module", async ({ page }) => {
   await expect(page.locator("#word-fight-actions")).not.toHaveClass(/hidden/);
   await expect(page.locator("#word-fight-pass-turn")).toBeVisible();
   await expect(page.locator("#word-fight-status")).toBeHidden();
-  await expect(page.locator("#turn-indicator .turn-player-host")).toHaveClass(/is-active/);
-  await expect(page.locator("#turn-indicator .turn-player-guest")).toHaveClass(/is-inactive/);
-  const hostScoreAfterGuess = await page.locator("#turn-indicator .turn-player-host .turn-player-score-game").innerText();
+  await expect(page.locator('#turn-indicator [data-side="host"]')).toHaveAttribute("data-active", "true");
+  await expect(page.locator('#turn-indicator [data-side="guest"]')).toHaveAttribute("data-active", "false");
+  const hostScoreAfterGuess = await page.locator('#turn-indicator [data-side="host"] .turn-score-game').innerText();
   expect(Number.parseInt(hostScoreAfterGuess, 10)).toBeGreaterThanOrEqual(0);
-  await expect(page.locator("#turn-indicator .turn-player-guest .turn-player-score-game")).toHaveText("0");
+  await expect(page.locator('#turn-indicator [data-side="guest"] .turn-score-game')).toHaveText("0");
 
   await page.locator("#word-fight-pass-turn").click();
   await expect(page.locator("#word-fight-keyboard")).not.toHaveClass(/hidden/);
   await expect(page.locator("#word-fight-actions")).toHaveClass(/hidden/);
-  await expect(page.locator("#turn-indicator .turn-player-host")).toHaveClass(/is-inactive/);
-  await expect(page.locator("#turn-indicator .turn-player-guest")).toHaveClass(/is-active/);
-  await expect(page.locator("#turn-indicator .turn-player-host .turn-player-score-game")).toHaveText(hostScoreAfterGuess);
-  await expect(page.locator("#turn-indicator .turn-player-guest .turn-player-score-game")).toHaveText("0");
+  const expectedAfterPassHint = await page.evaluate(() => {
+    const room = window.__multipassStore.getState().room;
+    const gameState = room?.game?.state;
+    const activePlayerId = gameState?.nextPlayerId;
+    return activePlayerId ? gameState?.categoryByPlayer?.[activePlayerId] || null : null;
+  });
+  expect(expectedAfterPassHint).toBeTruthy();
+  await expect(hintTitle).toHaveText(`Hint: ${expectedAfterPassHint}`);
+  await expect(page.locator('#turn-indicator [data-side="host"]')).toHaveAttribute("data-active", "false");
+  await expect(page.locator('#turn-indicator [data-side="guest"]')).toHaveAttribute("data-active", "true");
+  const [hostScoreAfterPass, guestScoreAfterPass] = await Promise.all([
+    page.locator('#turn-indicator [data-side="host"] .turn-score-game').innerText(),
+    page.locator('#turn-indicator [data-side="guest"] .turn-score-game').innerText()
+  ]);
+  expect(Number.parseInt(hostScoreAfterPass, 10)).toBeGreaterThanOrEqual(0);
+  expect(Number.parseInt(guestScoreAfterPass, 10)).toBeGreaterThanOrEqual(0);
+});
+
+test("word fight reveals exhausted secret only for the exhausted local viewer", async ({ page }) => {
+  await page.goto("/");
+  await page.waitForFunction(() => window.__multipassLegacyReady === true);
+
+  await page.getByRole("button", { name: "Local" }).click();
+  await page.locator('#local-avatar-grid .avatar-option[data-avatar="yellow"]').click();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.locator('#local-avatar-grid .avatar-option[data-avatar="green"]').click();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.locator("#screen-lobby.active")).toBeVisible();
+  await page.getByRole("button", { name: "Play Word Fight", exact: true }).click();
+  await expect(page.locator("#screen-game.active")).toBeVisible();
+
+  const snapshot = await page.evaluate(() => {
+    const appState = window.__multipassStore.getState();
+    const room = appState.room;
+    const hostId = room?.players?.host?.id || null;
+    const guestId = room?.players?.guest?.id || null;
+    const wordsByPlayer = room?.game?.state?.wordsByPlayer || {};
+    return {
+      hostId,
+      guestId,
+      hostSecret: String(wordsByPlayer[hostId] || "").toUpperCase(),
+      guestSecret: String(wordsByPlayer[guestId] || "").toUpperCase()
+    };
+  });
+
+  expect(snapshot.hostSecret).toMatch(/^[A-Z]{4}$/);
+  expect(snapshot.guestSecret).toMatch(/^[A-Z]{4}$/);
+
+  const hostWrongGuesses = WORD_FIGHT_GUESS_CANDIDATES
+    .filter((word) => word !== snapshot.hostSecret)
+    .slice(0, 5);
+  const guestWrongGuesses = WORD_FIGHT_GUESS_CANDIDATES
+    .filter((word) => word !== snapshot.guestSecret)
+    .slice(0, 4);
+  expect(hostWrongGuesses).toHaveLength(5);
+  expect(guestWrongGuesses).toHaveLength(4);
+
+  const status = page.locator("#word-fight-status");
+
+  for (let turn = 0; turn < 4; turn += 1) {
+    await expect(page.locator("#word-fight-keyboard")).toBeVisible();
+    await enterWordFightGuess(page, hostWrongGuesses[turn]);
+    await expect(page.locator("#word-fight-pass-turn")).toBeVisible();
+    await expect(status).toBeHidden();
+    await page.locator("#word-fight-pass-turn").click();
+
+    await expect(page.locator("#word-fight-keyboard")).toBeVisible();
+    await enterWordFightGuess(page, guestWrongGuesses[turn]);
+    await expect(page.locator("#word-fight-pass-turn")).toBeVisible();
+    await expect(status).toBeHidden();
+    await page.locator("#word-fight-pass-turn").click();
+  }
+
+  await expect(page.locator("#word-fight-keyboard")).toBeVisible();
+  await enterWordFightGuess(page, hostWrongGuesses[4]);
+  await expect(page.locator("#word-fight-pass-turn")).toBeVisible();
+  await expect(status).toBeVisible();
+  await expect(status).toHaveText(`Out of guesses. Your word was ${snapshot.hostSecret}.`);
+
+  await page.locator("#word-fight-pass-turn").click();
+  await expect(page.locator("#word-fight-keyboard")).toBeVisible();
+  await expect(status).toBeHidden();
+  await expect(status).toHaveText("");
 });

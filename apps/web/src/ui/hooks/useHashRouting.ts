@@ -5,6 +5,7 @@ import { parseScreenRoute } from "../../legacy/hashRoute.js";
 const HASH_TO_SCREEN: Record<string, ScreenKey> = {
   "": "landing",
   "#local": "local",
+  "#online": "online",
   "#host": "host",
   "#join": "join",
   "#lobby": "lobby",

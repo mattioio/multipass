@@ -17,7 +17,7 @@ test("local browser navigation: lobby -> local-or-landing", async ({ page }) => 
   await page.waitForFunction(() => window.__multipassLegacyReady === true);
   await expect(page).toHaveURL(/\/$/);
 
-  await page.getByRole("button", { name: "Start" }).click();
+  await page.getByRole("button", { name: "Local" }).click();
   await expect(page.locator("#screen-local.active")).toBeVisible();
   await expect(page).toHaveURL(/#local$/);
 
@@ -34,7 +34,7 @@ test("local browser navigation: lobby -> local-or-landing", async ({ page }) => 
   await expect(page).toHaveURL(/#lobby$/);
 
   await page.goBack();
-  await expect.poll(() => new URL(page.url()).hash).toMatch(/^#(local|landing)$/);
+  await expect.poll(() => new URL(page.url()).hash).toMatch(/^(|#landing)$/);
 });
 
 test("online browser back exits room flow from lobby to landing", async ({ browser }) => {
@@ -45,7 +45,7 @@ test("online browser back exits room flow from lobby to landing", async ({ brows
 
   await hostPage.goto("/");
   await hostPage.waitForFunction(() => window.__multipassLegacyReady === true);
-  await hostPage.getByRole("tab", { name: "Online" }).click();
+  await hostPage.getByRole("button", { name: "Online" }).click();
   await hostPage.getByRole("button", { name: "Host a room" }).click();
   await expect(hostPage).toHaveURL(/#host$/);
   await expect(hostPage.getByRole("button", { name: "Pick a player" })).toBeDisabled();
@@ -58,7 +58,7 @@ test("online browser back exits room flow from lobby to landing", async ({ brows
   const roomCode = (await hostPage.locator("#room-code").textContent())?.trim() || "";
   await guestPage.goto("/");
   await guestPage.waitForFunction(() => window.__multipassLegacyReady === true);
-  await guestPage.getByRole("tab", { name: "Online" }).click();
+  await guestPage.getByRole("button", { name: "Online" }).click();
   await guestPage.getByRole("button", { name: "Join a room" }).click();
   await fillJoinCodeSlots(guestPage, roomCode);
   await expect(guestPage.locator("#join-avatar-picker:not(.hidden)")).toBeVisible();
@@ -67,7 +67,7 @@ test("online browser back exits room flow from lobby to landing", async ({ brows
   await expect(guestPage.locator("#screen-lobby.active")).toBeVisible();
 
   await hostPage.goBack();
-  await expect.poll(() => new URL(hostPage.url()).hash).toMatch(/^(|#host|#landing)$/);
+  await expect.poll(() => new URL(hostPage.url()).hash).toMatch(/^(|#online|#landing)$/);
 
   await hostContext.close();
   await guestContext.close();

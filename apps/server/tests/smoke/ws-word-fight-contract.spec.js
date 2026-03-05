@@ -124,13 +124,23 @@ test("word fight keeps secrets private per player and resolves winner by scoring
   const guestId = hostStarted.room.players.guest.id;
   const hostSecret = hostStarted.room.game.state.mySecretWord;
   const guestSecret = guestStarted.room.game.state.mySecretWord;
+  const hostCategory = hostStarted.room.game.state.mySecretCategory;
+  const guestCategory = guestStarted.room.game.state.mySecretCategory;
 
   expect(typeof hostSecret).toBe("string");
   expect(typeof guestSecret).toBe("string");
+  expect(typeof hostCategory).toBe("string");
+  expect(typeof guestCategory).toBe("string");
   expect(hostSecret).toHaveLength(4);
   expect(guestSecret).toHaveLength(4);
+  expect(hostCategory.length).toBeGreaterThan(0);
+  expect(guestCategory.length).toBeGreaterThan(0);
   expect(hostStarted.room.game.state.wordsByPlayer).toBeUndefined();
   expect(guestStarted.room.game.state.wordsByPlayer).toBeUndefined();
+  expect(hostStarted.room.game.state.categoryByPlayer).toBeUndefined();
+  expect(guestStarted.room.game.state.categoryByPlayer).toBeUndefined();
+  expect(hostStarted.room.game.state.activeHintCategory).toBe(hostCategory);
+  expect(guestStarted.room.game.state.activeHintCategory).toBe(hostCategory);
 
   const afterHostSolve = waitForMessage(
     host,
@@ -149,6 +159,7 @@ test("word fight keeps secrets private per player and resolves winner by scoring
   expect(solvedUpdate.room.game.state.history[0]?.pointsEarned).toBe(60);
   expect(solvedUpdate.room.game.state.history[0]?.pointsByType?.solve).toBe(WORD_FIGHT_POINTS.solveByAttempt[0]);
   expect(solvedUpdate.room.game.state.nextPlayerId).toBe(guestId);
+  expect(solvedUpdate.room.game.state.activeHintCategory).toBe(guestCategory);
 
   let update = solvedUpdate;
   const noOverlapUsed = new Set();

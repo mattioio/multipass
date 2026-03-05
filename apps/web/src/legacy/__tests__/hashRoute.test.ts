@@ -2,6 +2,7 @@ import { normalizeRoomCode, parseScreenRoute } from "../hashRoute.js";
 
 describe("hash route parser", () => {
   const hashToScreen = {
+    "#online": "online",
     "#join": "join",
     "#host": "host"
   };
@@ -35,6 +36,13 @@ describe("hash route parser", () => {
   it("parses non-join hashes via map", () => {
     expect(parseScreenRoute("#host", hashToScreen)).toEqual({
       screen: "host",
+      joinCode: null
+    });
+  });
+
+  it("parses online chooser route", () => {
+    expect(parseScreenRoute("#online", hashToScreen)).toEqual({
+      screen: "online",
       joinCode: null
     });
   });

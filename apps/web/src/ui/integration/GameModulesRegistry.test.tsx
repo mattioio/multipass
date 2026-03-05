@@ -9,7 +9,6 @@ describe("registry-driven game modules", () => {
     expect(screen.getByRole("heading", { name: "Game Modules" })).toBeInTheDocument();
     expect(screen.getAllByText("Tic Tac Toe").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Dots & Boxes").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Battleships").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Unknown game").length).toBeGreaterThan(0);
   });
 
@@ -24,5 +23,8 @@ describe("registry-driven game modules", () => {
     expect(document.getElementById("dots-score-row")).toBeNull();
     expect(document.getElementById("dots-score-host")).toBeNull();
     expect(document.getElementById("dots-score-guest")).toBeNull();
+    expect(document.getElementById("unsupported-game-layout")).toBeInTheDocument();
+    expect(document.getElementById("unsupported-game-title")).toBeInTheDocument();
+    expect(document.getElementById("unsupported-game-message")).toBeInTheDocument();
   });
 });

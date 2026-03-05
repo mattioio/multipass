@@ -28,6 +28,38 @@ function gameCta(page, gameName) {
   return gameCard(page, gameName).locator(".game-cta");
 }
 
+async function readHomeChromeState(page) {
+  return page.evaluate(() => {
+    const settings = document.getElementById("open-settings");
+    const logoImage = document.querySelector(".logo-image");
+    const centerTitle = document.getElementById("lobby-games-title");
+    const logoContainer = document.querySelector(".logo");
+    const leftAction = document.getElementById("hero-left-action");
+    const isVisible = (node) => {
+      if (!(node instanceof HTMLElement)) return false;
+      const styles = window.getComputedStyle(node);
+      return styles.display !== "none" && styles.visibility !== "hidden" && styles.opacity !== "0";
+    };
+    const getCenterX = (node) => {
+      if (!(node instanceof HTMLElement)) return null;
+      const rect = node.getBoundingClientRect();
+      return rect.left + (rect.width / 2);
+    };
+    return {
+      settingsVisible: isVisible(settings),
+      logoWidth: logoImage instanceof HTMLElement ? window.getComputedStyle(logoImage).width : "",
+      leftActionVisible: isVisible(leftAction),
+      leftActionLabel: leftAction instanceof HTMLElement ? leftAction.textContent?.trim() || "" : "",
+      settingsX: getCenterX(settings),
+      leftActionX: getCenterX(leftAction),
+      centerTitleVisible: isVisible(centerTitle),
+      centerLogoVisible: isVisible(logoImage),
+      centerHasAction: Boolean(logoContainer?.querySelector("button")),
+      viewportWidth: window.innerWidth
+    };
+  });
+}
+
 test("online happy path: host + guest choose game -> game", async ({ browser }) => {
   const hostContext = await browser.newContext();
   const guestContext = await browser.newContext();
@@ -35,8 +67,29 @@ test("online happy path: host + guest choose game -> game", async ({ browser }) 
   const guestPage = await guestContext.newPage();
 
   await gotoApp(hostPage);
-  await hostPage.getByRole("tab", { name: "Online" }).click();
+  const landingChrome = await readHomeChromeState(hostPage);
+  await hostPage.getByRole("button", { name: "Online" }).click();
+  const onlineChrome = await readHomeChromeState(hostPage);
+  expect(onlineChrome.settingsVisible).toBe(landingChrome.settingsVisible);
+  expect(onlineChrome.logoWidth).toBe(landingChrome.logoWidth);
+  expect(Math.abs((onlineChrome.settingsX ?? 0) - (landingChrome.settingsX ?? 0))).toBeLessThanOrEqual(1);
+  if (onlineChrome.leftActionVisible) {
+    expect(onlineChrome.leftActionLabel).not.toMatch(/close|back/i);
+  }
+  await hostPage.locator("#screen-online .sheet-backdrop").click();
+  await expect(hostPage.locator("#screen-online.is-closing")).toBeVisible();
+  await expect(hostPage.locator("#screen-online.active")).toHaveCount(0);
+  await expect(hostPage.locator("#screen-landing.active")).toBeVisible();
+  await hostPage.getByRole("button", { name: "Online" }).click();
+  await expect(hostPage.locator("#screen-online.active")).toBeVisible();
   await hostPage.getByRole("button", { name: "Host a room" }).click();
+  const hostChrome = await readHomeChromeState(hostPage);
+  expect(hostChrome.settingsVisible).toBe(landingChrome.settingsVisible);
+  expect(hostChrome.logoWidth).toBe(landingChrome.logoWidth);
+  expect(Math.abs((hostChrome.settingsX ?? 0) - (landingChrome.settingsX ?? 0))).toBeLessThanOrEqual(1);
+  if (hostChrome.leftActionVisible) {
+    expect(hostChrome.leftActionLabel).not.toMatch(/close|back/i);
+  }
   await expect(hostPage.getByRole("button", { name: "Pick a player" })).toBeDisabled();
   await hostPage.locator('#host-avatar-picker .avatar-option[data-avatar="yellow"]').click();
   await expect(hostPage.getByRole("button", { name: "Continue" })).toBeEnabled();
@@ -47,7 +100,7 @@ test("online happy path: host + guest choose game -> game", async ({ browser }) 
   const roomCode = (await hostPage.locator("#room-code").textContent())?.trim() || "";
 
   await gotoApp(guestPage);
-  await guestPage.getByRole("tab", { name: "Online" }).click();
+  await guestPage.getByRole("button", { name: "Online" }).click();
   await guestPage.getByRole("button", { name: "Join a room" }).click();
   await fillJoinCodeSlots(guestPage, roomCode);
   await expect(guestPage.locator("#join-avatar-picker:not(.hidden)")).toBeVisible();
@@ -57,10 +110,21 @@ test("online happy path: host + guest choose game -> game", async ({ browser }) 
 
   await expect(guestPage.locator("#screen-lobby.active")).toBeVisible();
   await expect(hostPage.locator("#screen-lobby.active")).toBeVisible();
+  const lobbyChrome = await readHomeChromeState(hostPage);
+  expect(lobbyChrome.leftActionVisible).toBe(true);
+  expect(lobbyChrome.settingsVisible).toBe(true);
+  expect(lobbyChrome.centerTitleVisible).toBe(false);
+  expect(lobbyChrome.centerLogoVisible).toBe(false);
+  expect(lobbyChrome.centerHasAction).toBe(false);
+  expect((lobbyChrome.leftActionX ?? 0) < ((lobbyChrome.viewportWidth ?? 0) / 3)).toBe(true);
+  expect((lobbyChrome.settingsX ?? 0) > (((lobbyChrome.viewportWidth ?? 0) * 2) / 3)).toBe(true);
   await expect(hostPage.locator("#score-columns .score-duel-panel")).toHaveCount(1);
   await expect(hostPage.locator("#score-columns .score-duel-side")).toHaveCount(2);
-  await expect(hostPage.locator("#score-columns .score-duel-scorebar-wrap")).toHaveCount(1);
-  await expect(hostPage.locator("#score-columns .score-broadcast-row")).toHaveCount(1);
+  await expect(hostPage.locator("#score-columns .score-duel-meta")).toHaveCount(2);
+  await expect(hostPage.locator("#score-columns .score-duel-name")).toHaveCount(2);
+  await expect(hostPage.locator("#score-columns .score-duel-points")).toHaveCount(2);
+  await expect(hostPage.locator("#score-columns .score-duel-scorebar-wrap")).toHaveCount(0);
+  await expect(hostPage.locator("#score-columns .score-broadcast-row")).toHaveCount(0);
   await expect(hostPage.locator("#score-columns .score-role")).toHaveCount(0);
   await expect(hostPage.locator("#score-columns .score-column")).toHaveCount(0);
   const hostLobbyHostScoreRotationVar = await hostPage
@@ -115,12 +179,14 @@ test("online happy path: host + guest choose game -> game", async ({ browser }) 
   await expect(guestPage.locator("#screen-game .game-surface-head")).toHaveCount(0);
   await expect(guestPage.locator("#screen-game .game-surface-title")).toHaveCount(0);
   await expect(guestPage.locator("#screen-game .game-surface-status")).toHaveCount(0);
-  await expect(hostPage.locator("#turn-indicator .turn-player")).toHaveCount(2);
-  await expect(guestPage.locator("#turn-indicator .turn-player")).toHaveCount(2);
-  await expect(hostPage.locator("#turn-indicator .turn-player-score-match")).toHaveCount(0);
-  await expect(hostPage.locator("#turn-indicator .turn-player-score-game")).toHaveCount(0);
-  await expect(guestPage.locator("#turn-indicator .turn-player-score-match")).toHaveCount(0);
-  await expect(guestPage.locator("#turn-indicator .turn-player-score-game")).toHaveCount(0);
+  await expect(hostPage.locator("#turn-indicator .turn-pane")).toHaveCount(2);
+  await expect(guestPage.locator("#turn-indicator .turn-pane")).toHaveCount(2);
+  await expect(hostPage.locator("#turn-indicator .turn-meta")).toHaveCount(2);
+  await expect(guestPage.locator("#turn-indicator .turn-meta")).toHaveCount(2);
+  await expect(hostPage.locator("#turn-indicator .turn-score-match")).toHaveCount(0);
+  await expect(hostPage.locator("#turn-indicator .turn-score-game")).toHaveCount(0);
+  await expect(guestPage.locator("#turn-indicator .turn-score-match")).toHaveCount(0);
+  await expect(guestPage.locator("#turn-indicator .turn-score-game")).toHaveCount(0);
   const firstRoundStarter = await hostPage.evaluate(() => {
     const room = window.__multipassStore.getState().room;
     return {
@@ -144,7 +210,7 @@ test("online agreement countdown cancels when a player changes game before start
   const guestPage = await guestContext.newPage();
 
   await gotoApp(hostPage);
-  await hostPage.getByRole("tab", { name: "Online" }).click();
+  await hostPage.getByRole("button", { name: "Online" }).click();
   await hostPage.getByRole("button", { name: "Host a room" }).click();
   await hostPage.locator('#host-avatar-picker .avatar-option[data-avatar="yellow"]').click();
   await hostPage.getByRole("button", { name: "Continue" }).click();
@@ -152,7 +218,7 @@ test("online agreement countdown cancels when a player changes game before start
   const roomCode = (await hostPage.locator("#room-code").textContent())?.trim() || "";
 
   await gotoApp(guestPage);
-  await guestPage.getByRole("tab", { name: "Online" }).click();
+  await guestPage.getByRole("button", { name: "Online" }).click();
   await guestPage.getByRole("button", { name: "Join a room" }).click();
   await fillJoinCodeSlots(guestPage, roomCode);
   await expect(guestPage.locator("#join-avatar-picker:not(.hidden)")).toBeVisible();
@@ -207,7 +273,7 @@ test("online dots and boxes syncs edge moves across host and guest", async ({ br
   const guestPage = await guestContext.newPage();
 
   await gotoApp(hostPage);
-  await hostPage.getByRole("tab", { name: "Online" }).click();
+  await hostPage.getByRole("button", { name: "Online" }).click();
   await hostPage.getByRole("button", { name: "Host a room" }).click();
   await hostPage.locator('#host-avatar-picker .avatar-option[data-avatar="yellow"]').click();
   await hostPage.getByRole("button", { name: "Continue" }).click();
@@ -215,7 +281,7 @@ test("online dots and boxes syncs edge moves across host and guest", async ({ br
   const roomCode = (await hostPage.locator("#room-code").textContent())?.trim() || "";
 
   await gotoApp(guestPage);
-  await guestPage.getByRole("tab", { name: "Online" }).click();
+  await guestPage.getByRole("button", { name: "Online" }).click();
   await guestPage.getByRole("button", { name: "Join a room" }).click();
   await fillJoinCodeSlots(guestPage, roomCode);
   await expect(guestPage.locator("#join-avatar-picker:not(.hidden)")).toBeVisible();
@@ -234,42 +300,44 @@ test("online dots and boxes syncs edge moves across host and guest", async ({ br
   await expect(guestPage.locator("#dots-layout")).not.toHaveClass(/hidden/);
   await expect(hostPage.locator("#dots-board .dots-edge")).toHaveCount(60);
   await expect(guestPage.locator("#dots-board .dots-edge")).toHaveCount(60);
-  await expect(hostPage.locator("#turn-indicator .turn-player-score-match")).toHaveCount(0);
-  await expect(hostPage.locator("#turn-indicator .turn-player-score-game")).toHaveCount(2);
-  await expect(guestPage.locator("#turn-indicator .turn-player-score-match")).toHaveCount(0);
-  await expect(guestPage.locator("#turn-indicator .turn-player-score-game")).toHaveCount(2);
+  await expect(hostPage.locator("#turn-indicator .turn-score-match")).toHaveCount(0);
+  await expect(hostPage.locator("#turn-indicator .turn-score-game")).toHaveCount(2);
+  await expect(guestPage.locator("#turn-indicator .turn-score-match")).toHaveCount(0);
+  await expect(guestPage.locator("#turn-indicator .turn-score-game")).toHaveCount(2);
 
   const starter = await hostPage.evaluate(() => window.__multipassStore.getState().room.game.state.nextPlayerId);
   const hostPlayerId = await hostPage.evaluate(() => window.__multipassStore.getState().room.players.host.id);
   expect(starter).toBe(hostPlayerId);
-  await expect(hostPage.locator("#turn-indicator .turn-player-host .turn-player-state")).toHaveText("Turn");
-  await expect(hostPage.locator("#turn-indicator .turn-player-guest .turn-player-state")).toHaveText("Waiting");
-  await expect(hostPage.locator("#turn-indicator .turn-player-host .turn-player-score-game")).toHaveText("0");
-  await expect(hostPage.locator("#turn-indicator .turn-player-guest .turn-player-score-game")).toHaveText("0");
+  await expect(hostPage.locator("#turn-indicator")).toHaveAttribute("data-mode", "turn");
+  await expect(hostPage.locator("#turn-indicator")).toHaveAttribute("data-active-side", "host");
+  await expect(hostPage.locator('#turn-indicator [data-side="host"]')).toHaveAttribute("data-active", "true");
+  await expect(hostPage.locator('#turn-indicator [data-side="guest"]')).toHaveAttribute("data-active", "false");
+  await expect(hostPage.locator('#turn-indicator [data-side="host"] .turn-score-game')).toHaveText("0");
+  await expect(hostPage.locator('#turn-indicator [data-side="guest"] .turn-score-game')).toHaveText("0");
   const mirroredHostLayout = await hostPage.evaluate(() => {
-    const guestPane = document.querySelector("#turn-indicator .turn-player-guest");
-    const guestMeta = document.querySelector("#turn-indicator .turn-player-guest .turn-player-meta");
-    if (!(guestPane instanceof HTMLElement) || !(guestMeta instanceof HTMLElement)) return null;
+    const guestPane = document.querySelector('#turn-indicator [data-side="guest"]');
+    const guestMeta = document.querySelector('#turn-indicator [data-side="guest"] .turn-meta');
+    if (!(guestPane instanceof HTMLElement)) return null;
     return {
       guestFlexDirection: getComputedStyle(guestPane).flexDirection,
-      guestMetaTextAlign: getComputedStyle(guestMeta).textAlign
+      guestMetaExists: guestMeta instanceof HTMLElement
     };
   });
   expect(mirroredHostLayout).not.toBeNull();
   expect(mirroredHostLayout?.guestFlexDirection).toBe("row-reverse");
-  expect(mirroredHostLayout?.guestMetaTextAlign).toBe("right");
+  expect(mirroredHostLayout?.guestMetaExists).toBe(true);
   const mirroredGuestLayout = await guestPage.evaluate(() => {
-    const guestPane = document.querySelector("#turn-indicator .turn-player-guest");
-    const guestMeta = document.querySelector("#turn-indicator .turn-player-guest .turn-player-meta");
-    if (!(guestPane instanceof HTMLElement) || !(guestMeta instanceof HTMLElement)) return null;
+    const guestPane = document.querySelector('#turn-indicator [data-side="guest"]');
+    const guestMeta = document.querySelector('#turn-indicator [data-side="guest"] .turn-meta');
+    if (!(guestPane instanceof HTMLElement)) return null;
     return {
       guestFlexDirection: getComputedStyle(guestPane).flexDirection,
-      guestMetaTextAlign: getComputedStyle(guestMeta).textAlign
+      guestMetaExists: guestMeta instanceof HTMLElement
     };
   });
   expect(mirroredGuestLayout).not.toBeNull();
   expect(mirroredGuestLayout?.guestFlexDirection).toBe("row-reverse");
-  expect(mirroredGuestLayout?.guestMetaTextAlign).toBe("right");
+  expect(mirroredGuestLayout?.guestMetaExists).toBe(true);
   await expect(hostPage.locator("#dots-board .dots-edge.is-playable")).toHaveCount(60);
   await expect(guestPage.locator("#dots-board .dots-edge.is-playable")).toHaveCount(0);
 
@@ -292,8 +360,9 @@ test("online dots and boxes syncs edge moves across host and guest", async ({ br
   await expect(guestPage.locator("#dots-board .dots-edge.is-last-move")).toHaveCount(1);
   await expect(hostPage.locator("#dots-board .dots-edge.is-playable")).toHaveCount(0);
   await expect(guestPage.locator("#dots-board .dots-edge.is-playable")).toHaveCount(59);
-  await expect(hostPage.locator("#turn-indicator .turn-player-host .turn-player-state")).toHaveText("Waiting");
-  await expect(hostPage.locator("#turn-indicator .turn-player-guest .turn-player-state")).toHaveText("Turn");
+  await expect(hostPage.locator("#turn-indicator")).toHaveAttribute("data-active-side", "guest");
+  await expect(hostPage.locator('#turn-indicator [data-side="host"]')).toHaveAttribute("data-active", "false");
+  await expect(hostPage.locator('#turn-indicator [data-side="guest"]')).toHaveAttribute("data-active", "true");
 
   await clickEdge(guestPage, 10, 2);
   await clickEdge(hostPage, 30, 3);
@@ -301,16 +370,18 @@ test("online dots and boxes syncs edge moves across host and guest", async ({ br
   await clickEdge(hostPage, 5, 5);
   await clickEdge(guestPage, 12, 6);
   await expect(hostPage.locator('#dots-board .dots-edge[data-edge-index="31"]')).toHaveClass(/is-scoring-opportunity/);
-  await expect(hostPage.locator("#turn-indicator .turn-player-host .turn-player-state")).toHaveText("Turn");
-  await expect(hostPage.locator("#turn-indicator .turn-player-guest .turn-player-state")).toHaveText("Waiting");
+  await expect(hostPage.locator("#turn-indicator")).toHaveAttribute("data-active-side", "host");
+  await expect(hostPage.locator('#turn-indicator [data-side="host"]')).toHaveAttribute("data-active", "true");
+  await expect(hostPage.locator('#turn-indicator [data-side="guest"]')).toHaveAttribute("data-active", "false");
 
   await clickEdge(hostPage, 31, 7);
   await expect(hostPage.locator("#dots-board .dots-edge.is-last-move")).toHaveCount(1);
   await expect(guestPage.locator("#dots-board .dots-edge.is-last-move")).toHaveCount(1);
-  await expect(hostPage.locator("#turn-indicator .turn-player-host .turn-player-score-game")).toHaveText("1");
-  await expect(guestPage.locator("#turn-indicator .turn-player-host .turn-player-score-game")).toHaveText("1");
-  await expect(hostPage.locator("#turn-indicator .turn-player-host .turn-player-state")).toHaveText("Turn");
-  await expect(hostPage.locator("#turn-indicator .turn-player-guest .turn-player-state")).toHaveText("Waiting");
+  await expect(hostPage.locator('#turn-indicator [data-side="host"] .turn-score-game')).toHaveText("1");
+  await expect(guestPage.locator('#turn-indicator [data-side="host"] .turn-score-game')).toHaveText("1");
+  await expect(hostPage.locator("#turn-indicator")).toHaveAttribute("data-active-side", "host");
+  await expect(hostPage.locator('#turn-indicator [data-side="host"]')).toHaveAttribute("data-active", "true");
+  await expect(hostPage.locator('#turn-indicator [data-side="guest"]')).toHaveAttribute("data-active", "false");
 
   const syncedGuestState = await guestPage.evaluate(() => {
     const room = window.__multipassStore.getState().room;
@@ -336,7 +407,7 @@ test("online deep-link join: guest opens #join=CODE invite", async ({ browser })
   const guestPage = await guestContext.newPage();
 
   await gotoApp(hostPage);
-  await hostPage.getByRole("tab", { name: "Online" }).click();
+  await hostPage.getByRole("button", { name: "Online" }).click();
   await hostPage.getByRole("button", { name: "Host a room" }).click();
   await expect(hostPage.getByRole("button", { name: "Pick a player" })).toBeDisabled();
   await hostPage.locator('#host-avatar-picker .avatar-option[data-avatar="yellow"]').click();
@@ -365,29 +436,29 @@ test("online deep-link join: guest opens #join=CODE invite", async ({ browser })
   await guestContext.close();
 });
 
-test("online lobby Exit leaves on first click and stays on landing", async ({ page }) => {
+test("online lobby Home leaves on first click and stays on landing", async ({ page }) => {
   await gotoApp(page);
-  await page.getByRole("tab", { name: "Online" }).click();
+  await page.getByRole("button", { name: "Online" }).click();
   await page.getByRole("button", { name: "Host a room" }).click();
   await page.locator('#host-avatar-picker .avatar-option[data-avatar="yellow"]').click();
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.locator("#screen-lobby.active")).toBeVisible();
 
-  await page.getByRole("button", { name: "Exit" }).click();
+  await page.getByRole("button", { name: "Home" }).click();
   await expect(page.locator("#screen-landing.active")).toBeVisible();
   await page.waitForTimeout(800);
   await expect(page.locator("#screen-landing.active")).toBeVisible();
   await expect.poll(() => new URL(page.url()).hash).toMatch(/^(|#landing)$/);
 });
 
-test("online game Exit leaves on first click and stays on landing", async ({ browser }) => {
+test("online game Back closes board sheet and returns to lobby", async ({ browser }) => {
   const hostContext = await browser.newContext();
   const guestContext = await browser.newContext();
   const hostPage = await hostContext.newPage();
   const guestPage = await guestContext.newPage();
 
   await gotoApp(hostPage);
-  await hostPage.getByRole("tab", { name: "Online" }).click();
+  await hostPage.getByRole("button", { name: "Online" }).click();
   await hostPage.getByRole("button", { name: "Host a room" }).click();
   await hostPage.locator('#host-avatar-picker .avatar-option[data-avatar="yellow"]').click();
   await hostPage.getByRole("button", { name: "Continue" }).click();
@@ -395,7 +466,7 @@ test("online game Exit leaves on first click and stays on landing", async ({ bro
   const roomCode = (await hostPage.locator("#room-code").textContent())?.trim() || "";
 
   await gotoApp(guestPage);
-  await guestPage.getByRole("tab", { name: "Online" }).click();
+  await guestPage.getByRole("button", { name: "Online" }).click();
   await guestPage.getByRole("button", { name: "Join a room" }).click();
   await fillJoinCodeSlots(guestPage, roomCode);
   await expect(guestPage.locator("#join-avatar-picker:not(.hidden)")).toBeVisible();
@@ -406,12 +477,15 @@ test("online game Exit leaves on first click and stays on landing", async ({ bro
   await gameCta(hostPage, "Tic Tac Toe").click();
   await gameCta(guestPage, "Tic Tac Toe").click();
   await expect(hostPage.locator("#screen-game.active")).toBeVisible();
+  await expect(hostPage.locator("#open-settings")).toBeHidden();
+  await expect(hostPage.locator("#screen-game #game-close-board")).toBeVisible();
 
-  await hostPage.getByRole("button", { name: "Exit" }).click();
-  await expect(hostPage.locator("#screen-landing.active")).toBeVisible();
+  await hostPage.locator("#screen-game #game-close-board").click();
+  await expect(hostPage.locator("#screen-lobby.active")).toBeVisible();
+  await expect(hostPage.locator("#screen-game.active")).toHaveCount(0);
   await hostPage.waitForTimeout(800);
-  await expect(hostPage.locator("#screen-landing.active")).toBeVisible();
-  await expect.poll(() => new URL(hostPage.url()).hash).toMatch(/^(|#landing)$/);
+  await expect(hostPage.locator("#screen-lobby.active")).toBeVisible();
+  await expect.poll(() => new URL(hostPage.url()).hash).toBe("#lobby");
 
   await hostContext.close();
   await guestContext.close();
@@ -424,7 +498,7 @@ test("online honorific picker is independent per player", async ({ browser }) =>
   const guestPage = await guestContext.newPage();
 
   await gotoApp(hostPage);
-  await hostPage.getByRole("tab", { name: "Online" }).click();
+  await hostPage.getByRole("button", { name: "Online" }).click();
   await hostPage.getByRole("button", { name: "Host a room" }).click();
   await hostPage.locator("#host-honorific-toolbar .switch").click();
   await hostPage.locator('#host-avatar-picker .avatar-option[data-avatar="yellow"]').click();
@@ -434,7 +508,7 @@ test("online honorific picker is independent per player", async ({ browser }) =>
   const roomCode = (await hostPage.locator("#room-code").textContent())?.trim() || "";
 
   await gotoApp(guestPage);
-  await guestPage.getByRole("tab", { name: "Online" }).click();
+  await guestPage.getByRole("button", { name: "Online" }).click();
   await guestPage.getByRole("button", { name: "Join a room" }).click();
   await fillJoinCodeSlots(guestPage, roomCode);
   await expect(guestPage.locator("#join-avatar-picker:not(.hidden)")).toBeVisible();
@@ -477,8 +551,11 @@ test("online honorific picker is independent per player", async ({ browser }) =>
   await expect(guestPage.locator("#score-columns")).toContainText("Mr Green");
   await expect(guestPage.locator("#score-columns .score-duel-panel")).toHaveCount(1);
   await expect(guestPage.locator("#score-columns .score-duel-side")).toHaveCount(2);
-  await expect(guestPage.locator("#score-columns .score-duel-scorebar-wrap")).toHaveCount(1);
-  await expect(guestPage.locator("#score-columns .score-broadcast-row")).toHaveCount(1);
+  await expect(guestPage.locator("#score-columns .score-duel-meta")).toHaveCount(2);
+  await expect(guestPage.locator("#score-columns .score-duel-name")).toHaveCount(2);
+  await expect(guestPage.locator("#score-columns .score-duel-points")).toHaveCount(2);
+  await expect(guestPage.locator("#score-columns .score-duel-scorebar-wrap")).toHaveCount(0);
+  await expect(guestPage.locator("#score-columns .score-broadcast-row")).toHaveCount(0);
   await expect(guestPage.locator("#score-columns .score-role")).toHaveCount(0);
   await expect(guestPage.locator("#score-columns .score-column")).toHaveCount(0);
 
@@ -493,7 +570,7 @@ test("online pick can launch poker dice module", async ({ browser }) => {
   const guestPage = await guestContext.newPage();
 
   await gotoApp(hostPage);
-  await hostPage.getByRole("tab", { name: "Online" }).click();
+  await hostPage.getByRole("button", { name: "Online" }).click();
   await hostPage.getByRole("button", { name: "Host a room" }).click();
   await hostPage.locator('#host-avatar-picker .avatar-option[data-avatar="yellow"]').click();
   await hostPage.getByRole("button", { name: "Continue" }).click();
@@ -501,7 +578,7 @@ test("online pick can launch poker dice module", async ({ browser }) => {
   const roomCode = (await hostPage.locator("#room-code").textContent())?.trim() || "";
 
   await gotoApp(guestPage);
-  await guestPage.getByRole("tab", { name: "Online" }).click();
+  await guestPage.getByRole("button", { name: "Online" }).click();
   await guestPage.getByRole("button", { name: "Join a room" }).click();
   await fillJoinCodeSlots(guestPage, roomCode);
   await expect(guestPage.locator("#join-avatar-picker:not(.hidden)")).toBeVisible();
@@ -509,11 +586,17 @@ test("online pick can launch poker dice module", async ({ browser }) => {
   await guestPage.getByRole("button", { name: "Join room" }).click();
   await expect(guestPage.locator("#screen-lobby.active")).toBeVisible();
 
-  await gameCta(hostPage, "Poker Dice").click();
-  await gameCta(guestPage, "Poker Dice").click();
+  const hostPokerDiceCta = gameCta(hostPage, "Poker Dice");
+  const guestPokerDiceCta = gameCta(guestPage, "Poker Dice");
+  await hostPokerDiceCta.click();
+  await expect(hostPokerDiceCta).toHaveText("Selected");
+  await expect(guestPokerDiceCta).toHaveText("Agree");
+  await guestPokerDiceCta.click();
+  await expect(hostPokerDiceCta).toHaveText(/Starting in [1-3]/, { timeout: 1500 });
+  await expect(guestPokerDiceCta).toHaveText(/Starting in [1-3]/, { timeout: 1500 });
 
-  await expect(hostPage.locator("#screen-game.active")).toBeVisible();
-  await expect(guestPage.locator("#screen-game.active")).toBeVisible();
+  await expect(hostPage.locator("#screen-game.active")).toBeVisible({ timeout: 15000 });
+  await expect(guestPage.locator("#screen-game.active")).toBeVisible({ timeout: 15000 });
   await expect(hostPage.locator("#poker-dice-layout")).not.toHaveClass(/hidden/);
   await expect(guestPage.locator("#poker-dice-layout")).not.toHaveClass(/hidden/);
   await expect(hostPage.locator("#poker-dice-dice .poker-die")).toHaveCount(6);
@@ -538,7 +621,7 @@ test("join code slots sanitize ambiguous letters and support paste/backspace flo
   const guestPage = await guestContext.newPage();
 
   await gotoApp(hostPage);
-  await hostPage.getByRole("tab", { name: "Online" }).click();
+  await hostPage.getByRole("button", { name: "Online" }).click();
   await hostPage.getByRole("button", { name: "Host a room" }).click();
   await hostPage.locator('#host-avatar-picker .avatar-option[data-avatar="yellow"]').click();
   await hostPage.getByRole("button", { name: "Continue" }).click();
@@ -546,7 +629,7 @@ test("join code slots sanitize ambiguous letters and support paste/backspace flo
   const roomCode = (await hostPage.locator("#room-code").textContent())?.trim() || "";
 
   await gotoApp(guestPage);
-  await guestPage.getByRole("tab", { name: "Online" }).click();
+  await guestPage.getByRole("button", { name: "Online" }).click();
   await guestPage.getByRole("button", { name: "Join a room" }).click();
   await expect(guestPage.locator("#screen-join.active")).toBeVisible();
 

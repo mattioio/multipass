@@ -1,4 +1,3 @@
-import { createBattleshipsEngine } from "./engines/battleshipsEngine.js";
 import { createDotsAndBoxesEngine } from "./engines/dotsAndBoxesEngine.js";
 import { createWordFightEngine } from "./engines/wordFightEngine.js";
 import { createPokerDiceEngine } from "./engines/pokerDiceEngine.js";
@@ -164,30 +163,6 @@ export const gameCatalog = {
       };
     },
     localEngine: createDotsAndBoxesEngine()
-  },
-  battleships: {
-    id: "battleships",
-    name: "Battleships",
-    minPlayers: 2,
-    maxPlayers: 2,
-    comingSoon: false,
-    isAvailable: false,
-    bannerKey: "battleships",
-    surfaceType: "placeholder",
-    mode: "board",
-    visibility: "hidden_pass_device",
-    getWinRevealReason(state) {
-      const shots = Array.isArray(state?.shotHistory) ? state.shotHistory : [];
-      const lastShot = shots.length ? shots[shots.length - 1] : null;
-      const index = Number(lastShot?.index);
-      if (!Number.isInteger(index)) return null;
-      return {
-        boardId: "battleships",
-        effect: "impact",
-        indices: [index]
-      };
-    },
-    localEngine: createBattleshipsEngine()
   },
   word_fight: {
     id: "word_fight",

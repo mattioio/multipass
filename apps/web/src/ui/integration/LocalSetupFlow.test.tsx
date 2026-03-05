@@ -5,7 +5,7 @@ describe("App local setup integration", () => {
   it("renders local setup picker controls in the React tree", () => {
     render(<App />);
 
-    expect(screen.getByRole("button", { name: "Start" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Local" })).toBeInTheDocument();
     expect(screen.getByText("Player 1 choice")).toBeInTheDocument();
     const localCta = document.getElementById("local-continue");
     expect(localCta).toBeInTheDocument();

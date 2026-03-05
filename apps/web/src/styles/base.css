@@ -13,6 +13,7 @@ body {
   position: relative;
   isolation: isolate;
   overflow-x: hidden;
+  scrollbar-gutter: stable both-edges;
   overscroll-behavior-y: contain;
 }
 
@@ -157,8 +158,6 @@ body::after {
   }
 
   .ttt-cell.is-win-reason,
-  .battleship-cell.is-win-reason-shot,
-  .battleship-cell.is-win-reason-shot::before,
   .dots-edge.is-scoring-opportunity::before,
   .dots-box.is-hot-box,
   .dots-box.is-win-reason,
@@ -166,20 +165,21 @@ body::after {
     animation: none;
   }
 
-  .turn-indicator.turn-reveal-morph,
-  .turn-indicator.turn-reveal-morph .turn-player,
-  .turn-indicator.turn-reveal-morph .turn-player > *,
-  .game-result-panel {
+  .turn-indicator,
+  .turn-indicator .turn-pane,
+  .turn-indicator .turn-pane > * {
     transition: none;
+    animation: none;
   }
 }
 
 #app {
+  --layout-max-width: 1180px;
   --app-edge-padding: 24px;
   position: relative;
   z-index: 2;
   isolation: isolate;
-  max-width: 1180px;
+  max-width: var(--layout-max-width);
   margin: 0 auto;
   min-height: 100vh;
   min-height: 100dvh;
@@ -213,11 +213,18 @@ body::after {
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
   gap: 12px;
+  width: min(100%, var(--layout-max-width));
+  margin-inline: auto;
 }
 
 .logo {
   text-align: center;
   justify-self: center;
+}
+
+.logo .hero-action,
+.logo button {
+  display: none;
 }
 
 .logo-image {
@@ -254,6 +261,19 @@ body:not([data-screen="landing"]) {
   --logo-width: clamp(156px, 25vw, 250px);
 }
 
+body[data-layer="home"] {
+  --logo-width: clamp(210px, 34vw, 340px);
+}
+
+body[data-layer="setup-sheet"] {
+  --logo-width: clamp(210px, 34vw, 340px);
+}
+
+body[data-layer="game-space"],
+body[data-layer="game-sheet"] {
+  --logo-width: clamp(110px, 24vw, 168px);
+}
+
 .hero-room {
   display: grid;
   justify-items: center;
@@ -275,6 +295,18 @@ body:not([data-screen="landing"]) {
   justify-content: center;
 }
 
+.hero-action-home {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hero-home-icon {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
 .hero-left-actions {
   display: inline-flex;
   align-items: center;
@@ -287,6 +319,9 @@ body:not([data-screen="landing"]) {
 }
 
 #open-settings {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   justify-self: end;
   min-width: 56px;
   color: var(--muted);
@@ -300,6 +335,35 @@ body:not([data-screen="landing"]) {
   width: 20px;
   height: 20px;
   display: block;
+}
+
+.settings-label {
+  display: none;
+}
+
+#open-settings.hero-nav-link .settings-icon {
+  display: none;
+}
+
+#open-settings.hero-nav-link {
+  min-width: 0;
+  padding-inline: 18px;
+  color: var(--text);
+}
+
+#open-settings.hero-nav-link .settings-label {
+  display: inline;
+  font-weight: 700;
+}
+
+.hero-center-title {
+  margin: 0;
+  font-family: var(--title-font);
+  font-size: clamp(1.22rem, 1.9vw, 1.45rem);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: color-mix(in srgb, #ffffff 94%, var(--text));
+  white-space: nowrap;
 }
 
 .hero-room .room-label {
@@ -399,4 +463,12 @@ h5 {
   ) .logo-image {
     width: var(--logo-width, clamp(110px, 30vw, 150px));
   }
+}
+
+body[data-screen="game"] #app {
+  padding-top: 0;
+}
+
+body[data-screen="game"] #app > .hero {
+  display: none;
 }

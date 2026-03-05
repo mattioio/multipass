@@ -1,5 +1,7 @@
 import { getCatalogGame } from "./catalog.js";
 
+const REMOVED_GAME_IDS = new Set(["battleships"]);
+
 function mergeCatalogMetadata(game) {
   if (!game || !game.id) return game;
   const catalogGame = getCatalogGame(game.id);
@@ -14,5 +16,7 @@ function mergeCatalogMetadata(game) {
 }
 
 export function resolvePickerGames(games = []) {
-  return games.map((game) => mergeCatalogMetadata(game));
+  return games
+    .filter((game) => !REMOVED_GAME_IDS.has(String(game?.id || "").toLowerCase()))
+    .map((game) => mergeCatalogMetadata(game));
 }

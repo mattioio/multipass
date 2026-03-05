@@ -6,8 +6,16 @@ export interface TurnStatusBarProps {
 
 export function TurnStatusBar({
   id = "turn-indicator",
-  className = "turn-indicator turn-passive",
+  className = "turn-indicator",
   live = "polite"
 }: TurnStatusBarProps) {
-  return <div id={id} className={className} aria-live={live}></div>;
+  return (
+    <div
+      id={id}
+      className={className}
+      aria-live={live}
+      data-mode="idle"
+      data-active-side="none"
+    ></div>
+  );
 }

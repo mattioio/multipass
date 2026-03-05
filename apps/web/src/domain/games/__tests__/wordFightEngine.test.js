@@ -1,5 +1,10 @@
 import { createWordFightEngine } from "../engines/wordFightEngine.js";
-import { WORD_FIGHT_SECRET_WORDS, WORD_FIGHT_WORDS, isWordFightWord } from "../engines/wordFightWords.js";
+import {
+  WORD_FIGHT_SECRET_WORDS,
+  WORD_FIGHT_SECRET_WORD_TO_CATEGORY,
+  WORD_FIGHT_WORDS,
+  isWordFightWord
+} from "../engines/wordFightWords.js";
 
 function players() {
   return [{ id: "p1" }, { id: "p2" }];
@@ -139,8 +144,14 @@ describe("word fight engine", () => {
 
     expect(p1Visible.mySecretWord).toBe(p1Secret);
     expect(p2Visible.mySecretWord).toBe(p2Secret);
+    expect(p1Visible.mySecretCategory).toBe(WORD_FIGHT_SECRET_WORD_TO_CATEGORY[p1Secret]);
+    expect(p2Visible.mySecretCategory).toBe(WORD_FIGHT_SECRET_WORD_TO_CATEGORY[p2Secret]);
+    expect(p1Visible.activeHintCategory).toBe(WORD_FIGHT_SECRET_WORD_TO_CATEGORY[p1Secret]);
+    expect(p2Visible.activeHintCategory).toBe(WORD_FIGHT_SECRET_WORD_TO_CATEGORY[p1Secret]);
     expect(p1Visible.wordsByPlayer).toBeUndefined();
     expect(p2Visible.wordsByPlayer).toBeUndefined();
+    expect(p1Visible.categoryByPlayer).toBeUndefined();
+    expect(p2Visible.categoryByPlayer).toBeUndefined();
   });
 
   it("accepts UK+US dictionary words including repeated-letter entries", () => {
@@ -163,5 +174,16 @@ describe("word fight engine", () => {
     expect(WORD_FIGHT_SECRET_WORDS.includes(state0.wordsByPlayer.p2)).toBe(true);
     expect(WORD_FIGHT_WORDS.includes(state0.wordsByPlayer.p1)).toBe(true);
     expect(WORD_FIGHT_WORDS.includes(state0.wordsByPlayer.p2)).toBe(true);
+    expect(state0.categoryByPlayer.p1).toBe(WORD_FIGHT_SECRET_WORD_TO_CATEGORY[state0.wordsByPlayer.p1]);
+    expect(state0.categoryByPlayer.p2).toBe(WORD_FIGHT_SECRET_WORD_TO_CATEGORY[state0.wordsByPlayer.p2]);
+  });
+
+  it("updates active hint category when turn changes", () => {
+    const engine = createWordFightEngine();
+    const state0 = withMockRandom([0, randomForIndex(1)], () => engine.init(players()));
+    const p2Category = WORD_FIGHT_SECRET_WORD_TO_CATEGORY[state0.wordsByPlayer.p2];
+    const state1 = engine.applyMove(state0, { guess: "COME" }, "p1").state;
+    const visible = engine.getVisibleState(state1, "p1");
+    expect(visible.activeHintCategory).toBe(p2Category);
   });
 });

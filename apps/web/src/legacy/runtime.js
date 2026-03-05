@@ -41,7 +41,6 @@ import {
   classifySwipeAxis,
   computeSwipeVelocityPxPerMs,
   hasMetDragActivation,
-  resolveLandingSnapMode,
   shouldSuppressClick
 } from "./gestures.js";
 import {
@@ -50,6 +49,7 @@ import {
   queueLocalHandoff,
   shouldShowLocalPassScreen
 } from "./localPrivacy.js";
+import { resolveTurnIndicatorVisualState } from "./turnIndicatorState.js";
 import { syncDockFromSourceButtons } from "./appDockSync.js";
 import { copyRoomInviteLink } from "./shareLink.js";
 
@@ -61,6 +61,7 @@ const HONORIFIC_TOGGLE_SELECTOR = 'input[data-honorific-toggle="true"]';
 const SCREEN_TO_HASH = Object.freeze({
   landing: "",
   local: "#local",
+  online: "#online",
   host: "#host",
   join: "#join",
   lobby: "#lobby",
@@ -74,6 +75,7 @@ const SCREEN_TO_HASH = Object.freeze({
 const HASH_TO_SCREEN = Object.freeze({
   "": "landing",
   "#local": "local",
+  "#online": "online",
   "#host": "host",
   "#join": "join",
   "#lobby": "lobby",
@@ -85,7 +87,8 @@ const HASH_TO_SCREEN = Object.freeze({
   "#devkit": "devkit"
 });
 const ROOM_REQUIRED_SCREENS = new Set(["lobby", "wait", "game", "pass", "winner"]);
-const ONLINE_HERO_ROOM_SCREENS = new Set(["lobby", "wait", "game", "winner"]);
+const SETUP_SHEET_SCREENS = new Set(["local", "online", "host", "join"]);
+const ONLINE_HERO_ROOM_SCREENS = new Set(["lobby", "wait", "winner"]);
 const LEGACY_BOOTSTRAP_FLAG = "__multipassLegacyInitialized";
 const PROD_WS_FALLBACK_URLS = Object.freeze([
   "wss://api.loreandorder.com"
@@ -94,12 +97,14 @@ const WS_CONNECT_ATTEMPT_TIMEOUT_MS = 2600;
 const IS_DEV_BUILD = Boolean(typeof import.meta !== "undefined" && import.meta.env?.DEV);
 const RECENT_LEAVE_GUARD_MS = 5000;
 const PLAYER_THEME_CLASS_NAMES = ["theme-red", "theme-yellow", "theme-green", "theme-blue"];
+const REMOVED_GAME_IDS = new Set(["battleships"]);
 const BOARD_DRAG_ACTIVATION_PX = 6;
 const BOARD_CLICK_SUPPRESS_MS = 260;
-const LANDING_DRAG_ACTIVATION_PX = 14;
-const LANDING_SWIPE_DISTANCE_RATIO = 0.18;
-const LANDING_SWIPE_MIN_DISTANCE_PX = 32;
-const LANDING_SWIPE_VELOCITY_PX_PER_MS = 0.36;
+const SHEET_DRAG_ACTIVATION_PX = 10;
+const SHEET_CLOSE_DISTANCE_PX = 120;
+const SHEET_CLOSE_VELOCITY_PX_PER_MS = 0.4;
+const SETUP_SHEET_EXIT_FALLBACK_BUFFER_MS = 60;
+const SHEET_CLOSE_OFFSCREEN_PADDING_PX = 64;
 const WIN_REASON_ANIM_MS = 700;
 const WIN_REASON_PAUSE_MS = 1000;
 const WIN_MORPH_ANIM_MS = 500;
@@ -121,6 +126,7 @@ const POKER_DICE_ROLL_DURATION_MS = 2000;
 const POKER_DICE_SHUFFLE_MIN_MS = 80;
 const POKER_DICE_SHUFFLE_MAX_MS = 120;
 const POKER_DICE_SETTLE_MS = 220;
+const WORD_FIGHT_TURN_LIMIT_MS = 90 * 1000;
 const FIXED_FOOTER_SCREEN_SLOT_MAP = Object.freeze({
   local: "app-dock-slot-local",
   host: "app-dock-slot-host",
@@ -164,22 +170,6 @@ function createInitialBoardGestureState() {
   };
 }
 
-function createInitialLandingGestureState() {
-  return {
-    activePointerId: null,
-    startX: 0,
-    startY: 0,
-    lastX: 0,
-    lastY: 0,
-    startedAt: 0,
-    startMode: "local",
-    startOffsetPx: 0,
-    panelWidthPx: 0,
-    isDragging: false,
-    suppressClickUntil: 0
-  };
-}
-
 function createInitialState() {
   return {
     ws: null,
@@ -215,17 +205,12 @@ function createInitialState() {
     deferredInstallPrompt: null,
     isAppInstalled: false,
     localPrivacy: createInitialLocalPrivacyState(),
-    localBattleshipOrientation: "h",
-    localBattleshipPendingTargetIndex: null,
-    localBattleshipLastPhase: null,
     pokerDicePendingHolds: [],
     pokerDiceFx: createInitialPokerDiceFxState(),
     wordFightDraftGuess: "",
     hostHonorific: "mr",
     joinHonorific: "mr",
     localHonorifics: { p1: "mr", p2: "mr" },
-    landingMode: "local",
-    landingModeProgress: 0,
     winRevealPhase: "idle",
     winRevealSignature: null,
     winRevealReason: null,
@@ -233,8 +218,7 @@ function createInitialState() {
     winRevealTimerId2: null,
     winRevealShouldMorph: false,
     devkitReturnScreen: "landing",
-    boardGesture: createInitialBoardGestureState(),
-    landingGesture: createInitialLandingGestureState()
+    boardGesture: createInitialBoardGestureState()
   };
 }
 
@@ -249,6 +233,7 @@ window.__multipassStore = store;
 const screens = {
   landing: document.getElementById("screen-landing"),
   local: document.getElementById("screen-local"),
+  online: document.getElementById("screen-online"),
   host: document.getElementById("screen-host"),
   join: document.getElementById("screen-join"),
   lobby: document.getElementById("screen-lobby"),
@@ -259,13 +244,10 @@ const screens = {
   winner: document.getElementById("screen-winner"),
   devkit: document.getElementById("screen-devkit")
 };
-const landingTrack = document.getElementById("landing-track");
-const landingSegmented = document.querySelector(".landing-segmented");
-const landingTabLocal = document.getElementById("landing-tab-local");
-const landingTabOnline = document.getElementById("landing-tab-online");
-const landingPanelLocal = document.getElementById("landing-panel-local");
-const landingPanelOnline = document.getElementById("landing-panel-online");
-const landingCarousel = document.querySelector(".landing-carousel");
+let setupSheetCloseTimerId = null;
+let setupSheetClosingKey = null;
+let setupSheetClosingPanel = null;
+let setupSheetTransitionEndHandler = null;
 
 const toast = createToastController();
 const showToast = toast.showToast;
@@ -750,8 +732,11 @@ function handleBrowserNavigation(targetScreen, options = {}) {
     return;
   }
 
-  if (normalizedTarget === "join") {
+  if (normalizedTarget === "join" || normalizedTarget === "host" || normalizedTarget === "online") {
     state.mode = "online";
+  }
+  if (normalizedTarget === "local") {
+    state.mode = "local";
   }
 
   showScreen(normalizedTarget, { history: "none" });
@@ -792,16 +777,46 @@ function initHashRouting() {
   handleBrowserNavigation(initialTarget, { joinCode: initialRoute.joinCode });
 }
 
+function getLayerForScreen(screen) {
+  if (screen === "landing") return "home";
+  if (screen === "devkit") return "home";
+  if (SETUP_SHEET_SCREENS.has(screen)) return "setup-sheet";
+  return "game-space";
+}
+
+function getActiveScreenKeys(screen) {
+  if (SETUP_SHEET_SCREENS.has(screen)) {
+    return ["landing", screen];
+  }
+  return [screen];
+}
+
 function showScreen(key, options = {}) {
+  clearSetupSheetCloseLifecycle();
   const historyMode = options.history || "push";
   const historyState = options.historyState || {};
   const allowSameHashPush = Boolean(options.allowSameHashPush);
+  const activeKeys = new Set(getActiveScreenKeys(key));
   state.activeScreen = key;
   document.body.dataset.screen = key;
+  document.body.dataset.layer = getLayerForScreen(key);
   localStorage.setItem("multipass_last_screen", key);
   Object.entries(screens).forEach(([name, element]) => {
     if (!element) return;
-    element.classList.toggle("active", name === key);
+    element.classList.remove("is-closing");
+    const panel = element.querySelector("[data-sheet-panel=\"true\"]");
+    if (panel instanceof HTMLElement) {
+      panel.style.removeProperty("--sheet-translate-y");
+    }
+    element.style.removeProperty("--sheet-translate-y");
+    element.classList.toggle("active", activeKeys.has(name));
+  });
+  activeKeys.forEach((name) => {
+    const element = screens[name];
+    if (!(element instanceof HTMLElement)) return;
+    const panel = element.querySelector("[data-sheet-panel=\"true\"]");
+    if (!(panel instanceof HTMLElement)) return;
+    element.style.setProperty("--sheet-rail-bottom", `${Math.ceil(panel.getBoundingClientRect().height)}px`);
   });
   writeScreenHash(key, {
     mode: historyMode,
@@ -809,8 +824,183 @@ function showScreen(key, options = {}) {
     allowSameHashPush
   });
   updateFixedFooter();
+  updateHeroChrome();
   updateHeroActions();
   updateHeroRoomCodeVisibility();
+  updateGameCloseActionVisibility();
+}
+
+function clearSetupSheetCloseLifecycle() {
+  if (setupSheetCloseTimerId !== null) {
+    clearTimeout(setupSheetCloseTimerId);
+    setupSheetCloseTimerId = null;
+  }
+  if (setupSheetClosingPanel instanceof HTMLElement && typeof setupSheetTransitionEndHandler === "function") {
+    setupSheetClosingPanel.removeEventListener("transitionend", setupSheetTransitionEndHandler);
+  }
+  setupSheetClosingPanel = null;
+  setupSheetTransitionEndHandler = null;
+  setupSheetClosingKey = null;
+}
+
+function parseCssTimeToMs(rawValue) {
+  const value = String(rawValue || "").trim();
+  if (!value) return 0;
+  if (value.endsWith("ms")) {
+    const parsedMs = Number.parseFloat(value.slice(0, -2));
+    return Number.isFinite(parsedMs) ? parsedMs : 0;
+  }
+  if (value.endsWith("s")) {
+    const parsedSeconds = Number.parseFloat(value.slice(0, -1));
+    return Number.isFinite(parsedSeconds) ? parsedSeconds * 1000 : 0;
+  }
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function getTransitionDurationMs(element) {
+  if (!(element instanceof HTMLElement)) return 0;
+  const styles = window.getComputedStyle(element);
+  const durations = styles.transitionDuration.split(",");
+  const delays = styles.transitionDelay.split(",");
+  let maxMs = 0;
+  for (let index = 0; index < durations.length; index += 1) {
+    const durationMs = parseCssTimeToMs(durations[index]);
+    const delayMs = parseCssTimeToMs(delays[index] || delays[delays.length - 1] || "0ms");
+    maxMs = Math.max(maxMs, durationMs + delayMs);
+  }
+  return maxMs;
+}
+
+function setSheetPanelTranslateY(panel, translateYPx) {
+  if (!(panel instanceof HTMLElement)) return;
+  const normalized = Number.isFinite(translateYPx) ? Math.max(0, translateYPx) : 0;
+  const value = `${normalized}px`;
+  panel.style.setProperty("--sheet-translate-y", value);
+  const sheetScreen = panel.closest(".screen.sheet-screen");
+  if (sheetScreen instanceof HTMLElement) {
+    sheetScreen.style.setProperty("--sheet-translate-y", value);
+    sheetScreen.style.setProperty("--sheet-rail-bottom", `${Math.ceil(panel.getBoundingClientRect().height)}px`);
+  }
+}
+
+function getSheetPanelTranslateY(panel) {
+  if (!(panel instanceof HTMLElement)) return 0;
+  const inlineValue = panel.style.getPropertyValue("--sheet-translate-y");
+  if (inlineValue) {
+    const parsed = Number.parseFloat(inlineValue);
+    if (Number.isFinite(parsed)) return Math.max(0, parsed);
+  }
+  const computed = window.getComputedStyle(panel).transform;
+  if (!computed || computed === "none") return 0;
+  const matrix3dMatch = computed.match(/^matrix3d\((.+)\)$/);
+  if (matrix3dMatch) {
+    const values = matrix3dMatch[1].split(",").map((value) => Number.parseFloat(value.trim()));
+    if (values.length === 16 && Number.isFinite(values[13])) {
+      return Math.max(0, values[13]);
+    }
+  }
+  const matrixMatch = computed.match(/^matrix\((.+)\)$/);
+  if (matrixMatch) {
+    const values = matrixMatch[1].split(",").map((value) => Number.parseFloat(value.trim()));
+    if (values.length === 6 && Number.isFinite(values[5])) {
+      return Math.max(0, values[5]);
+    }
+  }
+  return 0;
+}
+
+function getSheetCloseTargetTranslateY(panel) {
+  if (!(panel instanceof HTMLElement)) return window.innerHeight + SHEET_CLOSE_OFFSCREEN_PADDING_PX;
+  const rect = panel.getBoundingClientRect();
+  return Math.max(
+    window.innerHeight + SHEET_CLOSE_OFFSCREEN_PADDING_PX,
+    rect.height + SHEET_CLOSE_OFFSCREEN_PADDING_PX
+  );
+}
+
+function closeSetupSheetToLanding(options = {}) {
+  if (!SETUP_SHEET_SCREENS.has(state.activeScreen)) return false;
+  if (setupSheetClosingKey === state.activeScreen) return true;
+  const activeScreenKey = state.activeScreen;
+  const sheet = screens[activeScreenKey];
+  const historyMode = options.history || "push";
+  if (!(sheet instanceof HTMLElement)) {
+    showScreen("landing", { history: historyMode });
+    return true;
+  }
+
+  const panel = sheet.querySelector("[data-sheet-panel=\"true\"]");
+  if (!(panel instanceof HTMLElement)) {
+    showScreen("landing", { history: historyMode });
+    return true;
+  }
+
+  const startTranslateY = Number.isFinite(options.startTranslateY)
+    ? Math.max(0, options.startTranslateY)
+    : getSheetPanelTranslateY(panel);
+  setSheetPanelTranslateY(panel, startTranslateY);
+  const exitDurationMs = prefersReducedMotion() ? 0 : getTransitionDurationMs(panel);
+  if (exitDurationMs <= 0) {
+    showScreen("landing", { history: historyMode });
+    return true;
+  }
+
+  panel.classList.remove("is-dragging");
+  setupSheetClosingKey = activeScreenKey;
+  sheet.classList.add("is-closing");
+  setSheetPanelTranslateY(panel, getSheetCloseTargetTranslateY(panel));
+
+  let finalized = false;
+  const finalizeClose = () => {
+    if (finalized) return;
+    finalized = true;
+    clearSetupSheetCloseLifecycle();
+    if (state.activeScreen === activeScreenKey) {
+      showScreen("landing", { history: historyMode });
+      return;
+    }
+    sheet.classList.remove("is-closing");
+  };
+
+  setupSheetClosingPanel = panel;
+  setupSheetTransitionEndHandler = (event) => {
+    if (event.target !== panel) return;
+    if (event.propertyName !== "transform") return;
+    finalizeClose();
+  };
+  panel.addEventListener("transitionend", setupSheetTransitionEndHandler);
+  setupSheetCloseTimerId = window.setTimeout(
+    finalizeClose,
+    Math.ceil(exitDurationMs + SETUP_SHEET_EXIT_FALLBACK_BUFFER_MS)
+  );
+  return true;
+}
+
+function closeGameSheet() {
+  if (!state.room) {
+    showScreen("landing", { history: "replace" });
+    return;
+  }
+  if ((window.location.hash || "").toLowerCase() === "#game" && window.history.length > 1) {
+    const activeBeforeBack = state.activeScreen;
+    window.history.back();
+    window.setTimeout(() => {
+      if (state.activeScreen === activeBeforeBack) {
+        showScreen("lobby", { history: "replace" });
+      }
+    }, 120);
+    return;
+  }
+  showScreen("lobby", { history: "replace" });
+}
+
+function closeActiveSheet() {
+  if (state.activeScreen === "game") {
+    closeGameSheet();
+    return;
+  }
+  closeSetupSheetToLanding({ history: "push" });
 }
 
 function updateFixedFooter() {
@@ -826,7 +1016,7 @@ function updateFixedFooter() {
     document.body.removeAttribute("data-fixed-footer-active");
     footer.classList.add("hidden");
     footer.setAttribute("aria-hidden", "true");
-    syncDockFromSourceButtons({ landingMode: state.landingMode });
+    syncDockFromSourceButtons();
     return;
   }
 
@@ -837,7 +1027,48 @@ function updateFixedFooter() {
   document.body.setAttribute("data-fixed-footer-active", "true");
   footer.classList.remove("hidden");
   footer.setAttribute("aria-hidden", "false");
-  syncDockFromSourceButtons({ landingMode: state.landingMode });
+  syncDockFromSourceButtons();
+}
+
+function updateHeroChrome() {
+  const settingsButton = document.getElementById("open-settings");
+  const settingsIcon = settingsButton?.querySelector(".settings-icon");
+  const settingsLabel = document.getElementById("open-settings-label");
+  const heroCenterTitle = document.getElementById("lobby-games-title");
+  const showHomeChrome = state.activeScreen === "landing" || SETUP_SHEET_SCREENS.has(state.activeScreen);
+  const showLobbyHome = state.activeScreen === "lobby";
+  if (settingsButton instanceof HTMLElement) {
+    settingsButton.classList.toggle("hidden", !(showHomeChrome || showLobbyHome));
+    settingsButton.classList.remove("hero-nav-link");
+    settingsButton.dataset.navMode = "settings";
+    settingsButton.onclick = null;
+    settingsButton.setAttribute("aria-label", "Open settings");
+  }
+  if (settingsLabel instanceof HTMLElement) {
+    settingsLabel.textContent = "";
+  }
+  if (settingsIcon instanceof HTMLElement) {
+    settingsIcon.classList.remove("hidden");
+  }
+  if (heroCenterTitle instanceof HTMLElement) {
+    heroCenterTitle.classList.add("hidden");
+  }
+  const logo = document.querySelector(".logo");
+  const logoImage = document.querySelector(".logo .logo-image");
+  const showLogo = showHomeChrome || showLobbyHome;
+  if (logo instanceof HTMLElement) {
+    logo.classList.toggle("hidden", !showLogo);
+  }
+  if (logoImage instanceof HTMLElement) {
+    logoImage.classList.toggle("hidden", showLobbyHome);
+  }
+}
+
+function updateGameCloseActionVisibility() {
+  const closeButton = document.getElementById("game-close-board");
+  if (!(closeButton instanceof HTMLElement)) return;
+  const shouldShow = state.activeScreen === "game";
+  closeButton.classList.toggle("hidden", !shouldShow);
 }
 
 function getPrimaryHeroActionConfig() {
@@ -845,18 +1076,25 @@ function getPrimaryHeroActionConfig() {
     const installAction = getInstallActionConfig();
     return installAction;
   }
-  if (state.activeScreen === "local") {
-    if (state.localStep === "p2") {
-      return { label: "Back", action: () => {
-        state.localStep = "p1";
-        writeScreenHash("local", { mode: "replace", historyState: { localStep: "p1" } });
-        renderLocalSetup();
-      } };
-    }
-    return { label: "Back", action: () => showScreen("landing", { history: "push" }) };
+  if (SETUP_SHEET_SCREENS.has(state.activeScreen)) {
+    return getInstallActionConfig();
   }
-  if (state.activeScreen === "host" || state.activeScreen === "join") {
-    return { label: "Back", action: () => showScreen("landing", { history: "push" }) };
+  if (state.activeScreen === "lobby") {
+    return {
+      label: "Home",
+      icon: "home",
+      action: () => {
+        if (isLocalMode()) {
+          leaveLocalMatch({ saveForRejoin: true });
+          return;
+        }
+        if (state.room) {
+          leaveRoom();
+          return;
+        }
+        showScreen("landing", { history: "push" });
+      }
+    };
   }
   if (state.activeScreen === "devkit") {
     return {
@@ -870,21 +1108,20 @@ function getPrimaryHeroActionConfig() {
     };
   }
   if (isLocalMode() && state.room && (
-    state.activeScreen === "lobby" ||
-    state.activeScreen === "game" ||
     state.activeScreen === "pass" ||
     state.activeScreen === "winner"
   )) {
     return { label: "Close", action: () => leaveLocalMatch({ saveForRejoin: true }) };
   }
-  if (!isLocalMode() && state.room && state.activeScreen === "lobby") {
-    return { label: "Exit", action: () => leaveRoom() };
-  }
   if (state.activeScreen === "game") {
-    return { label: "Exit", action: () => leaveRoom() };
+    return null;
   }
-  if (state.activeScreen === "winner") {
-    return { label: "Back", action: () => leaveRoom() };
+  if (!isLocalMode() && state.room && (
+    state.activeScreen === "wait" ||
+    state.activeScreen === "pass" ||
+    state.activeScreen === "winner"
+  )) {
+    return { label: "Exit", action: () => leaveRoom() };
   }
   return null;
 }
@@ -945,10 +1182,22 @@ function updateHeroActions() {
       element.classList.add("hidden");
       element.disabled = false;
       element.onclick = null;
+      element.innerHTML = "";
+      element.classList.remove("hero-action-home");
       return;
     }
     element.classList.remove("hidden");
-    element.textContent = config.label;
+    if (config.icon === "home") {
+      element.innerHTML = `
+        <svg class="hero-home-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 3.4 3 11v9.2c0 .2.2.4.4.4h6.2a.4.4 0 0 0 .4-.4v-5.6h4v5.6c0 .2.2.4.4.4h6.2c.2 0 .4-.2.4-.4V11z" fill="currentColor" />
+        </svg>
+        <span class="hero-action-label">${config.label}</span>
+      `.trim();
+    } else {
+      element.textContent = config.label;
+    }
+    element.classList.toggle("hero-action-home", config.icon === "home");
     element.disabled = Boolean(config.disabled);
     element.onclick = config.action;
   });
@@ -1155,7 +1404,7 @@ function connect() {
       renderRoom({ shouldAnimateEndReveal });
       const endSignature = getEndSignature(state.room);
       state.lastWinSignature = endSignature || null;
-      showScreen(nextScreen, { history: "replace" });
+      showScreen(nextScreen, { history: getRoomScreenHistoryMode(nextScreen) });
       return;
     }
 
@@ -1337,7 +1586,6 @@ function getGameName(room, gameId) {
 function getGameBannerClass(game) {
   const key = game?.bannerKey || game?.id || "";
   if (key === "tic_tac_toe") return "game-banner-tic-tac-toe";
-  if (key === "battleships") return "game-banner-battleships";
   if (key === "dots_and_boxes") return "game-banner-dots-and-boxes";
   if (key === "word_fight" || key === "words") return "game-banner-word-fight";
   if (key === "poker_dice" || key === "poker") return "game-banner-poker-dice";
@@ -1346,6 +1594,11 @@ function getGameBannerClass(game) {
 
 function isLocalMode() {
   return state.mode === "local";
+}
+
+function isRemovedGameId(gameId) {
+  const normalized = String(gameId || "").trim().toLowerCase();
+  return normalized ? REMOVED_GAME_IDS.has(normalized) : false;
 }
 
 function isHiddenPassGame(gameId) {
@@ -1532,10 +1785,6 @@ function saveLocalRejoinSnapshot(room) {
       stage: state.localPrivacy.stage === "handoff" ? "handoff" : "visible",
       prompt: String(state.localPrivacy.prompt || "")
     },
-    localBattleshipOrientation: state.localBattleshipOrientation === "v" ? "v" : "h",
-    localBattleshipPendingTargetIndex: Number.isInteger(state.localBattleshipPendingTargetIndex)
-      ? state.localBattleshipPendingTargetIndex
-      : null,
     pokerDicePendingHolds: Array.isArray(state.pokerDicePendingHolds)
       ? state.pokerDicePendingHolds
         .map((value) => Number(value))
@@ -1590,18 +1839,14 @@ function hydrateLocalFromSnapshot(snapshot) {
     ...(snapshot.localPrivacy && typeof snapshot.localPrivacy === "object" ? snapshot.localPrivacy : {})
   };
   state.localPrivacy.stage = state.localPrivacy.stage === "handoff" ? "handoff" : "visible";
-  state.localBattleshipOrientation = snapshot.localBattleshipOrientation === "v" ? "v" : "h";
-  state.localBattleshipPendingTargetIndex = Number.isInteger(snapshot.localBattleshipPendingTargetIndex)
-    ? snapshot.localBattleshipPendingTargetIndex
-    : null;
-  state.localBattleshipLastPhase = snapshot.room?.game?.state?.phase || null;
   state.pokerDicePendingHolds = Array.isArray(snapshot.pokerDicePendingHolds)
     ? snapshot.pokerDicePendingHolds
       .map((value) => Number(value))
       .filter((value) => Number.isInteger(value) && value >= 0 && value < POKER_DICE_PER_HAND)
     : [];
   renderRoom();
-  showScreen(resolveScreen(state.room), { history: "replace" });
+  const nextScreen = resolveScreen(state.room);
+  showScreen(nextScreen, { history: getRoomScreenHistoryMode(nextScreen) });
 }
 
 function createLocalRoom(avatarOne, avatarTwo, honorificOne = "mr", honorificTwo = "mr") {
@@ -1688,8 +1933,6 @@ function advanceLocalRoundByAlternation() {
   state.room.game = null;
   resetWinReveal();
   resetLocalPrivacy(state.room);
-  state.localBattleshipPendingTargetIndex = null;
-  state.localBattleshipLastPhase = null;
   state.pokerDicePendingHolds = [];
   resetPokerDiceFx();
   state.room.updatedAt = Date.now();
@@ -1702,7 +1945,8 @@ function handleLocalUpdate(options = {}) {
   renderRoom({ shouldAnimateEndReveal: Boolean(options.shouldAnimateEndReveal) });
   const endSignature = getEndSignature(state.room);
   state.lastWinSignature = endSignature || null;
-  showScreen(resolveScreen(state.room), { history: "replace" });
+  const nextScreen = resolveScreen(state.room);
+  showScreen(nextScreen, { history: getRoomScreenHistoryMode(nextScreen) });
 }
 
 function orderPlayersByFirst(players, firstPlayerId) {
@@ -1732,9 +1976,6 @@ function startLocalGame(gameId) {
   } else {
     state.localPrivacy = createInitialLocalPrivacyState(getDefaultLocalViewerId(state.room));
   }
-  state.localBattleshipOrientation = "h";
-  state.localBattleshipPendingTargetIndex = null;
-  state.localBattleshipLastPhase = null;
   state.pokerDicePendingHolds = [];
   resetPokerDiceFx();
   if (state.room.round) {
@@ -1776,8 +2017,6 @@ function startLocalRoundFromChoice(gameId) {
   state.room.round.guestGameId = gameId;
   state.room.round.resolvedGameId = gameId;
   state.localPrivacy = createInitialLocalPrivacyState(getDefaultLocalViewerId(state.room));
-  state.localBattleshipPendingTargetIndex = null;
-  state.localBattleshipLastPhase = null;
   state.pokerDicePendingHolds = [];
   resetPokerDiceFx();
 
@@ -1804,9 +2043,6 @@ function applyLocalMove(move) {
     return;
   }
   state.room.game.state = result.state;
-  if (state.room.game.id === "battleships") {
-    state.localBattleshipPendingTargetIndex = null;
-  }
   if (state.room.game.id === "poker_dice") {
     state.pokerDicePendingHolds = [];
     const action = String(move?.action || "").toLowerCase();
@@ -1854,7 +2090,6 @@ function applyLocalMove(move) {
 function acknowledgeLocalPassHandoff() {
   if (!state.room || state.localPrivacy.stage !== "handoff") return;
   state.localPrivacy = confirmLocalHandoff(state.localPrivacy);
-  state.localBattleshipPendingTargetIndex = null;
   state.pokerDicePendingHolds = [];
   resetPokerDiceFx();
   state.room.updatedAt = Date.now();
@@ -1864,6 +2099,7 @@ function acknowledgeLocalPassHandoff() {
 function leaveRoom(options = {}) {
   const historyMode = options.history || "push";
   clearLobbyCountdownRenderTicker();
+  clearWordFightTurnRenderTicker();
   if (isLocalMode()) {
     leaveLocalMatch({ saveForRejoin: false, history: historyMode });
     return;
@@ -1893,10 +2129,12 @@ function leaveRoom(options = {}) {
 function leaveLocalMatch({ saveForRejoin, history = "push" } = {}) {
   if (!isLocalMode() || !state.room) {
     clearLobbyCountdownRenderTicker();
+    clearWordFightTurnRenderTicker();
     showScreen("landing", { history });
     return;
   }
   clearLobbyCountdownRenderTicker();
+  clearWordFightTurnRenderTicker();
   resetWinReveal();
   if (saveForRejoin) {
     saveLocalRejoinSnapshot(state.room);
@@ -1907,9 +2145,6 @@ function leaveLocalMatch({ saveForRejoin, history = "push" } = {}) {
   state.lastLeaderId = null;
   state.lastWinSignature = null;
   state.localPrivacy = createInitialLocalPrivacyState();
-  state.localBattleshipOrientation = "h";
-  state.localBattleshipPendingTargetIndex = null;
-  state.localBattleshipLastPhase = null;
   state.pokerDicePendingHolds = [];
   resetPokerDiceFx();
   document.body.removeAttribute("data-theme");
@@ -1934,12 +2169,11 @@ function renderRoom(options = {}) {
 
   renderLobby(room);
   renderScoreboard(room, leaderId);
-  renderWinner(room, leaderId);
   renderWaitScreen(room);
   renderGame(room);
   renderGameList(room);
   renderPassScreen(room);
-  renderBattleships(room);
+  renderUnsupportedGame(room);
   renderPokerDice(room);
   renderWordFight(room);
   renderDotsAndBoxes(room);
@@ -1948,7 +2182,7 @@ function renderRoom(options = {}) {
 
   state.lastLeaderId = leaderId;
   updateHeroActions();
-  syncDockFromSourceButtons({ landingMode: state.landingMode });
+  syncDockFromSourceButtons();
 }
 
 function renderLobby(room) {
@@ -1970,6 +2204,9 @@ function renderScoreboard(room, leaderId) {
 }
 
 function buildScoreDuelPanel(host, guest, leaderId, options = {}) {
+  // Contract tokens kept for compatibility checks while the lobby no longer renders this legacy row.
+  const legacyScoreboardTokens = "score-duel-scorebar-wrap score-broadcast-row score-broadcast-score";
+  void legacyScoreboardTokens;
   const panel = document.createElement("div");
   panel.className = "score-duel-panel";
 
@@ -1984,15 +2221,6 @@ function buildScoreDuelPanel(host, guest, leaderId, options = {}) {
   sides.appendChild(hostSide);
   sides.appendChild(guestSide);
   panel.appendChild(sides);
-
-  const scorebarWrap = document.createElement("div");
-  scorebarWrap.className = "score-duel-scorebar-wrap";
-  scorebarWrap.appendChild(buildSharedScoreBroadcastRow({
-    host,
-    guest,
-    isWaiting: Boolean(options.guestWaiting)
-  }));
-  panel.appendChild(scorebarWrap);
 
   return panel;
 }
@@ -2021,7 +2249,7 @@ function buildScoreDuelSide(player, label, leaderId, options = {}) {
 
   const card = createPlayerCardElement({
     id: player?.id || "",
-    name: displayName,
+    name: "",
     theme,
     artSrc: getPlayerArtSrc(player),
     isWaiting,
@@ -2029,73 +2257,43 @@ function buildScoreDuelSide(player, label, leaderId, options = {}) {
   }, { variant: PLAYER_CARD_VARIANTS.score });
 
   top.appendChild(card);
-  side.appendChild(top);
+  const meta = document.createElement("div");
+  meta.className = "score-duel-meta";
 
+  const name = document.createElement("div");
+  name.className = "score-duel-name";
+  name.textContent = displayName;
+  if (isWaiting) {
+    name.classList.add("score-duel-name-waiting");
+  }
+
+  const points = document.createElement("div");
+  points.className = "score-duel-points";
+  points.textContent = isWaiting ? "--" : String(player?.gamesWon ?? 0);
+  if (isWaiting) {
+    points.classList.add("score-duel-points-waiting");
+  }
+
+  meta.appendChild(name);
+  meta.appendChild(points);
+  side.appendChild(top);
+  side.appendChild(meta);
   return side;
 }
 
-function getThemePalette(themeId, fallbackTheme = "red") {
-  const theme = themeId || fallbackTheme;
-  const tokens = {
-    red: { strong: "var(--red-1)", mid: "var(--red-2)", soft: "var(--red-3)" },
-    yellow: { strong: "var(--yellow-1)", mid: "var(--yellow-2)", soft: "var(--yellow-3)" },
-    green: { strong: "var(--green-1)", mid: "var(--green-2)", soft: "var(--green-3)" },
-    blue: { strong: "var(--blue-1)", mid: "var(--blue-2)", soft: "var(--blue-3)" }
-  };
-  return tokens[theme] || tokens[fallbackTheme];
-}
-
-function buildSharedScoreBroadcastRow(options = {}) {
-  const isWaiting = Boolean(options.isWaiting);
-  const host = options.host || null;
-  const guest = options.guest || null;
-  const hostName = getDisplayPlayerName(host, "Player 1");
-  const guestName = getDisplayPlayerName(guest, "Waiting");
-  const hostScoreValue = host ? String(host.gamesWon ?? 0) : "0";
-  const guestScoreValue = guest ? String(guest.gamesWon ?? 0) : "--";
-  const leftPalette = getThemePalette(host?.theme, "red");
-  const rightPalette = getThemePalette(guest?.theme, "green");
-
-  const row = document.createElement("div");
-  row.className = "score-broadcast-row";
-  if (isWaiting) {
-    row.classList.add("score-broadcast-row-waiting");
-  }
-  row.style.setProperty("--score-left-strong", leftPalette.strong);
-  row.style.setProperty("--score-left-mid", leftPalette.mid);
-  row.style.setProperty("--score-left-soft", leftPalette.soft);
-  row.style.setProperty("--score-right-strong", rightPalette.strong);
-  row.style.setProperty("--score-right-mid", rightPalette.mid);
-  row.style.setProperty("--score-right-soft", rightPalette.soft);
-  row.setAttribute("role", "group");
-  row.setAttribute("aria-label", `${hostName} ${hostScoreValue}, ${guestName} ${guestScoreValue}`);
-
-  const leftScore = document.createElement("div");
-  leftScore.className = "score-broadcast-score score-broadcast-score-left";
-  leftScore.textContent = hostScoreValue;
-
-  const rightScore = document.createElement("div");
-  rightScore.className = "score-broadcast-score score-broadcast-score-right";
-  if (isWaiting) {
-    const rightScoreSkeleton = document.createElement("span");
-    rightScoreSkeleton.className = "skeleton-value-bar";
-    rightScoreSkeleton.setAttribute("aria-hidden", "true");
-    rightScore.appendChild(rightScoreSkeleton);
-  } else {
-    rightScore.textContent = guestScoreValue;
-  }
-
-  row.appendChild(leftScore);
-  row.appendChild(rightScore);
-  return row;
-}
-
 let lobbyCountdownRenderTicker = null;
+let wordFightTurnRenderTicker = null;
 
 function clearLobbyCountdownRenderTicker() {
   if (lobbyCountdownRenderTicker === null) return;
   window.clearInterval(lobbyCountdownRenderTicker);
   lobbyCountdownRenderTicker = null;
+}
+
+function clearWordFightTurnRenderTicker() {
+  if (wordFightTurnRenderTicker === null) return;
+  window.clearInterval(wordFightTurnRenderTicker);
+  wordFightTurnRenderTicker = null;
 }
 
 function syncLobbyCountdownRenderTicker(room) {
@@ -2204,6 +2402,7 @@ function renderGameList(room) {
     const isMyChoice = myChoiceId === game.id;
     const isPeerChoice = otherChoiceId === game.id;
     const isCountdownTarget = Boolean(countdownActive && resolvedGameId === game.id);
+    const isCurrentActiveGame = Boolean(gameActive && room.game?.id === game.id);
 
     const card = document.createElement("article");
     card.className = "game-card";
@@ -2253,10 +2452,12 @@ function renderGameList(room) {
     const cta = document.createElement("button");
     cta.type = "button";
     cta.className = "game-cta";
-    cta.disabled = !canPick || comingSoon;
+    cta.disabled = Boolean(comingSoon || (!canPick && !isCurrentActiveGame));
 
     let ctaText = "Play";
-    if (!canPick) {
+    if (isCurrentActiveGame) {
+      ctaText = "Resume game";
+    } else if (!canPick) {
       ctaText = "Play";
     } else if (isCountdownTarget) {
       ctaText = `Starting in ${countdownSeconds ?? 0}`;
@@ -2277,6 +2478,10 @@ function renderGameList(room) {
     card.appendChild(meta);
 
     cta.addEventListener("click", () => {
+      if (isCurrentActiveGame) {
+        showScreen("game", { history: "push" });
+        return;
+      }
       if (comingSoon || !canPick) return;
       if (isLocalMode()) {
         startLocalRoundFromChoice(game.id);
@@ -2289,12 +2494,12 @@ function renderGameList(room) {
 
   const newRound = document.getElementById("new-round");
   if (!(newRound instanceof HTMLElement)) return;
-  if (isLocalMode()) {
-    newRound.classList.add("hidden");
-  } else if (finished && isPlayer) {
+  if (finished && (isLocalMode() || isPlayer)) {
     newRound.classList.remove("hidden");
+    newRound.textContent = "Pick next game";
   } else {
     newRound.classList.add("hidden");
+    newRound.textContent = "New round";
   }
 }
 
@@ -2662,7 +2867,7 @@ function resetWinReveal() {
 
 function normalizeWinRevealReason(reason) {
   if (!reason || typeof reason !== "object") return null;
-  const boardId = reason.boardId === "ttt" || reason.boardId === "battleships" || reason.boardId === "dots_boxes"
+  const boardId = reason.boardId === "ttt" || reason.boardId === "dots_boxes"
     ? reason.boardId
     : null;
   if (!boardId) return null;
@@ -2793,81 +2998,95 @@ function syncWinReveal(room, options = {}) {
 
 function renderTurnIndicatorSplit(indicatorEl, room, activePlayerId = null, mode = "turn", reveal = null) {
   if (!(indicatorEl instanceof HTMLElement)) return;
-
-  indicatorEl.innerHTML = "";
-  indicatorEl.classList.remove(
-    "turn-passive",
-    "turn-reveal-morph",
-    "turn-reveal-winner-host",
-    "turn-reveal-winner-guest"
-  );
-  if (!activePlayerId) {
-    indicatorEl.classList.add("turn-passive");
-  }
-  // Header morph animation is intentionally disabled.
+  void reveal;
 
   const host = room?.players?.host || null;
   const guest = room?.players?.guest || null;
-  const sides = [
-    { player: host, side: "host", fallback: "Player 1" },
-    { player: guest, side: "guest", fallback: "Player 2" }
-  ];
+  const visualState = resolveTurnIndicatorVisualState({
+    mode,
+    activePlayerId,
+    hostPlayerId: host?.id || null,
+    guestPlayerId: guest?.id || null
+  });
+  indicatorEl.innerHTML = "";
+  indicatorEl.dataset.mode = visualState.mode;
+  indicatorEl.dataset.activeSide = visualState.activeSide || "none";
   const headerScores = getTurnHeaderScores(room);
+  const sides = [
+    { side: "host", player: host, fallback: "Player 1" },
+    { side: "guest", player: guest, fallback: "Player 2" }
+  ];
 
-  sides.forEach(({ player, side, fallback }) => {
-    const pane = document.createElement("div");
-    pane.className = `turn-player turn-player-${side}`;
-
-    const theme = player?.theme || (side === "host" ? "red" : "green");
-    pane.classList.add(`theme-${theme}`);
-
-    const isActive = Boolean(activePlayerId && player && player.id === activePlayerId);
-    pane.classList.add(isActive ? "is-active" : "is-inactive");
-    if (!player) pane.classList.add("is-empty");
-
+  const createAvatar = (player) => {
     const avatar = document.createElement("span");
-    avatar.className = "turn-player-avatar";
+    avatar.className = "turn-avatar";
     avatar.setAttribute("aria-hidden", "true");
     const avatarImg = document.createElement("img");
     avatarImg.src = getPlayerArtSrc(player);
     avatarImg.alt = "";
     avatar.appendChild(avatarImg);
+    return avatar;
+  };
+
+  const createStatusText = ({ currentMode, side, activeSide, hasPlayer }) => {
+    if (currentMode === "winner") return activeSide === side ? "Won" : "Waiting";
+    if (currentMode === "draw") return "Draw";
+    if (currentMode === "idle") return hasPlayer ? "Ready" : "Waiting";
+    return activeSide === side ? "Turn" : "Waiting";
+  };
+
+  const createPane = ({ side, player, fallback, isActive, modeText }) => {
+    const pane = document.createElement("section");
+    pane.className = "turn-pane";
+    pane.dataset.side = side;
+    pane.dataset.active = isActive ? "true" : "false";
+    pane.classList.add(`theme-${player?.theme || (side === "host" ? "red" : "green")}`);
+    pane.setAttribute("aria-label", `${getDisplayPlayerName(player, fallback)} ${modeText}`);
+    if (!player) pane.classList.add("is-empty");
+
+    pane.appendChild(createAvatar(player));
 
     const meta = document.createElement("span");
-    meta.className = "turn-player-meta";
+    meta.className = "turn-meta";
     const name = document.createElement("span");
-    name.className = "turn-player-name";
+    name.className = "turn-name";
     name.textContent = getDisplayPlayerName(player, fallback);
     const stateLabel = document.createElement("span");
-    stateLabel.className = "turn-player-state";
-    if (mode === "winner") {
-      stateLabel.textContent = isActive ? "Won" : "Done";
-    } else if (mode === "draw") {
-      stateLabel.textContent = "Draw";
-    } else if (!player) {
-      stateLabel.textContent = "Waiting";
-    } else {
-      stateLabel.textContent = isActive ? "Turn" : "Waiting";
-    }
+    stateLabel.className = "turn-state";
+    stateLabel.textContent = modeText;
     const metaRow = document.createElement("span");
-    metaRow.className = "turn-player-meta-row";
+    metaRow.className = "turn-meta-row";
     metaRow.appendChild(stateLabel);
-
     meta.appendChild(name);
     meta.appendChild(metaRow);
-
-    pane.appendChild(avatar);
     pane.appendChild(meta);
+
     if (headerScores?.[side]?.showGameScore) {
       const gameScoreValue = Number(headerScores[side].gameScore || 0);
       const gameScore = document.createElement("span");
-      gameScore.className = "turn-player-score-game";
+      gameScore.className = "turn-score-game";
       gameScore.textContent = String(gameScoreValue);
       gameScore.setAttribute("aria-label", `Current game score ${gameScoreValue}`);
       pane.appendChild(gameScore);
       pane.classList.add("has-game-score");
     }
-    indicatorEl.appendChild(pane);
+    return pane;
+  };
+
+  sides.forEach(({ side, player, fallback }) => {
+    const modeText = createStatusText({
+      currentMode: visualState.mode,
+      side,
+      activeSide: visualState.activeSide,
+      hasPlayer: Boolean(player)
+    });
+    indicatorEl.appendChild(createPane({
+      side,
+      player,
+      fallback,
+      isActive: visualState.activeSide === side,
+      modeText
+    }));
   });
 }
 
@@ -3166,199 +3385,29 @@ function renderPassScreen(room) {
   passMessage.textContent = state.localPrivacy.prompt || "Hand over to the next player, then continue.";
 }
 
-function toBattleshipCoordinate(index, boardSize) {
-  const normalizedSize = Number(boardSize) || 6;
-  if (!Number.isInteger(index) || index < 0 || index >= normalizedSize * normalizedSize) {
-    return "--";
-  }
-  const col = String.fromCharCode(65 + (index % normalizedSize));
-  const row = Math.floor(index / normalizedSize) + 1;
-  return `${col}${row}`;
-}
-
-function createBattleshipMarker(text, className) {
-  const marker = document.createElement("span");
-  marker.className = className;
-  marker.textContent = text;
-  return marker;
-}
-
-function renderBattleships(room) {
-  const activeGameId = room.game?.id || null;
-  const isBattleships = activeGameId === "battleships";
-  const battleshipLayout = document.getElementById("battleship-layout");
-  const tttBoard = document.getElementById("ttt-board");
+function renderUnsupportedGame(room) {
+  const layout = document.getElementById("unsupported-game-layout");
+  const title = document.getElementById("unsupported-game-title");
+  const message = document.getElementById("unsupported-game-message");
   const indicatorEl = document.getElementById("turn-indicator");
-  const ownBoardEl = document.getElementById("battleship-own-board");
-  const ownCard = document.getElementById("battleship-own-card");
-  const ownTitle = document.getElementById("battleship-own-title");
-  const phaseLabel = document.getElementById("battleship-phase-label");
-  const orientationButton = document.getElementById("battleship-orientation");
-  const actionRow = document.getElementById("battleship-action-row");
-  const clearTargetButton = document.getElementById("battleship-clear-target");
-  const fireTargetButton = document.getElementById("battleship-fire-target");
 
-  if (!battleshipLayout || !ownBoardEl || !ownCard) return;
+  if (!(layout instanceof HTMLElement)) return;
 
-  if (!room.game || !isBattleships) {
-    battleshipLayout.classList.add("hidden");
-    ownBoardEl.innerHTML = "";
-    state.localBattleshipPendingTargetIndex = null;
-    if (actionRow) actionRow.classList.add("hidden");
-    if (clearTargetButton instanceof HTMLButtonElement) clearTargetButton.disabled = true;
-    if (fireTargetButton instanceof HTMLButtonElement) {
-      fireTargetButton.disabled = true;
-      fireTargetButton.textContent = "Fire";
-    }
-    return;
+  const activeGameId = room?.game?.id || null;
+  const isUnsupported = Boolean(
+    activeGameId && (isRemovedGameId(activeGameId) || !localGames[activeGameId])
+  );
+  layout.classList.toggle("hidden", !isUnsupported);
+  if (!isUnsupported) return;
+
+  if (title instanceof HTMLElement) {
+    title.textContent = room?.game?.name || "Game unavailable";
   }
-
-  battleshipLayout.classList.remove("hidden");
-  if (tttBoard) tttBoard.classList.add("hidden");
-
-  const gameState = getDisplayStateForRoomGame(room) || room.game.state;
-  const fullState = room.game.state;
-  const viewerPlayerId = ensureLocalViewer(room);
-  const viewer = playerById(room, viewerPlayerId);
-  const isViewerTurn = Boolean(fullState.nextPlayerId && fullState.nextPlayerId === viewerPlayerId);
-  const isFinished = Boolean(fullState.winnerId || fullState.draw || fullState.phase === "finished");
-  const canInteract = isLocalMode() && state.localPrivacy.stage !== "handoff" && !isFinished && isViewerTurn;
-  const phase = fullState.phase || gameState.phase || "placement";
-  const reveal = getWinRevealSnapshot(room);
-  const reasonIndices = reveal.phase === "reason" && reveal.reason?.boardId === "battleships"
-    ? new Set(reveal.reason.indices)
-    : null;
-
-  if (state.localBattleshipLastPhase !== phase) {
-    state.localBattleshipPendingTargetIndex = null;
-    state.localBattleshipLastPhase = phase;
+  if (message instanceof HTMLElement) {
+    message.textContent = "This game has been retired and is no longer supported in this version.";
   }
-  if (ownTitle) ownTitle.textContent = `${getDisplayPlayerName(viewer, "You")} board`;
-
-  if (phaseLabel) {
-    if (gameState.phase === "placement") {
-      phaseLabel.textContent = `Placement: place ${fullState.shipsPerPlayer} ships of length ${fullState.shipLength}.`;
-    } else if (gameState.phase === "battle") {
-      phaseLabel.textContent = "Battle: tap a cell to stage a shot, then confirm Fire.";
-    } else {
-      phaseLabel.textContent = "Round complete.";
-    }
-  }
-
-  const canPlace = gameState.phase === "placement" && canInteract;
-  const canFirePhase = gameState.phase === "battle" && canInteract;
-  if (!canFirePhase) {
-    state.localBattleshipPendingTargetIndex = null;
-  }
-  if (orientationButton instanceof HTMLButtonElement) {
-    orientationButton.disabled = !canPlace;
-    orientationButton.textContent = `Orientation: ${state.localBattleshipOrientation === "v" ? "Vertical" : "Horizontal"}`;
-  }
-
-  if (indicatorEl) {
-    if (isFinished) {
-      const winner = playerById(room, fullState.winnerId);
-      if (winner) {
-        renderTurnIndicatorSplit(indicatorEl, room, winner.id, "winner", reveal);
-      } else {
-        renderTurnIndicatorSplit(indicatorEl, room, null, "draw", reveal);
-      }
-    } else {
-      renderTurnIndicatorSplit(indicatorEl, room, fullState.nextPlayerId || null, "turn", reveal);
-    }
-  }
-
-  const board = gameState.board || {};
-  const shipCells = new Set((board.ships || []).flatMap((ship) => ship.cells || []));
-  const incomingHits = new Set(board.incomingHits || []);
-  const incomingMisses = new Set(board.incomingMisses || []);
-  const outgoingHits = new Set(board.outgoingHits || []);
-  const outgoingMisses = new Set(board.outgoingMisses || []);
-  const outgoingKnown = new Set([...outgoingHits, ...outgoingMisses]);
-  const size = Number(gameState.boardSize) || 6;
-
-  if (!Number.isInteger(state.localBattleshipPendingTargetIndex)) {
-    state.localBattleshipPendingTargetIndex = null;
-  }
-  if (Number.isInteger(state.localBattleshipPendingTargetIndex) && outgoingKnown.has(state.localBattleshipPendingTargetIndex)) {
-    state.localBattleshipPendingTargetIndex = null;
-  }
-
-  ownCard.classList.remove("game-board-highlight", "is-actionable", ...PLAYER_THEME_CLASS_NAMES);
-  ownCard.classList.add("game-board-highlight");
-  if (viewer?.theme) ownCard.classList.add(`theme-${viewer.theme}`);
-  ownCard.classList.toggle("is-actionable", canPlace || canFirePhase);
-
-  ownBoardEl.innerHTML = "";
-  for (let index = 0; index < size * size; index += 1) {
-    const cell = document.createElement("button");
-    cell.type = "button";
-    cell.className = "battleship-cell";
-    cell.dataset.index = String(index);
-    cell.disabled = true;
-
-    const hasShip = shipCells.has(index);
-    const hasIncomingHit = incomingHits.has(index);
-    const hasIncomingMiss = incomingMisses.has(index);
-    const hasOutgoingHit = outgoingHits.has(index);
-    const hasOutgoingMiss = outgoingMisses.has(index);
-    const hasOutgoingMark = hasOutgoingHit || hasOutgoingMiss;
-    const isPendingTarget = state.localBattleshipPendingTargetIndex === index;
-
-    if (hasShip) cell.classList.add("is-ship");
-    if (hasIncomingHit) {
-      cell.classList.add("is-incoming-hit");
-      cell.appendChild(createBattleshipMarker("X", "battleship-marker battleship-marker-incoming battleship-marker-hit"));
-    } else if (hasIncomingMiss) {
-      cell.classList.add("is-incoming-miss");
-      cell.appendChild(createBattleshipMarker("•", "battleship-marker battleship-marker-incoming battleship-marker-miss"));
-    }
-    if (hasOutgoingHit) {
-      cell.classList.add("has-outgoing-hit");
-      cell.appendChild(createBattleshipMarker("X", "battleship-marker battleship-marker-outgoing battleship-marker-hit"));
-    } else if (hasOutgoingMiss) {
-      cell.classList.add("has-outgoing-miss");
-      cell.appendChild(createBattleshipMarker("•", "battleship-marker battleship-marker-outgoing battleship-marker-miss"));
-    }
-    if (isPendingTarget) {
-      cell.classList.add("is-pending-target");
-    }
-    if (reasonIndices && reasonIndices.has(index)) {
-      cell.classList.add("is-win-reason-shot");
-    }
-
-    if (canPlace && !hasShip) {
-      cell.disabled = false;
-      cell.classList.add("is-target");
-      cell.addEventListener("click", () => {
-        applyLocalMove({
-          action: "place_ship",
-          index,
-          orientation: state.localBattleshipOrientation
-        });
-      });
-    } else if (canFirePhase && !hasOutgoingMark) {
-      cell.disabled = false;
-      cell.classList.add("is-target");
-      cell.addEventListener("click", () => {
-        state.localBattleshipPendingTargetIndex = index;
-        renderRoom();
-      });
-    }
-    ownBoardEl.appendChild(cell);
-  }
-
-  if (actionRow) {
-    actionRow.classList.toggle("hidden", gameState.phase !== "battle");
-  }
-  const pendingIndex = state.localBattleshipPendingTargetIndex;
-  const pendingCoordinate = Number.isInteger(pendingIndex) ? toBattleshipCoordinate(pendingIndex, size) : null;
-  if (clearTargetButton instanceof HTMLButtonElement) {
-    clearTargetButton.disabled = !canFirePhase || !pendingCoordinate;
-  }
-  if (fireTargetButton instanceof HTMLButtonElement) {
-    fireTargetButton.disabled = !canFirePhase || !pendingCoordinate;
-    fireTargetButton.textContent = pendingCoordinate ? `Fire at ${pendingCoordinate}` : "Fire";
+  if (indicatorEl instanceof HTMLElement) {
+    renderTurnIndicatorSplit(indicatorEl, room, null, "idle", null);
   }
 }
 
@@ -3671,6 +3720,84 @@ function clearWordFightDraftGuess() {
   state.wordFightDraftGuess = "";
 }
 
+function getWordFightTurnStartedAt(room, stateGame) {
+  const turnStartedAt = Number(stateGame?.turnStartedAt);
+  if (Number.isFinite(turnStartedAt) && turnStartedAt > 0) {
+    return turnStartedAt;
+  }
+
+  const roomUpdatedAt = Number(room?.updatedAt);
+  if (Number.isFinite(roomUpdatedAt) && roomUpdatedAt > 0) {
+    return roomUpdatedAt;
+  }
+
+  return Date.now();
+}
+
+function getWordFightTurnMsRemaining(room, stateGame) {
+  if (!stateGame || stateGame.winnerId || stateGame.draw || !stateGame.nextPlayerId) {
+    return 0;
+  }
+  const startedAt = getWordFightTurnStartedAt(room, stateGame);
+  const elapsed = Math.max(0, Date.now() - startedAt);
+  return Math.max(0, WORD_FIGHT_TURN_LIMIT_MS - elapsed);
+}
+
+function formatWordFightTurnClock(msRemaining) {
+  const safeMs = Math.max(0, Number(msRemaining) || 0);
+  const totalSeconds = safeMs > 0 ? Math.ceil(safeMs / 1000) : 0;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+function renderWordFightTurnTimer(timerEl, room, stateGame) {
+  if (!(timerEl instanceof HTMLElement)) return;
+  const isActiveTurn = Boolean(stateGame && !stateGame.winnerId && !stateGame.draw && stateGame.nextPlayerId);
+  if (!isActiveTurn) {
+    timerEl.textContent = "--:--";
+    timerEl.classList.remove("is-expiring");
+    return;
+  }
+  const msRemaining = getWordFightTurnMsRemaining(room, stateGame);
+  timerEl.textContent = formatWordFightTurnClock(msRemaining);
+  timerEl.classList.toggle("is-expiring", msRemaining > 0 && msRemaining <= 10_000);
+}
+
+function syncWordFightTurnRenderTicker(room, stateGame) {
+  const shouldTick = Boolean(
+    state.activeScreen === "game"
+    && room?.game?.id === "word_fight"
+    && stateGame
+    && !stateGame.winnerId
+    && !stateGame.draw
+    && stateGame.nextPlayerId
+  );
+
+  if (!shouldTick) {
+    clearWordFightTurnRenderTicker();
+    return;
+  }
+
+  if (wordFightTurnRenderTicker !== null) return;
+  wordFightTurnRenderTicker = window.setInterval(() => {
+    if (!state.room || state.activeScreen !== "game" || state.room?.game?.id !== "word_fight") {
+      clearWordFightTurnRenderTicker();
+      return;
+    }
+    const nextStateGame = getWordFightState(state.room);
+    const timerEl = document.getElementById("word-fight-turn-timer");
+    if (!(timerEl instanceof HTMLElement)) {
+      clearWordFightTurnRenderTicker();
+      return;
+    }
+    renderWordFightTurnTimer(timerEl, state.room, nextStateGame);
+    if (!nextStateGame || nextStateGame.winnerId || nextStateGame.draw || !nextStateGame.nextPlayerId) {
+      clearWordFightTurnRenderTicker();
+    }
+  }, 250);
+}
+
 function getWordFightInputContext(room) {
   const stateGame = getWordFightState(room);
   if (!stateGame) {
@@ -3889,15 +4016,20 @@ function renderWordFight(room) {
   const passTurnButton = document.getElementById("word-fight-pass-turn");
   const statusEl = document.getElementById("word-fight-status");
   const activeBoardTitle = document.getElementById("word-fight-active-title");
+  const activeBoardTimer = document.getElementById("word-fight-turn-timer");
   const activeBoard = document.getElementById("word-fight-active-board");
   const indicatorEl = document.getElementById("turn-indicator");
 
-  if (!(layout instanceof HTMLElement) || !(keyboard instanceof HTMLElement)) return;
+  if (!(layout instanceof HTMLElement) || !(keyboard instanceof HTMLElement)) {
+    clearWordFightTurnRenderTicker();
+    return;
+  }
 
   const stateGame = getWordFightState(room);
   if (!stateGame) {
     layout.classList.add("hidden");
     if (activeBoard instanceof HTMLElement) activeBoard.innerHTML = "";
+    if (activeBoardTitle instanceof HTMLElement) activeBoardTitle.textContent = "Hint: --";
     if (keyboard instanceof HTMLElement) {
       keyboard.classList.remove("hidden");
       renderWordFightKeyboard(keyboard, [], true);
@@ -3907,6 +4039,14 @@ function renderWordFight(room) {
       passTurnButton.classList.add("hidden");
       passTurnButton.disabled = true;
     }
+    if (activeBoardTimer instanceof HTMLElement) {
+      renderWordFightTurnTimer(activeBoardTimer, room, null);
+    }
+    if (statusEl instanceof HTMLElement) {
+      statusEl.textContent = "";
+      statusEl.classList.remove("is-visible");
+    }
+    clearWordFightTurnRenderTicker();
     clearWordFightDraftGuess();
     return;
   }
@@ -3914,6 +4054,13 @@ function renderWordFight(room) {
   layout.classList.remove("hidden");
   const context = getWordFightInputContext(room);
   const { localBlocked, isFinished, showPassTurn, viewerPlayerId } = context;
+  const myProgress = viewerPlayerId ? (stateGame.progressByPlayer?.[viewerPlayerId] || null) : null;
+  const mySecretWord = String(stateGame.mySecretWord || "").toUpperCase();
+  const shouldRevealExhaustedWord = Boolean(
+    myProgress?.exhausted
+    && !myProgress?.solved
+    && /^[A-Z]{4}$/.test(mySecretWord)
+  );
   const effectiveHeaderPlayerId = localBlocked && !isFinished
     ? (ensureLocalViewer(room) || stateGame.nextPlayerId || null)
     : (stateGame.nextPlayerId || null);
@@ -3929,20 +4076,16 @@ function renderWordFight(room) {
     }
   }
 
-  const viewer = playerById(room, viewerPlayerId);
   const activeBoardPlayerId = localBlocked
     ? (viewerPlayerId || stateGame.playerOrder?.[0] || null)
     : (stateGame.nextPlayerId || viewerPlayerId || stateGame.playerOrder?.[0] || null);
-  const activeBoardPlayer = playerById(room, activeBoardPlayerId);
+  const activeHintCategory = String(stateGame.activeHintCategory || "").trim();
 
   if (activeBoardTitle) {
-    if (!activeBoardPlayerId || !activeBoardPlayer) {
-      activeBoardTitle.textContent = "Current Board";
-    } else if (!isLocalMode() && activeBoardPlayerId === viewerPlayerId) {
-      activeBoardTitle.textContent = "Your Board";
-    } else {
-      activeBoardTitle.textContent = `${getDisplayPlayerName(activeBoardPlayer, "Player")} Board`;
-    }
+    activeBoardTitle.textContent = activeHintCategory ? `Hint: ${activeHintCategory}` : "Hint: --";
+  }
+  if (activeBoardTimer instanceof HTMLElement) {
+    renderWordFightTurnTimer(activeBoardTimer, room, stateGame);
   }
 
   const boardsByPlayer = stateGame.boardsByPlayer || {};
@@ -3966,9 +4109,16 @@ function renderWordFight(room) {
     clearWordFightDraftGuess();
   }
 
-  if (statusEl) {
-    statusEl.textContent = "";
+  if (statusEl instanceof HTMLElement) {
+    if (shouldRevealExhaustedWord) {
+      statusEl.textContent = `Out of guesses. Your word was ${mySecretWord}.`;
+      statusEl.classList.add("is-visible");
+    } else {
+      statusEl.textContent = "";
+      statusEl.classList.remove("is-visible");
+    }
   }
+  syncWordFightTurnRenderTicker(room, stateGame);
 }
 
 function renderPokerDice(room) {
@@ -4189,60 +4339,6 @@ function renderGame(room) {
   }
 }
 
-function renderWinner(room, leaderId) {
-  const panel = document.getElementById("game-result-panel");
-  const winnerId = room.game?.state?.winnerId;
-  const isDraw = Boolean(room.game?.state?.draw);
-  if (!(panel instanceof HTMLElement)) return;
-  const winner = winnerId ? playerById(room, winnerId) : null;
-
-  const titleEl = document.getElementById("winner-title");
-  const heroEl = document.getElementById("winner-hero");
-  const hasEnded = Boolean(winnerId || isDraw);
-  const reveal = getWinRevealSnapshot(room);
-  const showOverlay = hasEnded && reveal.phase === "overlay";
-
-  panel.classList.toggle("hidden", !showOverlay);
-  panel.classList.toggle("is-draw", Boolean(isDraw || !winner));
-  panel.classList.toggle("is-win", Boolean(winner && !isDraw));
-  if (!hasEnded) {
-    if (titleEl) {
-      titleEl.textContent = "Winner";
-    }
-    if (heroEl instanceof HTMLElement) {
-      heroEl.classList.add("hidden");
-      heroEl.innerHTML = "";
-    }
-    return;
-  }
-
-  if (titleEl) {
-    titleEl.textContent = isDraw && !winner
-      ? "It's a draw"
-      : `${getDisplayPlayerName(winner, "Someone")} is the winner`;
-  }
-  if (heroEl instanceof HTMLElement) {
-    heroEl.innerHTML = "";
-    if (winner && !isDraw) {
-      const showLeaderCrown = Boolean(
-        winner && leaderId && winner.id === leaderId && (winner.gamesWon ?? 0) > 0
-      );
-      const heroCard = createPlayerCardElement({
-        id: winner.id,
-        name: getDisplayPlayerName(winner, "Winner"),
-        theme: winner.theme || "red",
-        artSrc: getPlayerArtSrc(winner),
-        isLeader: showLeaderCrown
-      }, { variant: PLAYER_CARD_VARIANTS.score });
-      heroCard.classList.add("game-result-hero-card");
-      heroEl.appendChild(heroCard);
-      heroEl.classList.remove("hidden");
-    } else {
-      heroEl.classList.add("hidden");
-    }
-  }
-}
-
 function getEndSignature(room) {
   const stateGame = room?.game?.state;
   if (!stateGame) return null;
@@ -4276,6 +4372,13 @@ function renderEndRequest(room) {
   });
 }
 
+function getRoomScreenHistoryMode(nextScreen) {
+  if (state.activeScreen === "lobby" && nextScreen === "game") {
+    return "push";
+  }
+  return "replace";
+}
+
 function resolveScreen(room) {
   const finished = room.game?.state?.winnerId || room.game?.state?.draw;
   if (isLocalMode()) {
@@ -4294,6 +4397,20 @@ function resolveScreen(room) {
   return "lobby";
 }
 
+function startNextRoundFromWinnerCta() {
+  state.keepPickOpen = false;
+  if (isLocalMode()) {
+    advanceLocalRoundByAlternation();
+    showScreen("lobby", { history: "push" });
+    return;
+  }
+  if (state.room?.code) {
+    setPreferredRoomScreen(state.room.code, "lobby");
+    clearDismissedWinnerSignature(state.room.code);
+  }
+  send({ type: "new_round" });
+}
+
 function setup() {
   const joinCodeInput = document.getElementById("join-code");
   const hostPicker = document.getElementById("host-avatar-picker");
@@ -4310,18 +4427,23 @@ function setup() {
   const updateLocalPickers = () => renderLocalSetup();
 
   document.getElementById("go-local").addEventListener("click", () => {
+    sheetGestureState.suppressClickUntil = 0;
     state.mode = "local";
     state.localStep = "p1";
     state.localAvatars = { one: null, two: null };
     state.localHonorifics = { p1: "mr", p2: "mr" };
-    state.localBattleshipPendingTargetIndex = null;
-    state.localBattleshipLastPhase = null;
     state.pokerDicePendingHolds = [];
     resetPokerDiceFx();
     updateLocalPickers();
     showScreen("local", { history: "push" });
   });
+  document.getElementById("go-online").addEventListener("click", () => {
+    sheetGestureState.suppressClickUntil = 0;
+    state.mode = "online";
+    showScreen("online", { history: "push" });
+  });
   document.getElementById("go-host").addEventListener("click", () => {
+    sheetGestureState.suppressClickUntil = 0;
     state.mode = "online";
     state.hostHonorific = "mr";
     syncHonorificToggleInputs();
@@ -4331,6 +4453,7 @@ function setup() {
     showScreen("host", { history: "push" });
   });
   document.getElementById("go-join").addEventListener("click", () => {
+    sheetGestureState.suppressClickUntil = 0;
     state.mode = "online";
     resetJoinFlow();
     renderJoinSetup();
@@ -4398,15 +4521,7 @@ function setup() {
   initJoinCodeCluster();
   renderJoinSetup();
   initTicTacToeBoardGestures();
-  initLandingSwipeGestures();
-  setLandingMode("local", { animate: false });
-
-  if (landingTabLocal) {
-    landingTabLocal.addEventListener("click", () => setLandingMode("local"));
-  }
-  if (landingTabOnline) {
-    landingTabOnline.addEventListener("click", () => setLandingMode("online"));
-  }
+  initSheetInteractions();
 
   document.getElementById("create-room").addEventListener("click", () => {
     state.mode = "online";
@@ -4474,6 +4589,13 @@ function setup() {
     send({ type: "new_round" });
   });
 
+  const gameCloseBoard = document.getElementById("game-close-board");
+  if (gameCloseBoard) {
+    gameCloseBoard.addEventListener("click", () => {
+      closeGameSheet();
+    });
+  }
+
   const endGameGame = document.getElementById("end-game-game");
   if (endGameGame) {
     endGameGame.addEventListener("click", () => {
@@ -4483,23 +4605,6 @@ function setup() {
         return;
       }
       send({ type: "end_game_request" });
-    });
-  }
-
-  const winnerAgain = document.getElementById("winner-play-again");
-  if (winnerAgain) {
-    winnerAgain.addEventListener("click", () => {
-      state.keepPickOpen = false;
-      if (isLocalMode()) {
-        advanceLocalRoundByAlternation();
-        showScreen("lobby", { history: "push" });
-        return;
-      }
-      if (state.room?.code) {
-        setPreferredRoomScreen(state.room.code, "lobby");
-        clearDismissedWinnerSignature(state.room.code);
-      }
-      send({ type: "new_round" });
     });
   }
 
@@ -4514,34 +4619,6 @@ function setup() {
       seatToken: state.seatToken
     }));
   });
-
-  const battleshipOrientation = document.getElementById("battleship-orientation");
-  if (battleshipOrientation) {
-    battleshipOrientation.addEventListener("click", () => {
-      state.localBattleshipOrientation = state.localBattleshipOrientation === "h" ? "v" : "h";
-      renderRoom();
-    });
-  }
-
-  const battleshipClearTarget = document.getElementById("battleship-clear-target");
-  if (battleshipClearTarget) {
-    battleshipClearTarget.addEventListener("click", () => {
-      if (!Number.isInteger(state.localBattleshipPendingTargetIndex)) return;
-      state.localBattleshipPendingTargetIndex = null;
-      renderRoom();
-    });
-  }
-
-  const battleshipFireTarget = document.getElementById("battleship-fire-target");
-  if (battleshipFireTarget) {
-    battleshipFireTarget.addEventListener("click", () => {
-      if (!Number.isInteger(state.localBattleshipPendingTargetIndex)) return;
-      applyLocalMove({
-        action: "fire",
-        index: state.localBattleshipPendingTargetIndex
-      });
-    });
-  }
 
   const wordFightKeyboard = document.getElementById("word-fight-keyboard");
   const wordFightPassTurn = document.getElementById("word-fight-pass-turn");
@@ -4697,9 +4774,10 @@ function setup() {
   updateRejoinCard();
   updateLocalRejoinCard();
   initHashRouting();
+  updateHeroChrome();
   updateHeroActions();
   updateHeroRoomCodeVisibility();
-  syncDockFromSourceButtons({ landingMode: state.landingMode });
+  syncDockFromSourceButtons();
   connect();
   window.__multipassLegacyReady = true;
 }
@@ -4748,6 +4826,7 @@ function initSettingsModal() {
   };
 
   openButton.addEventListener("click", () => {
+    if (openButton.dataset.navMode !== "settings") return;
     state.settingsLastFocus = document.activeElement instanceof HTMLElement
       ? document.activeElement
       : openButton;
@@ -4804,17 +4883,10 @@ function updateRejoinCard() {
 }
 
 function updateLandingRejoinIndicators() {
-  const hasLocalRejoin = Boolean(state.localRejoinSnapshot || loadLocalRejoinSnapshot());
-  const hasOnlineRejoin = Boolean(state.lastRoomCode);
-  if (landingSegmented) {
-    landingSegmented.classList.toggle("has-alert", hasLocalRejoin || hasOnlineRejoin);
-  }
-  if (landingTabLocal) {
-    landingTabLocal.classList.toggle("has-alert", hasLocalRejoin);
-  }
-  if (landingTabOnline) {
-    landingTabOnline.classList.toggle("has-alert", hasOnlineRejoin);
-  }
+  const localAction = document.getElementById("go-local");
+  const onlineAction = document.getElementById("go-online");
+  localAction?.classList.remove("has-alert");
+  onlineAction?.classList.remove("has-alert");
 }
 
 function updateLocalRejoinCard() {
@@ -4835,243 +4907,190 @@ function updateLocalRejoinCard() {
   updateLandingRejoinIndicators();
 }
 
-function getLandingPanelWidthPx() {
-  if (landingPanelLocal instanceof HTMLElement && landingPanelOnline instanceof HTMLElement) {
-    const localRect = landingPanelLocal.getBoundingClientRect();
-    const onlineRect = landingPanelOnline.getBoundingClientRect();
-    const step = Math.abs(onlineRect.left - localRect.left);
-    if (step > 0) return step;
-  }
-  if (!(landingTrack instanceof HTMLElement)) return 0;
-  const rect = landingTrack.getBoundingClientRect();
-  return rect.width > 0 ? rect.width / 2 : 0;
-}
+const sheetGestureState = {
+  activePointerId: null,
+  startX: 0,
+  startY: 0,
+  lastY: 0,
+  startedAt: 0,
+  isDragging: false,
+  screen: null,
+  panel: null,
+  screenKey: null,
+  suppressClickUntil: 0
+};
 
-function getLandingTrackOffsetPx(mode, panelWidthPx) {
-  return mode === "online" ? -panelWidthPx : 0;
-}
-
-function getLandingModeProgress(mode) {
-  return mode === "online" ? 1 : 0;
-}
-
-function applyLandingModeProgress(progress) {
-  const normalized = clamp(
-    Number.isFinite(progress) ? progress : getLandingModeProgress(state.landingMode),
-    0,
-    1
-  );
-  state.landingModeProgress = normalized;
-  if (!(landingSegmented instanceof HTMLElement)) return;
-  landingSegmented.style.setProperty("--landing-mode-progress", normalized.toFixed(4));
-  landingSegmented.style.setProperty(
-    "--landing-local-active-pct",
-    `${Math.round((1 - normalized) * 100)}%`
-  );
-  landingSegmented.style.setProperty(
-    "--landing-online-active-pct",
-    `${Math.round(normalized * 100)}%`
-  );
-}
-
-function clearLandingGestureTracking(options = {}) {
-  const preserveSuppression = Boolean(options.preserveSuppression);
-  state.landingGesture.activePointerId = null;
-  state.landingGesture.startX = 0;
-  state.landingGesture.startY = 0;
-  state.landingGesture.lastX = 0;
-  state.landingGesture.lastY = 0;
-  state.landingGesture.startedAt = 0;
-  state.landingGesture.startMode = state.landingMode;
-  state.landingGesture.startOffsetPx = 0;
-  state.landingGesture.panelWidthPx = 0;
-  state.landingGesture.isDragging = false;
+function clearSheetGestureState({ preserveSuppression = false } = {}) {
+  sheetGestureState.activePointerId = null;
+  sheetGestureState.startX = 0;
+  sheetGestureState.startY = 0;
+  sheetGestureState.lastY = 0;
+  sheetGestureState.startedAt = 0;
+  sheetGestureState.isDragging = false;
   if (!preserveSuppression) {
-    state.landingGesture.suppressClickUntil = 0;
+    sheetGestureState.suppressClickUntil = 0;
   }
-  if (landingTrack instanceof HTMLElement) {
-    landingTrack.classList.remove("is-dragging");
-    landingTrack.style.removeProperty("transform");
+  if (sheetGestureState.panel instanceof HTMLElement) {
+    sheetGestureState.panel.classList.remove("is-dragging");
+    if (!preserveSuppression) {
+      sheetGestureState.panel.style.removeProperty("--sheet-translate-y");
+    }
+  }
+  if (sheetGestureState.screen instanceof HTMLElement && !preserveSuppression) {
+    sheetGestureState.screen.style.removeProperty("--sheet-translate-y");
+  }
+  sheetGestureState.screen = null;
+  sheetGestureState.panel = null;
+  sheetGestureState.screenKey = null;
+}
+
+function resolveSheetScreenKeyFromElement(element) {
+  const screen = element.closest(".screen");
+  if (!(screen instanceof HTMLElement)) return null;
+  if (!screen.id.startsWith("screen-")) return null;
+  const key = screen.id.replace("screen-", "");
+  return Object.prototype.hasOwnProperty.call(screens, key) ? key : null;
+}
+
+function closeSheetScreen(screenKey) {
+  if (screenKey !== state.activeScreen) return;
+  if (screenKey === "game") {
+    closeGameSheet();
+    return;
+  }
+  if (SETUP_SHEET_SCREENS.has(screenKey)) {
+    closeSetupSheetToLanding({ history: "push" });
   }
 }
 
-function handleLandingPointerDown(event) {
-  if (!(landingTrack instanceof HTMLElement)) return;
-  if (state.activeScreen !== "landing") return;
-  if (state.landingGesture.activePointerId !== null) return;
+function handleSheetPointerDown(event) {
+  if (!(event.currentTarget instanceof HTMLElement)) return;
+  if (!(event.target instanceof HTMLElement)) return;
+  if (!event.target.closest("[data-sheet-handle=\"true\"]")) return;
   if (event.pointerType === "mouse" && event.button !== 0) return;
+  if (sheetGestureState.activePointerId !== null) return;
 
-  const panelWidthPx = getLandingPanelWidthPx();
-  if (!panelWidthPx) return;
+  const screen = event.currentTarget;
+  const panel = screen.querySelector("[data-sheet-panel=\"true\"]");
+  if (!(panel instanceof HTMLElement)) return;
 
-  state.landingGesture.activePointerId = event.pointerId;
-  state.landingGesture.startX = event.clientX;
-  state.landingGesture.startY = event.clientY;
-  state.landingGesture.lastX = event.clientX;
-  state.landingGesture.lastY = event.clientY;
-  state.landingGesture.startedAt = Date.now();
-  state.landingGesture.startMode = state.landingMode;
-  state.landingGesture.panelWidthPx = panelWidthPx;
-  state.landingGesture.startOffsetPx = getLandingTrackOffsetPx(state.landingMode, panelWidthPx);
-  state.landingGesture.isDragging = false;
-  applyLandingModeProgress(getLandingModeProgress(state.landingMode));
+  const screenKey = resolveSheetScreenKeyFromElement(screen);
+  if (!screenKey || screenKey !== state.activeScreen) return;
+
+  sheetGestureState.activePointerId = event.pointerId;
+  sheetGestureState.startX = event.clientX;
+  sheetGestureState.startY = event.clientY;
+  sheetGestureState.lastY = event.clientY;
+  sheetGestureState.startedAt = Date.now();
+  sheetGestureState.isDragging = false;
+  sheetGestureState.screen = screen;
+  sheetGestureState.panel = panel;
+  sheetGestureState.screenKey = screenKey;
 }
 
-function handleLandingPointerMove(event) {
-  if (!(landingTrack instanceof HTMLElement)) return;
-  if (state.landingGesture.activePointerId !== event.pointerId) return;
+function handleSheetPointerMove(event) {
+  if (!(sheetGestureState.panel instanceof HTMLElement)) return;
+  if (sheetGestureState.activePointerId !== event.pointerId) return;
 
-  const deltaX = event.clientX - state.landingGesture.startX;
-  const deltaY = event.clientY - state.landingGesture.startY;
-  state.landingGesture.lastX = event.clientX;
-  state.landingGesture.lastY = event.clientY;
+  const deltaX = event.clientX - sheetGestureState.startX;
+  const deltaY = event.clientY - sheetGestureState.startY;
+  sheetGestureState.lastY = event.clientY;
 
-  if (!state.landingGesture.isDragging) {
-    if (!hasMetDragActivation(deltaX, deltaY, LANDING_DRAG_ACTIVATION_PX)) return;
+  if (!sheetGestureState.isDragging) {
+    if (!hasMetDragActivation(deltaX, deltaY, SHEET_DRAG_ACTIVATION_PX)) return;
     const axis = classifySwipeAxis(deltaX, deltaY);
-    if (axis !== "horizontal") {
-      clearLandingGestureTracking({ preserveSuppression: true });
+    if (axis !== "vertical") {
+      clearSheetGestureState({ preserveSuppression: true });
       return;
     }
-    state.landingGesture.isDragging = true;
-    landingTrack.classList.add("is-dragging");
-    if (typeof landingTrack.setPointerCapture === "function") {
+    sheetGestureState.isDragging = true;
+    sheetGestureState.panel.classList.add("is-dragging");
+    if (sheetGestureState.screen instanceof HTMLElement &&
+      typeof sheetGestureState.screen.setPointerCapture === "function") {
       try {
-        landingTrack.setPointerCapture(event.pointerId);
+        sheetGestureState.screen.setPointerCapture(event.pointerId);
       } catch (error) {
         // ignore pointer capture failures
       }
     }
   }
 
-  const panelWidthPx = state.landingGesture.panelWidthPx || getLandingPanelWidthPx();
-  if (!panelWidthPx) return;
-  const nextOffset = clamp(
-    state.landingGesture.startOffsetPx + deltaX,
-    -panelWidthPx,
-    0
-  );
-  landingTrack.style.transform = `translateX(${nextOffset}px)`;
-  applyLandingModeProgress(Math.abs(nextOffset) / panelWidthPx);
-
+  const clampedY = clamp(deltaY, 0, window.innerHeight);
+  setSheetPanelTranslateY(sheetGestureState.panel, clampedY);
   if (event.cancelable) {
     event.preventDefault();
   }
 }
 
-function handleLandingPointerUp(event) {
-  if (!(landingTrack instanceof HTMLElement)) return;
-  if (state.landingGesture.activePointerId !== event.pointerId) return;
+function handleSheetPointerEnd(event) {
+  if (!(sheetGestureState.panel instanceof HTMLElement)) return;
+  if (sheetGestureState.activePointerId !== event.pointerId) return;
 
-  if (state.landingGesture.isDragging) {
-    const deltaX = event.clientX - state.landingGesture.startX;
-    const elapsedMs = Date.now() - state.landingGesture.startedAt;
-    const velocityX = computeSwipeVelocityPxPerMs(deltaX, elapsedMs);
-    const panelWidthPx = state.landingGesture.panelWidthPx || getLandingPanelWidthPx();
-    const distanceThresholdPx = Math.max(
-      LANDING_SWIPE_MIN_DISTANCE_PX,
-      panelWidthPx * LANDING_SWIPE_DISTANCE_RATIO
-    );
-    const nextMode = resolveLandingSnapMode({
-      startMode: state.landingGesture.startMode,
-      deltaX,
-      velocityX,
-      distanceThresholdPx,
-      velocityThresholdPxPerMs: LANDING_SWIPE_VELOCITY_PX_PER_MS
-    });
+  const panel = sheetGestureState.panel;
+  const screen = sheetGestureState.screen;
+  const screenKey = sheetGestureState.screenKey;
 
-    if (typeof landingTrack.releasePointerCapture === "function") {
-      try {
-        if (landingTrack.hasPointerCapture(event.pointerId)) {
-          landingTrack.releasePointerCapture(event.pointerId);
-        }
-      } catch (error) {
-        // ignore release failures
-      }
-    }
-    state.landingGesture.suppressClickUntil = Date.now() + BOARD_CLICK_SUPPRESS_MS;
-    clearLandingGestureTracking({ preserveSuppression: true });
-    setLandingMode(nextMode);
-    if (event.cancelable) {
-      event.preventDefault();
-    }
-    return;
-  }
-
-  clearLandingGestureTracking({ preserveSuppression: true });
-}
-
-function handleLandingPointerCancel(event) {
-  if (!(landingTrack instanceof HTMLElement)) return;
-  if (state.landingGesture.activePointerId !== event.pointerId) return;
-
-  const fallbackMode = state.landingGesture.startMode || state.landingMode;
-  if (typeof landingTrack.releasePointerCapture === "function") {
+  if (screen instanceof HTMLElement && typeof screen.releasePointerCapture === "function") {
     try {
-      if (landingTrack.hasPointerCapture(event.pointerId)) {
-        landingTrack.releasePointerCapture(event.pointerId);
+      if (screen.hasPointerCapture(event.pointerId)) {
+        screen.releasePointerCapture(event.pointerId);
       }
     } catch (error) {
       // ignore release failures
     }
   }
-  clearLandingGestureTracking({ preserveSuppression: true });
-  setLandingMode(fallbackMode, { animate: false });
+
+  if (!sheetGestureState.isDragging || !screenKey) {
+    clearSheetGestureState({ preserveSuppression: true });
+    return;
+  }
+
+  const deltaY = Math.max(0, event.clientY - sheetGestureState.startY);
+  const elapsedMs = Date.now() - sheetGestureState.startedAt;
+  const velocityY = computeSwipeVelocityPxPerMs(deltaY, elapsedMs);
+  const shouldClose = deltaY >= SHEET_CLOSE_DISTANCE_PX || velocityY >= SHEET_CLOSE_VELOCITY_PX_PER_MS;
+
+  sheetGestureState.suppressClickUntil = Date.now() + BOARD_CLICK_SUPPRESS_MS;
+  if (shouldClose) {
+    const closingStartTranslateY = clamp(deltaY, 0, window.innerHeight);
+    panel.classList.remove("is-dragging");
+    setSheetPanelTranslateY(panel, closingStartTranslateY);
+    clearSheetGestureState({ preserveSuppression: true });
+    if (SETUP_SHEET_SCREENS.has(screenKey)) {
+      closeSetupSheetToLanding({ history: "push", startTranslateY: closingStartTranslateY });
+    } else {
+      closeSheetScreen(screenKey);
+    }
+    return;
+  }
+  setSheetPanelTranslateY(panel, 0);
+  clearSheetGestureState({ preserveSuppression: true });
 }
 
-function handleLandingClickCapture(event) {
-  if (!shouldSuppressClick(state.landingGesture.suppressClickUntil, Date.now(), 0)) return;
+function handleSheetClickCapture(event) {
+  if (!shouldSuppressClick(sheetGestureState.suppressClickUntil, Date.now(), 0)) return;
   event.preventDefault();
   event.stopPropagation();
 }
 
-function initLandingSwipeGestures() {
-  if (!(landingCarousel instanceof HTMLElement)) return;
-  if (landingCarousel.dataset.swipeInit === "true") return;
-  landingCarousel.dataset.swipeInit = "true";
-  landingCarousel.addEventListener("pointerdown", handleLandingPointerDown);
-  landingCarousel.addEventListener("pointermove", handleLandingPointerMove);
-  landingCarousel.addEventListener("pointerup", handleLandingPointerUp);
-  landingCarousel.addEventListener("pointercancel", handleLandingPointerCancel);
-  landingCarousel.addEventListener("click", handleLandingClickCapture, true);
-}
+function initSheetInteractions() {
+  document.querySelectorAll(".screen.sheet-screen").forEach((sheetScreen) => {
+    if (!(sheetScreen instanceof HTMLElement)) return;
+    if (sheetScreen.dataset.sheetInit === "true") return;
+    sheetScreen.dataset.sheetInit = "true";
+    sheetScreen.addEventListener("pointerdown", handleSheetPointerDown);
+    sheetScreen.addEventListener("pointermove", handleSheetPointerMove);
+    sheetScreen.addEventListener("pointerup", handleSheetPointerEnd);
+    sheetScreen.addEventListener("pointercancel", handleSheetPointerEnd);
+    sheetScreen.addEventListener("click", handleSheetClickCapture, true);
+  });
 
-function setLandingMode(mode, options = {}) {
-  const nextMode = mode === "online" ? "online" : "local";
-  const modeChanged = state.landingMode !== nextMode;
-  const shouldAnimate = options.animate ?? modeChanged;
-  state.landingMode = nextMode;
-  if (landingTrack) {
-    landingTrack.classList.remove("is-dragging");
-    landingTrack.style.removeProperty("transform");
-    landingTrack.dataset.mode = nextMode;
-  }
-  if (landingSegmented) {
-    landingSegmented.dataset.mode = nextMode;
-  }
-  applyLandingModeProgress(getLandingModeProgress(nextMode));
-  if (landingTabLocal) {
-    const isLocal = nextMode === "local";
-    landingTabLocal.classList.toggle("active", isLocal);
-    landingTabLocal.setAttribute("aria-selected", String(isLocal));
-    landingTabLocal.tabIndex = isLocal ? 0 : -1;
-  }
-  if (landingTabOnline) {
-    const isOnline = nextMode === "online";
-    landingTabOnline.classList.toggle("active", isOnline);
-    landingTabOnline.setAttribute("aria-selected", String(isOnline));
-    landingTabOnline.tabIndex = isOnline ? 0 : -1;
-  }
-  updateLocalRejoinCard();
-  updateRejoinCard();
-  if (shouldAnimate) {
-    if (nextMode === "online") {
-      staggerLandingPanel(landingPanelOnline);
-    } else {
-      staggerLandingPanel(landingPanelLocal);
-    }
-  }
-  syncDockFromSourceButtons({ landingMode: state.landingMode });
+  document.querySelectorAll("[data-sheet-close=\"true\"]").forEach((closeTarget) => {
+    if (!(closeTarget instanceof HTMLElement)) return;
+    if (closeTarget.dataset.sheetCloseInit === "true") return;
+    closeTarget.dataset.sheetCloseInit = "true";
+    closeTarget.addEventListener("click", () => closeActiveSheet());
+  });
 }
 
 function resetJoinFlow() {
@@ -5168,7 +5187,7 @@ function renderJoinSetup() {
     syncHonorificToggleInputs();
     refreshAvatarPickerLabels();
     refreshStaticPlayerArt();
-    syncDockFromSourceButtons({ landingMode: state.landingMode });
+    syncDockFromSourceButtons();
     return;
   }
 
@@ -5187,7 +5206,7 @@ function renderJoinSetup() {
   syncHonorificToggleInputs();
   refreshAvatarPickerLabels();
   refreshStaticPlayerArt();
-  syncDockFromSourceButtons({ landingMode: state.landingMode });
+  syncDockFromSourceButtons();
 }
 
 function renderHostSetupCta() {
@@ -5197,12 +5216,12 @@ function renderHostSetupCta() {
   if (!avatar) {
     hostCta.disabled = true;
     hostCta.textContent = "Pick a player";
-    syncDockFromSourceButtons({ landingMode: state.landingMode });
+    syncDockFromSourceButtons();
     return;
   }
   hostCta.disabled = false;
   hostCta.textContent = "Continue";
-  syncDockFromSourceButtons({ landingMode: state.landingMode });
+  syncDockFromSourceButtons();
 }
 
 function renderLocalSetupCta() {
@@ -5213,12 +5232,12 @@ function renderLocalSetupCta() {
   if (!avatar) {
     localCta.disabled = true;
     localCta.textContent = "Pick a player";
-    syncDockFromSourceButtons({ landingMode: state.landingMode });
+    syncDockFromSourceButtons();
     return;
   }
   localCta.disabled = false;
   localCta.textContent = "Continue";
-  syncDockFromSourceButtons({ landingMode: state.landingMode });
+  syncDockFromSourceButtons();
 }
 
 function startLocalRoomFromSetupSelections() {
@@ -5239,15 +5258,12 @@ function startLocalRoomFromSetupSelections() {
   state.lastWinSignature = null;
   state.lastLeaderId = null;
   resetLocalPrivacy(state.room);
-  state.localBattleshipOrientation = "h";
-  state.localBattleshipPendingTargetIndex = null;
-  state.localBattleshipLastPhase = null;
   state.pokerDicePendingHolds = [];
   resetPokerDiceFx();
   state.localStep = "p1";
   saveLocalRejoinSnapshot(state.room);
   updateLocalRejoinCard();
   renderRoom();
-  showScreen("lobby", { history: "push" });
+  showScreen("lobby", { history: "replace" });
   return true;
 }

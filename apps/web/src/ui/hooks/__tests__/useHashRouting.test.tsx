@@ -26,6 +26,12 @@ describe("useHashRouting", () => {
     expect(result.current.route.join.code).toBe("FVBJ");
   });
 
+  it("maps #online hash to online chooser route", () => {
+    window.history.replaceState({}, "", "/#online");
+    const { result } = renderHook(() => useHashRouting());
+    expect(result.current.route.screen).toBe("online");
+  });
+
   it("maps #pick hash to lobby route", () => {
     window.history.replaceState({}, "", "/#pick");
     const { result } = renderHook(() => useHashRouting());

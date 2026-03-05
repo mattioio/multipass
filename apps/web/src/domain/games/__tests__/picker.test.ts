@@ -36,4 +36,14 @@ describe("picker game resolver", () => {
     expect(resolved.id).toBe("my_custom_game");
     expect(resolved.name).toBe("Custom");
   });
+
+  it("filters removed games from picker data", () => {
+    const resolved = resolvePickerGames([
+      { id: "battleships", name: "Battleships" },
+      { id: "tic_tac_toe", name: "Tic Tac Toe" }
+    ]);
+
+    expect(resolved).toHaveLength(1);
+    expect(resolved[0].id).toBe("tic_tac_toe");
+  });
 });

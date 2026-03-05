@@ -1,4 +1,8 @@
-import { WORD_FIGHT_SECRET_WORDS, isWordFightWord } from "./wordFightWords.js";
+import {
+  WORD_FIGHT_SECRET_WORDS,
+  WORD_FIGHT_SECRET_WORD_TO_CATEGORY,
+  isWordFightWord
+} from "./wordFightWords.js";
 import {
   WORD_FIGHT_MAX_GUESSES,
   WORD_FIGHT_POINTS
@@ -6,12 +10,16 @@ import {
 
 const MAX_GUESSES = WORD_FIGHT_MAX_GUESSES;
 
+function nowTimestamp() {
+  return Date.now();
+}
+
 function randomWord() {
   const index = Math.floor(Math.random() * WORD_FIGHT_SECRET_WORDS.length);
   return WORD_FIGHT_SECRET_WORDS[index];
 }
 
-function pickSecretWords(playerOrder) {
+function pickSecretAssignments(playerOrder) {
   if (playerOrder.length < 2) return {};
   const first = randomWord();
   let second = randomWord();
@@ -20,9 +28,22 @@ function pickSecretWords(playerOrder) {
       second = randomWord();
     }
   }
-  return {
+  const wordsByPlayer = {
     [playerOrder[0]]: first,
     [playerOrder[1]]: second
+  };
+  const categoryByPlayer = {};
+  for (const playerId of playerOrder) {
+    const secretWord = wordsByPlayer[playerId];
+    const category = WORD_FIGHT_SECRET_WORD_TO_CATEGORY[secretWord] || null;
+    if (!category) {
+      throw new Error(`Missing secret category for word: ${secretWord}`);
+    }
+    categoryByPlayer[playerId] = category;
+  }
+  return {
+    wordsByPlayer,
+    categoryByPlayer
   };
 }
 
@@ -127,15 +148,20 @@ export function createWordFightEngine() {
     init(players) {
       const [p1, p2] = players;
       const playerOrder = [p1?.id, p2?.id].filter(Boolean);
-      const wordsByPlayer = pickSecretWords(playerOrder);
+      const {
+        wordsByPlayer = {},
+        categoryByPlayer = {}
+      } = pickSecretAssignments(playerOrder);
 
       return {
         playerOrder,
         maxGuesses: MAX_GUESSES,
         nextPlayerId: playerOrder[0] || null,
+        turnStartedAt: nowTimestamp(),
         winnerId: null,
         draw: false,
         wordsByPlayer,
+        categoryByPlayer,
         boardsByPlayer: Object.fromEntries(playerOrder.map((id) => [id, []])),
         progressByPlayer: Object.fromEntries(
           playerOrder.map((id) => [id, {
@@ -276,6 +302,7 @@ export function createWordFightEngine() {
           state: {
             ...baseNextState,
             nextPlayerId: null,
+            turnStartedAt: null,
             winnerId: outcome.winnerId,
             draw: outcome.draw
           }
@@ -285,22 +312,28 @@ export function createWordFightEngine() {
       return {
         state: {
           ...baseNextState,
-          nextPlayerId: nextTurnPlayerId(baseNextState, playerId)
+          nextPlayerId: nextTurnPlayerId(baseNextState, playerId),
+          turnStartedAt: nowTimestamp()
         }
       };
     },
 
     getVisibleState(state, viewerPlayerId) {
+      const viewerSecretCategory = viewerPlayerId ? state.categoryByPlayer?.[viewerPlayerId] || null : null;
+      const activeHintCategory = state.nextPlayerId ? state.categoryByPlayer?.[state.nextPlayerId] || null : null;
       return {
         playerOrder: state.playerOrder,
         maxGuesses: state.maxGuesses,
         nextPlayerId: state.nextPlayerId,
+        turnStartedAt: state.turnStartedAt,
         winnerId: state.winnerId,
         draw: state.draw,
         boardsByPlayer: state.boardsByPlayer,
         progressByPlayer: state.progressByPlayer,
         history: state.history,
-        mySecretWord: viewerPlayerId ? state.wordsByPlayer?.[viewerPlayerId] || null : null
+        mySecretWord: viewerPlayerId ? state.wordsByPlayer?.[viewerPlayerId] || null : null,
+        mySecretCategory: viewerSecretCategory,
+        activeHintCategory
       };
     }
   };
