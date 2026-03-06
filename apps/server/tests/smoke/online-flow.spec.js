@@ -603,8 +603,16 @@ test("online pick can launch poker dice module", async ({ browser }) => {
   await expect(guestPage.locator("#poker-dice-dice .poker-die")).toHaveCount(6);
   await expect(hostPage.locator("#poker-dice-layout .poker-dice-score-guide")).toBeVisible();
   await expect(guestPage.locator("#poker-dice-layout .poker-dice-score-guide")).toBeVisible();
-  await expect(hostPage.locator("#poker-dice-layout .poker-dice-score-row")).toHaveCount(9);
-  await expect(guestPage.locator("#poker-dice-layout .poker-dice-score-row")).toHaveCount(9);
+  await expect(hostPage.locator("#poker-dice-layout .poker-dice-score-row")).toHaveCount(8);
+  await expect(guestPage.locator("#poker-dice-layout .poker-dice-score-row")).toHaveCount(8);
+  await expect(hostPage.locator("#poker-dice-preroll-status")).toHaveAttribute("data-state", "ready_to_roll");
+  await expect(hostPage.locator("#poker-dice-preroll-status")).toContainText("Not rolled yet. Tap Roll to open this hand.");
+  await expect(guestPage.locator("#poker-dice-preroll-status")).toHaveAttribute("data-state", "waiting_for_opening_roll");
+  await expect(guestPage.locator("#poker-dice-preroll-status")).toContainText("Waiting for");
+  await expect(hostPage.locator("#poker-dice-roll")).toHaveClass(/is-preroll-cta/);
+  await expect(guestPage.locator("#poker-dice-roll")).not.toHaveClass(/is-preroll-cta/);
+  await expect(hostPage.locator('#poker-dice-dice .poker-die[aria-label="Die value hidden"]')).toHaveCount(6);
+  await expect(guestPage.locator('#poker-dice-dice .poker-die[aria-label="Die value hidden"]')).toHaveCount(6);
   await expect(hostPage.locator("#poker-dice-info")).toHaveCount(0);
   await expect(guestPage.locator("#poker-dice-info")).toHaveCount(0);
   await expect(hostPage.locator("#poker-dice-info-modal")).toHaveCount(0);

@@ -15,5 +15,9 @@ export interface RoomState {
     name?: string;
     state: Record<string, unknown>;
   } | null;
+  endRequest?: {
+    byId: string;
+    at: number;
+  } | null;
   games?: Array<{ id: string; name: string; comingSoon?: boolean; bannerKey?: string }>;
 }

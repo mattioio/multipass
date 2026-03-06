@@ -1803,6 +1803,45 @@ button:disabled {
   display: none;
 }
 
+@media (min-width: 1024px) {
+  .score-duel-side {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(12px, 1.4vw, 20px);
+    text-align: left;
+  }
+
+  .score-duel-side-guest {
+    flex-direction: row-reverse;
+  }
+
+  .score-duel-top {
+    width: clamp(120px, 11vw, 156px);
+    min-width: clamp(120px, 11vw, 156px);
+  }
+
+  .score-duel-meta {
+    align-content: center;
+    justify-items: start;
+    text-align: left;
+    gap: 4px;
+  }
+
+  .score-duel-side-guest .score-duel-meta {
+    justify-items: end;
+    text-align: right;
+  }
+
+  .score-duel-name {
+    font-size: clamp(1.24rem, 1.8vw, 1.6rem);
+  }
+
+  .score-duel-points {
+    font-size: clamp(1.7rem, 2.4vw, 2.35rem);
+  }
+}
+
 .player-card-art-placeholder {
   background:
     radial-gradient(circle at 35% 28%, color-mix(in srgb, #ffffff 38%, transparent) 0%, transparent 44%),

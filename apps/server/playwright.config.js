@@ -19,7 +19,7 @@ export default defineConfig({
       timeout: 120_000
     },
     {
-      command: "npm --prefix ../web run dev -- --host 127.0.0.1 --port 3000",
+      command: "VITE_RUNTIME_MODE=react npm --prefix ../web run dev -- --host 127.0.0.1 --port 3000",
       url: "http://127.0.0.1:3000",
       reuseExistingServer: false,
       timeout: 120_000

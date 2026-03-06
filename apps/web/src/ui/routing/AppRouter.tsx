@@ -14,6 +14,7 @@ export function AppRouter({ children }: PropsWithChildren) {
 
   useEffect(() => {
     document.body.dataset.routeScreen = route.screen;
+    document.body.dataset.screen = route.screen;
   }, [route.screen]);
 
   return (

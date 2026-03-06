@@ -53,7 +53,7 @@ jobs:
         id: smoke_online
         run: npm --prefix apps/server run smoke:online
 
-      - name: Server protocol/security smoke
+      - name: Server protocol/security/turn-order smoke
         id: smoke_contract
         run: npm --prefix apps/server run smoke:contract
 
@@ -70,5 +70,5 @@ jobs:
             echo "- Web build: ${{ steps.web_build.outcome }}"
             echo "- Server smoke local: ${{ steps.smoke_local.outcome }}"
             echo "- Server smoke online: ${{ steps.smoke_online.outcome }}"
-            echo "- Server protocol/security smoke: ${{ steps.smoke_contract.outcome }}"
+            echo "- Server protocol/security/turn-order smoke: ${{ steps.smoke_contract.outcome }}"
           } >> "$GITHUB_STEP_SUMMARY"

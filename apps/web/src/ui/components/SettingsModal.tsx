@@ -36,7 +36,7 @@ export function SettingsModal({ open, onClose, returnFocusTo = null }: SettingsM
 
   return (
     <div className="modal" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">
-      <button className="modal-backdrop" type="button" aria-label="Close settings" onClick={onClose} />
+      <div className="modal-scrim" role="presentation" aria-hidden="true" onClick={onClose} />
       <div className="modal-content">
         <div className="modal-head">
           <h2 id="settings-modal-title">Settings</h2>

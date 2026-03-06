@@ -10,7 +10,7 @@
     "dict:wordfight:check": "node ./scripts/build-word-fight-dictionary.mjs --check",
     "contract:generate": "node ./scripts/generate-ws-contract.mjs",
     "smoke": "playwright test",
-    "smoke:contract": "playwright test tests/smoke/ws-avatar-contract.spec.js tests/smoke/ws-security.spec.js",
+    "smoke:contract": "playwright test tests/smoke/ws-avatar-contract.spec.js tests/smoke/ws-security.spec.js tests/smoke/ws-turn-order-contract.spec.js",
     "smoke:local": "playwright test tests/smoke/local-flow.spec.js",
     "smoke:online": "playwright test tests/smoke/online-flow.spec.js"
   },

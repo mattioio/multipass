@@ -7,11 +7,11 @@ const HAND_RANK = Object.freeze({
   one_pair: 1,
   two_pair: 2,
   three_kind: 4,
-  full_house: 8,
-  four_kind: 10,
-  five_kind: 12,
-  flush: 16,
-  royal_flush: 20
+  full_house: 6,
+  four_kind: 8,
+  five_kind: 10,
+  flush: 12,
+  royal_flush: 16
 });
 
 function rollDie() {
@@ -173,11 +173,11 @@ function classifyHand(dice) {
 }
 
 function getCategoryPoints(category) {
-  if (category === "royal_flush") return 20;
-  if (category === "flush") return 16;
-  if (category === "five_kind") return 12;
-  if (category === "four_kind") return 10;
-  if (category === "full_house") return 8;
+  if (category === "royal_flush") return 16;
+  if (category === "flush") return 12;
+  if (category === "five_kind") return 10;
+  if (category === "four_kind") return 8;
+  if (category === "full_house") return 6;
   if (category === "three_kind") return 4;
   if (category === "two_pair") return 2;
   if (category === "one_pair") return 0;

@@ -26,7 +26,7 @@ function withMockRandom(sequence, run) {
 }
 
 function randomForIndex(index) {
-  const size = Math.max(WORD_FIGHT_WORDS.length, 1);
+  const size = Math.max(WORD_FIGHT_SECRET_WORDS.length, 1);
   return (index + 0.01) / size;
 }
 

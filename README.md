@@ -56,6 +56,14 @@ Run this full suite before merging major backend/protocol work:
 - Current production list (priority order): `wss://api.loreandorder.com`.
 - The app retries the next endpoint only if the current candidate fails.
 
+## Runtime mode override
+- Default runtime boot path is React (`VITE_RUNTIME_MODE=react` when unset).
+- Emergency fallback can force legacy runtime:
+  - env override: `VITE_RUNTIME_MODE=legacy`
+  - browser override: `localStorage.setItem("multipass_runtime_mode", "legacy")`
+- Clear browser override to return to env/default behavior:
+  - `localStorage.removeItem("multipass_runtime_mode")`
+
 ## Smart invite links
 - Host can use the in-room `Share` action to copy a deep-link invite.
 - Canonical invite format is `/#join=CODE` (example: `https://your-site.example/#join=FVBJ`).

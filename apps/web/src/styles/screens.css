@@ -1119,6 +1119,23 @@ body[data-mode="dark"] .ttt-board {
   color: color-mix(in srgb, var(--text) 90%, #ffffff);
 }
 
+.poker-dice-preroll-status {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--border) 86%, #ffffff22);
+  background: color-mix(in srgb, var(--surface-2) 78%, var(--surface));
+  font-size: 0.86rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: color-mix(in srgb, var(--text) 88%, #ffffff);
+}
+
+.poker-dice-preroll-status[data-state="ready_to_roll"] {
+  border-color: color-mix(in srgb, var(--cta) 54%, var(--border));
+  background: color-mix(in srgb, var(--cta) 14%, var(--surface-2) 86%);
+}
+
 .poker-dice-dice {
   display: grid;
   gap: 8px;
@@ -1220,6 +1237,13 @@ body[data-mode="dark"] .ttt-board {
   -webkit-backface-visibility: hidden;
 }
 
+.poker-dice-layout.is-preroll-viewer .poker-cube-face {
+  background-image: none !important;
+  border-color: color-mix(in srgb, #cfd5ef 70%, #ffffff22);
+  background:
+    linear-gradient(165deg, #f5f7ff 0%, #ecf0ff 55%, #e6eaf9 100%);
+}
+
 .poker-cube-face.face-1 {
   transform: rotateY(0deg) translateZ(var(--poker-cube-depth));
 }
@@ -1285,6 +1309,13 @@ body[data-mode="dark"] .ttt-board {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.poker-dice-actions .compact-action.is-preroll-cta {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--cta) 48%, transparent),
+    0 0 0 0 color-mix(in srgb, var(--cta) 26%, transparent);
+  animation: poker-roll-cta-pulse 1.8s var(--ease-out) infinite;
 }
 
 .poker-dice-actions.is-pass-only {
@@ -1373,6 +1404,24 @@ body[data-mode="dark"] .ttt-board {
   }
 }
 
+@keyframes poker-roll-cta-pulse {
+  0% {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--cta) 48%, transparent),
+      0 0 0 0 color-mix(in srgb, var(--cta) 26%, transparent);
+  }
+  70% {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--cta) 40%, transparent),
+      0 0 0 10px color-mix(in srgb, var(--cta) 0%, transparent);
+  }
+  100% {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--cta) 36%, transparent),
+      0 0 0 0 color-mix(in srgb, var(--cta) 0%, transparent);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .poker-die.is-rolling .poker-cube {
     animation: none;
@@ -1383,6 +1432,10 @@ body[data-mode="dark"] .ttt-board {
   }
 
   .poker-die.is-settling {
+    animation: none;
+  }
+
+  .poker-dice-actions .compact-action.is-preroll-cta {
     animation: none;
   }
 }
@@ -1918,10 +1971,18 @@ body[data-mode="dark"] .dots-board {
   z-index: 30;
 }
 
-.modal-backdrop {
+.modal-scrim {
   position: absolute;
   inset: 0;
+  border-radius: 0;
+  border: 0;
+  padding: 0;
+  margin: 0;
   background: rgba(0, 0, 0, 0.35);
+  box-shadow: none;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: default;
 }
 
 .modal-content {

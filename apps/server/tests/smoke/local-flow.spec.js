@@ -600,9 +600,15 @@ test("local poker dice banks points immediately and swaps to pass-only CTA at en
   await expect(page.locator("#poker-dice-layout")).not.toHaveClass(/hidden/);
   await expect(page.locator("#poker-dice-dice .poker-die")).toHaveCount(6);
   await expect(page.locator("#poker-dice-layout .poker-dice-score-guide")).toBeVisible();
-  await expect(page.locator("#poker-dice-layout .poker-dice-score-row")).toHaveCount(9);
+  await expect(page.locator("#poker-dice-layout .poker-dice-score-row")).toHaveCount(8);
+  await expect(page.locator('#poker-dice-layout [data-poker-category="royal_flush"]')).toContainText("16 pts");
+  await expect(page.locator('#poker-dice-layout [data-poker-category="full_house"]')).toContainText("6 pts");
   await expect(page.locator('#poker-dice-layout [data-poker-category="one_pair"]')).toContainText("0 pts");
-  await expect(page.locator('#poker-dice-layout [data-poker-category="high_card"]')).toContainText("0 pts");
+  await expect(page.locator('#poker-dice-layout [data-poker-category="two_pair"]')).toContainText("2 pts");
+  await expect(page.locator("#poker-dice-preroll-status")).toHaveAttribute("data-state", "ready_to_roll");
+  await expect(page.locator("#poker-dice-preroll-status")).toContainText("Not rolled yet. Tap Roll to open this hand.");
+  await expect(page.locator("#poker-dice-roll")).toHaveClass(/is-preroll-cta/);
+  await expect(page.locator('#poker-dice-dice .poker-die[aria-label="Die value hidden"]')).toHaveCount(6);
   await expect(page.locator("#poker-dice-info")).toHaveCount(0);
   await expect(page.locator("#poker-dice-info-modal")).toHaveCount(0);
 
@@ -613,6 +619,9 @@ test("local poker dice banks points immediately and swaps to pass-only CTA at en
 
   await page.locator("#poker-dice-roll").click();
   await expect(page.locator("#poker-dice-bank")).toBeEnabled({ timeout: 6000 });
+  await expect(page.locator("#poker-dice-preroll-status")).toHaveCount(0);
+  await expect(page.locator("#poker-dice-roll")).not.toHaveClass(/is-preroll-cta/);
+  await expect(page.locator('#poker-dice-dice .poker-die[aria-label="Die value hidden"]')).toHaveCount(0);
   await expect(page.locator("#poker-dice-layout .poker-dice-score-row.is-projected")).toHaveCount(1);
   const projectedCategoryAfterRoll = await page
     .locator("#poker-dice-layout .poker-dice-score-row.is-projected")

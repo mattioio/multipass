@@ -75,7 +75,7 @@ describe("poker dice engine", () => {
 
     expect(state4.handTies).toBe(1);
     expect(state4.currentHandNumber).toBe(2);
-    expect(state4.nextPlayerId).toBe("p1");
+    expect(state4.nextPlayerId).toBe("p2");
     expect(state4.currentHand.finalByPlayer.p1).toBeNull();
     expect(state4.currentHand.finalByPlayer.p2).toBeNull();
     const lastResult = state4.history[state4.history.length - 1];
@@ -98,23 +98,23 @@ describe("poker dice engine", () => {
     state = engine.applyMove(state, { action: "bank" }, "p2").state;
 
     expect(state.currentHandNumber).toBe(2);
-    expect(state.pointsByPlayer.p1).toBe(16);
+    expect(state.pointsByPlayer.p1).toBe(12);
     expect(state.pointsByPlayer.p2).toBe(0);
-    expect(state.nextPlayerId).toBe("p1");
+    expect(state.nextPlayerId).toBe("p2");
 
     state = withMockRandom(randomSequenceFromDice([2, 3, 4, 5, 6, 2]), () => {
-      return engine.applyMove(state, { action: "roll" }, "p1").state;
-    });
-    state = engine.applyMove(state, { action: "bank" }, "p1").state;
-
-    state = withMockRandom(randomSequenceFromDice([1, 1, 3, 4, 5, 6]), () => {
       return engine.applyMove(state, { action: "roll" }, "p2").state;
     });
     state = engine.applyMove(state, { action: "bank" }, "p2").state;
 
+    state = withMockRandom(randomSequenceFromDice([1, 1, 3, 4, 5, 6]), () => {
+      return engine.applyMove(state, { action: "roll" }, "p1").state;
+    });
+    state = engine.applyMove(state, { action: "bank" }, "p1").state;
+
     expect(state.currentHandNumber).toBe(3);
-    expect(state.pointsByPlayer.p1).toBe(32);
-    expect(state.pointsByPlayer.p2).toBe(0);
+    expect(state.pointsByPlayer.p1).toBe(12);
+    expect(state.pointsByPlayer.p2).toBe(12);
     expect(state.nextPlayerId).toBe("p1");
 
     state = withMockRandom(randomSequenceFromDice([1, 1, 2, 3, 4, 5]), () => {
@@ -131,8 +131,8 @@ describe("poker dice engine", () => {
     expect(state.phase).toBe("finished");
     expect(state.nextPlayerId).toBeNull();
     expect(state.currentHandNumber).toBe(3);
-    expect(state.pointsByPlayer.p1).toBe(52);
-    expect(state.pointsByPlayer.p2).toBe(0);
+    expect(state.pointsByPlayer.p1).toBe(28);
+    expect(state.pointsByPlayer.p2).toBe(12);
     expect(state.draw).toBeFalsy();
   });
 
@@ -145,8 +145,8 @@ describe("poker dice engine", () => {
     });
     state = engine.applyMove(state, { action: "bank" }, "p1").state;
     expect(state.currentHand.finalByPlayer.p1?.category).toBe("royal_flush");
-    expect(state.currentHand.finalByPlayer.p1?.bankedPoints).toBe(20);
-    expect(state.pointsByPlayer.p1).toBe(20);
+    expect(state.currentHand.finalByPlayer.p1?.bankedPoints).toBe(16);
+    expect(state.pointsByPlayer.p1).toBe(16);
 
     state = withMockRandom(randomSequenceFromDice([2, 3, 4, 5, 6, 2]), () => {
       return engine.applyMove(state, { action: "roll" }, "p2").state;
@@ -155,7 +155,41 @@ describe("poker dice engine", () => {
     const lastResult = state.history[state.history.length - 1];
     expect(lastResult?.type).toBe("hand_result");
     expect(lastResult?.right?.category).toBe("flush");
-    expect(lastResult?.right?.bankedPoints).toBe(16);
-    expect(state.pointsByPlayer.p2).toBe(16);
+    expect(lastResult?.right?.bankedPoints).toBe(12);
+    expect(state.pointsByPlayer.p2).toBe(12);
+  });
+
+  it("alternates hand starter host -> guest -> host", () => {
+    const engine = createPokerDiceEngine();
+    let state = engine.init(players());
+
+    expect(state.handStarterId).toBe("p1");
+    expect(state.nextPlayerId).toBe("p1");
+
+    state = withMockRandom(randomSequenceFromDice([1, 2, 3, 4, 5, 6]), () => {
+      return engine.applyMove(state, { action: "roll" }, state.nextPlayerId).state;
+    });
+    state = engine.applyMove(state, { action: "bank" }, state.nextPlayerId).state;
+    state = withMockRandom(randomSequenceFromDice([1, 2, 3, 4, 5, 6]), () => {
+      return engine.applyMove(state, { action: "roll" }, state.nextPlayerId).state;
+    });
+    state = engine.applyMove(state, { action: "bank" }, state.nextPlayerId).state;
+
+    expect(state.currentHandNumber).toBe(2);
+    expect(state.handStarterId).toBe("p2");
+    expect(state.nextPlayerId).toBe("p2");
+
+    state = withMockRandom(randomSequenceFromDice([1, 2, 3, 4, 5, 6]), () => {
+      return engine.applyMove(state, { action: "roll" }, state.nextPlayerId).state;
+    });
+    state = engine.applyMove(state, { action: "bank" }, state.nextPlayerId).state;
+    state = withMockRandom(randomSequenceFromDice([1, 2, 3, 4, 5, 6]), () => {
+      return engine.applyMove(state, { action: "roll" }, state.nextPlayerId).state;
+    });
+    state = engine.applyMove(state, { action: "bank" }, state.nextPlayerId).state;
+
+    expect(state.currentHandNumber).toBe(3);
+    expect(state.handStarterId).toBe("p1");
+    expect(state.nextPlayerId).toBe("p1");
   });
 });

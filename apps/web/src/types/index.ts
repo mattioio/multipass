@@ -12,3 +12,13 @@ export type { GameRuntimeState, GameUiState } from "./GameRuntimeState";
 export type { GameComponentProps } from "./GameComponentProps";
 export type { GameDefinition, GameRegistry, LocalGameEngine } from "./GameDefinition";
 export type { ClientMessage, ServerMessage, ErrorMessage, SessionMessage } from "./protocol";
+export type {
+  RuntimeMode,
+  RuntimeConnectionStatus,
+  RuntimeAppMode,
+  RuntimeYouState,
+  RuntimeJoinPreviewPlayer,
+  RuntimeJoinPreview,
+  RuntimeJoinState,
+  RuntimeState
+} from "./RuntimeState";

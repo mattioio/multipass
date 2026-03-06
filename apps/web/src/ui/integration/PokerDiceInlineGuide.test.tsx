@@ -7,7 +7,7 @@ describe("Poker Dice inline score guide", () => {
 
     const layout = document.getElementById("poker-dice-layout");
     expect(layout?.querySelector(".poker-dice-score-guide")).toBeInTheDocument();
-    expect(layout?.querySelectorAll(".poker-dice-score-row[data-poker-category]")).toHaveLength(9);
+    expect(layout?.querySelectorAll(".poker-dice-score-row[data-poker-category]")).toHaveLength(8);
 
     expect(layout?.querySelector('[data-poker-category="royal_flush"]')).toBeInTheDocument();
     expect(layout?.querySelector('[data-poker-category="flush"]')).toBeInTheDocument();
@@ -17,7 +17,7 @@ describe("Poker Dice inline score guide", () => {
     expect(layout?.querySelector('[data-poker-category="three_kind"]')).toBeInTheDocument();
     expect(layout?.querySelector('[data-poker-category="two_pair"]')).toBeInTheDocument();
     expect(layout?.querySelector('[data-poker-category="one_pair"]')).toBeInTheDocument();
-    expect(layout?.querySelector('[data-poker-category="high_card"]')).toBeInTheDocument();
+    expect(layout?.querySelector('[data-poker-category="high_card"]')).not.toBeInTheDocument();
 
     expect(document.getElementById("poker-dice-projected")).toBeNull();
     expect(document.getElementById("poker-dice-info")).toBeNull();

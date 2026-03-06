@@ -30,6 +30,17 @@ function parseRoute(hash: string): RouteState {
   };
 }
 
+function getCanonicalHash(route: RouteState): string {
+  if (route.screen === "landing") return "";
+  if (route.screen === "join") {
+    if (route.join.code) {
+      return `#join=${route.join.code}`;
+    }
+    return "#join";
+  }
+  return `#${route.screen}`;
+}
+
 export function useHashRouting() {
   const [hash, setHash] = useState(() => window.location.hash || "");
 
@@ -49,11 +60,15 @@ export function useHashRouting() {
   const route = useMemo(() => parseRoute(hash), [hash]);
 
   useEffect(() => {
-    if (route.hash.toLowerCase() === "#landing") {
-      window.history.replaceState(window.history.state, "", `${window.location.pathname}${window.location.search}`);
-      setHash("");
-    }
-  }, [route.hash]);
+    const canonicalHash = getCanonicalHash(route);
+    if (route.hash === canonicalHash) return;
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `${window.location.pathname}${window.location.search}${canonicalHash}`
+    );
+    setHash(canonicalHash);
+  }, [route]);
 
   const goTo = (screen: ScreenKey, { replace = false }: { replace?: boolean } = {}) => {
     const nextHash = screen === "landing" ? "" : `#${screen}`;
