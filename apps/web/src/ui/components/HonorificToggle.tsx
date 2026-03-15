@@ -13,30 +13,48 @@ export function HonorificToggle({
   inputId,
   className = "",
   hidden = false,
-  checked,
+  checked = false,
   onChange,
   disabled = false
 }: HonorificToggleProps) {
   const classes = ["avatar-picker-toolbar", className, hidden ? "hidden" : ""].filter(Boolean).join(" ");
-  const isControlled = typeof checked === "boolean";
 
   return (
     <div id={id} className={classes}>
-      <div className="honorific-toggle" aria-label="Toggle player title">
-        <span className="honorific-label" aria-hidden="true">Mr</span>
-        <label className="switch">
-          <input
-            id={inputId}
-            data-honorific-toggle="true"
-            type="checkbox"
-            aria-label="Use Mrs player title"
-            checked={isControlled ? checked : undefined}
-            disabled={disabled}
-            onChange={(event) => onChange?.(event.currentTarget.checked)}
-          />
-          <span className="slider"></span>
-        </label>
-        <span className="honorific-label" aria-hidden="true">Mrs</span>
+      <div
+        className={`honorific-segmented${checked ? " honorific-segmented--mrs" : ""}`}
+        role="radiogroup"
+        aria-label="Player title"
+      >
+        <input
+          id={inputId}
+          type="checkbox"
+          className="honorific-segmented-input"
+          data-honorific-toggle="true"
+          aria-label="Use Mrs player title"
+          checked={checked}
+          disabled={disabled}
+          onChange={(e) => onChange?.(e.currentTarget.checked)}
+        />
+        <button
+          type="button"
+          className={`honorific-seg${!checked ? " honorific-seg--active" : ""}`}
+          aria-pressed={!checked}
+          disabled={disabled}
+          onClick={() => onChange?.(false)}
+        >
+          Mr
+        </button>
+        <button
+          type="button"
+          className={`honorific-seg${checked ? " honorific-seg--active" : ""}`}
+          aria-pressed={checked}
+          disabled={disabled}
+          onClick={() => onChange?.(true)}
+        >
+          Mrs
+        </button>
+        <span className="honorific-seg-indicator" aria-hidden="true" />
       </div>
     </div>
   );

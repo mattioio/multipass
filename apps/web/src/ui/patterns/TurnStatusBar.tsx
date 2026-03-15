@@ -131,10 +131,39 @@ export function TurnStatusBar({
     );
   }
 
-  const sides = [
-    { side: "host" as const, player: room.players.host, fallback: "Player 1", score: headerScores.host },
-    { side: "guest" as const, player: room.players.guest, fallback: "Player 2", score: headerScores.guest }
-  ];
+  const hostData = { side: "host" as const, player: room.players.host, fallback: "Player 1", score: headerScores.host };
+  const guestData = { side: "guest" as const, player: room.players.guest, fallback: "Player 2", score: headerScores.guest };
+
+  const renderPane = ({ side, player, fallback, score }: typeof hostData) => {
+    const modeText = resolveModeText(safeMode, side, activeSide, Boolean(player));
+    const paneThemeClass = player?.theme ? `theme-${player.theme}` : `theme-${side === "host" ? "red" : "green"}`;
+    const paneName = getDisplayPlayerName(player, fallback);
+    const isActive = activeSide === side;
+    return (
+      <section
+        key={side}
+        className={`turn-pane ${paneThemeClass}${!player ? " is-empty" : ""}`}
+        data-side={side}
+        data-active={isActive ? "true" : "false"}
+        aria-label={`${paneName} ${modeText}`}
+      >
+        <span className="turn-avatar" aria-hidden="true">
+          <img src={getPlayerArtSrc(player)} alt="" />
+        </span>
+        <span className="turn-meta">
+          <span className="turn-name">{paneName}</span>
+          <span className="turn-meta-row">
+            <span className="turn-state">{modeText}</span>
+          </span>
+        </span>
+        {score.showGameScore ? (
+          <span className="turn-score-game" aria-label={`Current game score ${score.gameScore}`}>
+            {score.gameScore}
+          </span>
+        ) : null}
+      </section>
+    );
+  };
 
   return (
     <div
@@ -144,36 +173,9 @@ export function TurnStatusBar({
       data-mode={safeMode}
       data-active-side={activeSide}
     >
-      {sides.map(({ side, player, fallback, score }) => {
-        const modeText = resolveModeText(safeMode, side, activeSide, Boolean(player));
-        const paneThemeClass = player?.theme ? `theme-${player.theme}` : `theme-${side === "host" ? "red" : "green"}`;
-        const paneName = getDisplayPlayerName(player, fallback);
-        const isActive = activeSide === side;
-        return (
-          <section
-            key={side}
-            className={`turn-pane ${paneThemeClass}${!player ? " is-empty" : ""}`}
-            data-side={side}
-            data-active={isActive ? "true" : "false"}
-            aria-label={`${paneName} ${modeText}`}
-          >
-            <span className="turn-avatar" aria-hidden="true">
-              <img src={getPlayerArtSrc(player)} alt="" />
-            </span>
-            <span className="turn-meta">
-              <span className="turn-name">{paneName}</span>
-              <span className="turn-meta-row">
-                <span className="turn-state">{modeText}</span>
-              </span>
-            </span>
-            {score.showGameScore ? (
-              <span className="turn-score-game" aria-label={`Current game score ${score.gameScore}`}>
-                {score.gameScore}
-              </span>
-            ) : null}
-          </section>
-        );
-      })}
+      {renderPane(hostData)}
+      <span className="turn-indicator-vs" aria-hidden="true">VS</span>
+      {renderPane(guestData)}
     </div>
   );
 }

@@ -4,7 +4,7 @@ export interface AppUiState {
   activeScreen: ScreenKey;
   hasRoom: boolean;
   roomCode: string | null;
-  connectionStatus: "connected" | "connecting" | "disconnected";
+  connectionStatus: "connected" | "connecting" | "disconnected" | "reconnecting";
   currentGameId: string | null;
   isSettingsOpen: boolean;
 }

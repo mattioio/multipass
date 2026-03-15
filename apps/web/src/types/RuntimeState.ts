@@ -1,7 +1,6 @@
 import type { RoomState } from "./RoomState";
 
-export type RuntimeMode = "react" | "legacy";
-export type RuntimeConnectionStatus = "connected" | "connecting" | "disconnected";
+export type RuntimeConnectionStatus = "connected" | "connecting" | "disconnected" | "reconnecting";
 export type RuntimeAppMode = "online" | "local";
 
 export interface RuntimeYouState {
@@ -39,7 +38,6 @@ export interface RuntimeJoinState {
 }
 
 export interface RuntimeState {
-  runtimeMode: RuntimeMode;
   mode: RuntimeAppMode;
   ws: WebSocket | null;
   connectionStatus: RuntimeConnectionStatus;

@@ -9,7 +9,6 @@ import {
 } from "react";
 import type { RuntimeState } from "../../types";
 import { runtimeActions } from "./actions";
-import { resolveRuntimeMode } from "./mode";
 import { persistLastRoom } from "./persistence";
 import { runtimeReducer } from "./reducer";
 import { createInitialRuntimeState } from "./state";
@@ -32,9 +31,8 @@ export interface RuntimeContextValue {
 const RuntimeContext = createContext<RuntimeContextValue | null>(null);
 
 export function RuntimeProvider({ children }: PropsWithChildren) {
-  const runtimeMode = resolveRuntimeMode();
   const isTestMode = import.meta.env.MODE === "test";
-  const [state, dispatch] = useReducer(runtimeReducer, runtimeMode, createInitialRuntimeState);
+  const [state, dispatch] = useReducer(runtimeReducer, undefined, createInitialRuntimeState);
   const stateRef = useRef(state);
   const sessionRef = useRef<RuntimeWsSession | null>(null);
   const pendingValidateCodeRef = useRef<string | null>(null);
@@ -44,7 +42,7 @@ export function RuntimeProvider({ children }: PropsWithChildren) {
   }, [state]);
 
   useEffect(() => {
-    if (runtimeMode !== "react" || isTestMode) return;
+    if (isTestMode) return;
     const session = createRuntimeWsSession({
       dispatch,
       getState: () => stateRef.current,
@@ -67,7 +65,7 @@ export function RuntimeProvider({ children }: PropsWithChildren) {
       session.disconnect();
       sessionRef.current = null;
     };
-  }, [isTestMode, runtimeMode]);
+  }, [isTestMode]);
 
   const value = useMemo<RuntimeContextValue>(() => {
     return {

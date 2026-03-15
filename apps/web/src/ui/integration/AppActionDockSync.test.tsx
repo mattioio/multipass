@@ -1,5 +1,5 @@
 import { fireEvent, render } from "@testing-library/react";
-import { syncDockFromSourceButtons } from "../../legacy/appDockSync.js";
+import { syncDockFromSourceButtons } from "../shared/appDockSync.js";
 import { App } from "../App";
 
 describe("App action dock sync", () => {

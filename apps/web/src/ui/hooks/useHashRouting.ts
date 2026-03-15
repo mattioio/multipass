@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { RouteState, ScreenKey } from "../../types";
-import { parseScreenRoute } from "../../legacy/hashRoute.js";
+import { parseScreenRoute } from "../../net/hashRoute.js";
 
 const HASH_TO_SCREEN: Record<string, ScreenKey> = {
   "": "landing",

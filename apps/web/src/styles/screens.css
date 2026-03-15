@@ -1,143 +1,204 @@
+/* ── Game Grid ─────────────────────────────────────── */
 .game-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--space-4);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: clamp(10px, 1.2vw, 14px);
+  perspective: 900px;
 }
 
-@media (max-width: 1100px) {
-  .game-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
+/* ── Game Card — Collectible trading card ─────────── */
 .game-card {
-  padding: 0;
-  gap: 0;
-  text-align: left;
-  font-weight: 600;
+  --card-color: #5b7af0;
+  --card-color-dark: #2a3880;
+  --card-rx: 0deg;
+  --card-ry: 0deg;
+  --card-shine-x: 50%;
+  --card-shine-y: 50%;
   position: relative;
-  background: var(--shell-bg);
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--border) 90%, #ffffff);
-  box-shadow: var(--shadow-md);
-  transition: transform var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out);
+  border-radius: 16px;
+  aspect-ratio: 5 / 4;
+  cursor: pointer;
+  padding: 0;
+  border: 3px solid var(--card-color);
+  background: var(--card-color-dark);
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 color-mix(in srgb, var(--card-color) 60%, white);
+  transition:
+    transform 400ms cubic-bezier(0.03, 0.98, 0.52, 0.99),
+    box-shadow 400ms var(--ease-out);
+  transform-style: preserve-3d;
+  will-change: transform;
+  transform: perspective(800px) rotateX(var(--card-rx)) rotateY(var(--card-ry));
 }
 
 .game-card:hover {
-  border-color: color-mix(in srgb, var(--cta) 38%, var(--border));
-  box-shadow: 0 16px 28px color-mix(in srgb, var(--cta) 20%, transparent);
+  box-shadow:
+    0 20px 40px rgba(0, 0, 0, 0.5),
+    0 0 20px color-mix(in srgb, var(--card-color) 25%, transparent),
+    0 0 0 1px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 color-mix(in srgb, var(--card-color) 80%, white);
 }
 
+.game-card:active {
+  transform: perspective(800px) scale(0.97);
+  transition-duration: 100ms;
+}
+
+/* Gloss highlight — follows mouse position */
 .game-card::before {
   content: "";
   position: absolute;
   inset: 0;
-  border-radius: inherit;
+  z-index: 6;
   pointer-events: none;
-  border: 1px solid color-mix(in srgb, #ffffff 25%, transparent);
-  opacity: 0.78;
+  border-radius: inherit;
+  background: radial-gradient(
+    circle at var(--card-shine-x) var(--card-shine-y),
+    rgba(255, 255, 255, 0.12) 0%,
+    rgba(255, 255, 255, 0.04) 40%,
+    transparent 70%
+  );
+  opacity: 0;
+  transition: opacity 400ms var(--ease-out);
 }
 
+.game-card:hover::before {
+  opacity: 1;
+}
+
+/* ── Banner (card art area) ──────────────────────── */
 .game-banner {
-  min-height: 172px;
-  padding: 16px;
+  position: absolute;
+  inset: 0;
+  bottom: 56px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
-  position: relative;
+  background-image: var(--game-banner-gradient);
+  background-size: 100% 100%;
+  border-radius: 12px 12px 0 0;
   overflow: hidden;
-  background-image:
-    var(--game-banner-gradient),
-    var(--scratch-texture-image);
-  background-repeat: no-repeat, repeat;
-  background-size: 100% 100%, var(--scratch-size-surface);
-  background-position: 0 0, 0 0;
-  background-blend-mode: normal, screen;
 }
 
+/* Game icon — large and centered */
 .game-banner::after {
   content: "";
   position: absolute;
   inset: 0;
-  background-color: var(--game-banner-icon-color, color-mix(in srgb, #ffffff 72%, transparent));
+  background-color: rgba(255, 255, 255, 0.18);
   -webkit-mask-image: var(--game-banner-image);
   -webkit-mask-repeat: no-repeat;
-  -webkit-mask-size: 62% auto;
+  -webkit-mask-size: 52% auto;
   -webkit-mask-position: center center;
   mask-image: var(--game-banner-image);
   mask-repeat: no-repeat;
-  mask-size: 62% auto;
+  mask-size: 52% auto;
   mask-position: center center;
-  opacity: 1;
   pointer-events: none;
   z-index: 1;
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.3));
+  transition: transform 320ms cubic-bezier(0.32, 0.72, 0, 1), opacity 320ms var(--ease-out);
 }
 
+.game-card:hover .game-banner::after {
+  transform: scale(1.1) translateY(-2px);
+  opacity: 1;
+  background-color: rgba(255, 255, 255, 0.28);
+}
+
+/* Highlight hotspot — top-left shine */
 .game-banner::before {
   content: "";
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(circle at 18% 18%, color-mix(in srgb, #ffffff 14%, transparent), transparent 52%),
-    repeating-linear-gradient(-28deg, color-mix(in srgb, #ffffff 6%, transparent) 0 10px, transparent 10px 20px);
-  opacity: 0.2;
+    radial-gradient(ellipse 60% 40% at 25% 15%, rgba(255, 255, 255, 0.22), transparent 55%),
+    radial-gradient(ellipse 40% 50% at 80% 85%, rgba(0, 0, 0, 0.15), transparent 50%);
   pointer-events: none;
   z-index: 2;
 }
 
 .game-banner-label {
-  position: relative;
-  z-index: 3;
-  font-family: var(--title-font);
-  font-size: 1.1rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: #ffffff;
-  text-shadow: 0 2px 8px rgba(7, 12, 24, 0.45);
+  display: none;
 }
 
+/* ── Per-game colours ────────────────────────────── */
 .game-banner-tic-tac-toe {
-  --game-banner-gradient: linear-gradient(135deg, #4f6ce6 0%, #2f3ea8 50%, #1d274f 100%);
+  --game-banner-gradient: linear-gradient(160deg, #6b8af8 0%, #3b55d0 45%, #1e2e78 100%);
   --game-banner-image: url("../assets/games/game-ttt.svg");
-  --game-banner-icon-color: color-mix(in srgb, #4f6ce6 68%, #dce6ff);
+}
+
+.game-card:has(.game-banner-tic-tac-toe) {
+  --card-color: #5b7af0;
+  --card-color-dark: #1a2668;
 }
 
 .game-banner-dots-and-boxes {
-  --game-banner-gradient: linear-gradient(135deg, #d89238 0%, #bf5a2a 54%, #6f2f35 100%);
+  --game-banner-gradient: linear-gradient(160deg, #f0a840 0%, #d06028 45%, #702820 100%);
   --game-banner-image: url("../assets/games/game-dotsandboxes.svg");
-  --game-banner-icon-color: color-mix(in srgb, #d06f2f 72%, #ffe6c8);
+}
+
+.game-card:has(.game-banner-dots-and-boxes) {
+  --card-color: #e09940;
+  --card-color-dark: #5a2218;
 }
 
 .game-banner-word-fight {
-  --game-banner-gradient: linear-gradient(135deg, #8c4fd8 0%, #6c2faf 52%, #3a1a68 100%);
+  --game-banner-gradient: linear-gradient(160deg, #b06ef0 0%, #7838c0 45%, #3a1870 100%);
   --game-banner-image: url("../assets/games/game-words.svg");
-  --game-banner-icon-color: color-mix(in srgb, #8a56db 70%, #f1dcff);
+}
+
+.game-card:has(.game-banner-word-fight) {
+  --card-color: #9b5ee0;
+  --card-color-dark: #2a1050;
 }
 
 .game-banner-poker-dice {
-  --game-banner-gradient: linear-gradient(135deg, #4a8f44 0%, #2f6f3f 48%, #1d4d30 100%);
+  --game-banner-gradient: linear-gradient(160deg, #60b858 0%, #388840 45%, #1a4020 100%);
   --game-banner-image: url("../assets/games/game-poker.svg");
-  --game-banner-icon-color: color-mix(in srgb, #79c974 72%, #dff4df);
 }
 
+.game-card:has(.game-banner-poker-dice) {
+  --card-color: #50a048;
+  --card-color-dark: #163818;
+}
+
+/* ── Meta (solid ribbon at bottom) ───────────────── */
 .game-meta {
-  display: grid;
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 8px;
-  padding: 14px 16px 16px;
+  padding: 0 12px;
+  height: 56px;
+  background: var(--card-color-dark);
+  border-top: 2px solid color-mix(in srgb, var(--card-color) 50%, var(--card-color-dark));
 }
 
 .game-name-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
 }
 
 .game-name {
   margin: 0;
-  font-size: 1.12rem;
+  font-size: clamp(0.85rem, 1.3vw, 1.05rem);
+  font-weight: 800;
   letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #ffffff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
 }
 
 .pick-status {
@@ -150,65 +211,87 @@
 
 .game-cta-row {
   display: flex;
-  justify-content: flex-start;
-  margin-top: 8px;
+  flex-shrink: 0;
 }
 
 .game-cta {
-  min-height: 38px;
-  border-radius: 999px;
-  padding: 0 16px;
-  border: 1px solid color-mix(in srgb, var(--cta) 46%, var(--border));
-  background: color-mix(in srgb, var(--cta) 86%, #ffffff);
-  color: var(--cta-text);
+  min-height: 30px;
+  border-radius: 10px;
+  padding: 0 14px;
+  border: 1px solid color-mix(in srgb, var(--card-color) 60%, white);
+  background: var(--card-color);
+  color: #ffffff;
   font-family: var(--title-font);
-  font-weight: 700;
-  letter-spacing: 0.02em;
+  font-weight: 800;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   cursor: pointer;
-  transition: transform var(--motion-fast) var(--ease-out), filter var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  box-shadow:
+    0 4px 0 0 color-mix(in srgb, var(--card-color) 45%, black),
+    inset 0 1px 0 color-mix(in srgb, var(--card-color) 50%, white);
+  transform: translateY(0);
+  transition:
+    background 120ms var(--ease-out),
+    transform 80ms var(--ease-out),
+    box-shadow 80ms var(--ease-out);
 }
 
 .game-cta:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--card-color) 80%, white);
+  box-shadow:
+    0 5px 0 0 color-mix(in srgb, var(--card-color) 45%, black),
+    inset 0 1px 0 color-mix(in srgb, var(--card-color) 40%, white);
   transform: translateY(-1px);
-  box-shadow: 0 10px 18px color-mix(in srgb, var(--cta) 30%, transparent);
+}
+
+.game-cta:active:not(:disabled) {
+  transform: translateY(4px);
+  box-shadow:
+    0 0 0 0 color-mix(in srgb, var(--card-color) 45%, black),
+    inset 0 2px 6px rgba(0, 0, 0, 0.3);
 }
 
 .game-cta.is-agree {
-  background: color-mix(in srgb, #f4d77b 88%, #ffffff);
-  border-color: color-mix(in srgb, #d8a517 70%, var(--border));
+  background: #d8a517;
+  border-color: #f4d77b;
   color: #2b2200;
+  text-shadow: none;
 }
 
 .game-cta:disabled {
   cursor: not-allowed;
-  background: color-mix(in srgb, var(--surface-2) 88%, var(--surface));
-  color: var(--muted);
-  border-color: var(--border);
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.35);
   box-shadow: none;
+  text-shadow: none;
 }
 
+/* ── Chips ────────────────────────────────────────── */
 .game-chip {
-  border-radius: 999px;
-  padding: 4px 9px;
-  font-size: 0.66rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  border-radius: 6px;
+  padding: 2px 7px;
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  background: color-mix(in srgb, #f5b7c7 35%, var(--surface));
-  border: 1px solid color-mix(in srgb, var(--cta) 52%, transparent);
-  color: color-mix(in srgb, var(--text) 86%, var(--cta));
+  white-space: nowrap;
+  background: color-mix(in srgb, var(--card-color) 40%, transparent);
+  border: 1px solid color-mix(in srgb, var(--card-color) 60%, white);
+  color: #ffffff;
 }
 
 .choice-chip {
-  background: color-mix(in srgb, var(--cta) 26%, var(--surface));
-  border-color: color-mix(in srgb, var(--cta) 64%, transparent);
-  color: color-mix(in srgb, var(--text) 90%, var(--cta));
+  background: color-mix(in srgb, var(--card-color) 50%, transparent);
+  border-color: color-mix(in srgb, var(--card-color) 70%, white);
 }
 
 .waiting-chip {
-  background: color-mix(in srgb, #f4d77b 35%, var(--surface));
-  border-color: color-mix(in srgb, #d8a517 60%, transparent);
-  color: color-mix(in srgb, #3a2a00 75%, var(--text));
+  background: rgba(244, 215, 123, 0.3);
+  border-color: #f4d77b;
+  color: #fff;
 }
 
 .blocked-chip {
@@ -224,17 +307,29 @@
 }
 
 .game-card.active {
-  border-color: var(--cta);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--cta) 34%, transparent), 0 16px 28px color-mix(in srgb, var(--cta) 26%, transparent);
+  border-color: color-mix(in srgb, var(--card-color) 70%, white);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--card-color) 50%, transparent),
+    0 0 20px color-mix(in srgb, var(--card-color) 40%, transparent),
+    0 12px 32px rgba(0, 0, 0, 0.5);
 }
 
 .game-card.awaiting-agree {
-  border-color: color-mix(in srgb, #d8a517 54%, var(--border));
-  box-shadow: 0 16px 28px color-mix(in srgb, #d8a517 18%, transparent);
+  border-color: #f4d77b;
+  box-shadow:
+    0 0 0 3px rgba(244, 215, 123, 0.4),
+    0 0 20px rgba(244, 215, 123, 0.2),
+    0 12px 32px rgba(0, 0, 0, 0.4);
 }
 
 .game-card.coming-soon {
-  border-style: dashed;
+  opacity: 0.5;
+  filter: saturate(0.4) brightness(0.7);
+}
+
+.game-card.coming-soon:hover {
+  opacity: 0.65;
+  filter: saturate(0.6) brightness(0.8);
 }
 
 .game-panel {
@@ -309,7 +404,7 @@
 
 #screen-game .game-screen-layout {
   display: grid;
-  gap: 10px;
+  gap: 6px;
   min-height: 0;
 }
 
@@ -495,20 +590,38 @@ body[data-screen="game"] #screen-game .game-surface-actions {
 }
 
 .turn-indicator {
-  --turn-bar-height: clamp(56px, 8vw, 64px);
-  --turn-avatar-size: clamp(56px, 8vw, 64px);
+  --turn-bar-height: clamp(72px, 10vw, 88px);
+  --turn-avatar-size: clamp(72px, 10vw, 88px);
   --turn-gap: clamp(10px, 1.2vw, 14px);
   margin: 0;
   height: var(--turn-bar-height);
-  max-height: 64px;
+  max-height: 88px;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   gap: 0;
   padding: 0;
-  border-radius: var(--radius-md);
+  border-radius: 16px;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--shell-border) 84%, #ffffff2e);
-  box-shadow: 0 10px 22px color-mix(in srgb, #070512 36%, transparent);
+  border: 2px solid color-mix(in srgb, var(--shell-border) 84%, #ffffff2e);
+  box-shadow:
+    0 4px 0 0 color-mix(in srgb, #070512 50%, transparent),
+    0 12px 28px color-mix(in srgb, #070512 36%, transparent);
+}
+
+.turn-indicator-vs {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  background: color-mix(in srgb, #0d0a1d 85%, transparent);
+  font-family: var(--title-font);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, #ffffff 60%, transparent);
+  border-inline: 1px solid color-mix(in srgb, #ffffff 12%, transparent);
+  z-index: 3;
 }
 
 .turn-pane {
@@ -647,13 +760,14 @@ body[data-screen="game"] #screen-game .game-surface-actions {
 
 .turn-name {
   font-family: var(--title-font);
-  font-size: clamp(1rem, 1.45vw, 1.28rem);
+  font-size: clamp(1.05rem, 1.6vw, 1.35rem);
   font-weight: 700;
-  line-height: 1;
+  line-height: 1.1;
   color: #ffffff;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
 }
 
 .turn-state {
@@ -769,28 +883,21 @@ body[data-screen="game"] #screen-game .game-surface-actions {
 }
 
 .ttt-board {
-  --ttt-line-thickness: clamp(2px, 0.42vw, 4px);
-  --ttt-line-color: #111111;
-  --ttt-line-opacity: 0.2;
+  --ttt-line-thickness: 2px;
+  --ttt-line-color: #ffffff;
+  --ttt-line-opacity: 0.1;
   display: grid;
   grid-template-columns: repeat(3, minmax(64px, 1fr));
   gap: 0;
-  padding: clamp(10px, 1.1vw, 14px);
-  width: min(100%, 640px);
+  padding: 0;
+  width: min(100%, 420px);
   margin-inline: auto;
-  border-radius: clamp(16px, 2vw, 22px);
-  border: 1px solid color-mix(in srgb, var(--border) 70%, #ffffff30);
-  background:
-    linear-gradient(
-      160deg,
-      color-mix(in srgb, var(--surface) 88%, #ffffff08) 0%,
-      color-mix(in srgb, var(--surface-2) 92%, #0d0a1d 8%) 100%
-    );
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, #ffffff24 48%, transparent),
-    0 16px 28px color-mix(in srgb, #05030f 38%, transparent);
+  border-radius: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
   position: relative;
-  overflow: hidden;
+  overflow: visible;
   transition:
     border-color var(--motion-fast) var(--ease-out),
     box-shadow var(--motion-fast) var(--ease-out);
@@ -854,17 +961,11 @@ body[data-mode="dark"] .ttt-board {
 }
 
 .ttt-board.game-board-highlight {
-  border-color: color-mix(in srgb, var(--theme-strong, var(--cta)) 44%, var(--border));
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, #ffffff26 52%, transparent),
-    0 18px 30px color-mix(in srgb, #05030f 40%, transparent);
+  --ttt-line-opacity: 0.14;
 }
 
 .ttt-board.game-board-passive {
-  border-color: color-mix(in srgb, var(--border) 84%, #ffffff14);
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, #ffffff1a 38%, transparent),
-    0 12px 24px color-mix(in srgb, #05030f 32%, transparent);
+  --ttt-line-opacity: 0.08;
 }
 
 .unsupported-game-layout {
@@ -944,8 +1045,8 @@ body[data-mode="dark"] .ttt-board {
   min-width: 0;
   min-height: 42px;
   padding: 0;
-  border-radius: 8px;
-  border: 1px solid var(--border);
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, #ffffff18);
   background: color-mix(in srgb, var(--surface-2) 84%, var(--surface));
   color: var(--text);
   font-weight: 700;
@@ -955,11 +1056,25 @@ body[data-mode="dark"] .ttt-board {
   cursor: pointer;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
+  box-shadow:
+    0 3px 0 0 color-mix(in srgb, var(--surface-3) 80%, #000000),
+    inset 0 1px 0 color-mix(in srgb, #ffffff 8%, transparent);
+  transform: translateY(0);
+  transition: transform 80ms var(--ease-out), box-shadow 80ms var(--ease-out);
 }
 
-.word-fight-key:hover {
-  transform: none;
-  box-shadow: none;
+.word-fight-key:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow:
+    0 4px 0 0 color-mix(in srgb, var(--surface-3) 80%, #000000),
+    inset 0 1px 0 color-mix(in srgb, #ffffff 10%, transparent);
+}
+
+.word-fight-key:active:not(:disabled) {
+  transform: translateY(3px);
+  box-shadow:
+    0 0 0 0 color-mix(in srgb, var(--surface-3) 80%, #000000),
+    inset 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 .word-fight-key:disabled {
@@ -989,10 +1104,19 @@ body[data-mode="dark"] .ttt-board {
 }
 
 .word-fight-board-card {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--surface-2) 72%, var(--surface));
-  padding: 10px;
+  border: 2px solid color-mix(in srgb, var(--border) 60%, #ffffff20);
+  border-radius: 20px;
+  background:
+    linear-gradient(
+      160deg,
+      color-mix(in srgb, var(--surface) 80%, #1a1530 20%) 0%,
+      color-mix(in srgb, var(--surface-2) 85%, #0d0a1d 15%) 100%
+    );
+  padding: clamp(12px, 1.6vw, 18px);
+  box-shadow:
+    0 4px 0 0 color-mix(in srgb, #05030f 60%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #ffffff20 48%, transparent),
+    0 16px 28px color-mix(in srgb, #05030f 38%, transparent);
 }
 
 .word-fight-board-card-single {
@@ -1045,15 +1169,19 @@ body[data-mode="dark"] .ttt-board {
 
 .word-fight-tile {
   aspect-ratio: 1 / 1;
-  border-radius: 8px;
-  border: 1px solid var(--border);
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, #ffffff14);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   font-weight: 700;
+  font-size: clamp(1.1rem, 2vw, 1.4rem);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   background: color-mix(in srgb, var(--surface-2) 84%, var(--surface));
+  box-shadow:
+    0 2px 0 0 color-mix(in srgb, #05030f 30%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #ffffff 6%, transparent);
 }
 
 .word-fight-tile.is-exact {
@@ -1105,9 +1233,22 @@ body[data-mode="dark"] .ttt-board {
 
 .poker-dice-layout {
   display: grid;
-  gap: 12px;
-  width: min(100%, 460px);
+  gap: 14px;
+  width: min(100%, 480px);
   margin-inline: auto;
+  padding: clamp(14px, 2vw, 20px);
+  border-radius: 20px;
+  border: 2px solid color-mix(in srgb, var(--border) 60%, #ffffff20);
+  background:
+    linear-gradient(
+      160deg,
+      color-mix(in srgb, var(--surface) 80%, #1a1530 20%) 0%,
+      color-mix(in srgb, var(--surface-2) 85%, #0d0a1d 15%) 100%
+    );
+  box-shadow:
+    0 4px 0 0 color-mix(in srgb, #05030f 60%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #ffffff20 48%, transparent),
+    0 16px 28px color-mix(in srgb, #05030f 38%, transparent);
 }
 
 .poker-dice-round-title {
@@ -1343,7 +1484,7 @@ body[data-mode="dark"] .ttt-board {
 
 .poker-dice-score-rows {
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .poker-dice-score-row {
@@ -1351,10 +1492,11 @@ body[data-mode="dark"] .ttt-board {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  border: 1px solid var(--border);
+  border: 1px solid color-mix(in srgb, var(--border) 70%, #ffffff14);
   border-radius: 10px;
-  padding: 8px 10px;
+  padding: 8px 12px;
   background: color-mix(in srgb, var(--surface-2) 74%, var(--surface));
+  box-shadow: 0 2px 0 0 color-mix(in srgb, #05030f 20%, transparent);
   transition:
     border-color var(--motion-fast) var(--ease-out),
     box-shadow var(--motion-fast) var(--ease-out),
@@ -1452,6 +1594,21 @@ body[data-mode="dark"] .ttt-board {
 .dots-layout {
   display: grid;
   gap: 8px;
+  width: min(100%, 480px);
+  margin-inline: auto;
+  padding: clamp(14px, 2vw, 20px);
+  border-radius: 20px;
+  border: 2px solid color-mix(in srgb, var(--border) 60%, #ffffff20);
+  background:
+    linear-gradient(
+      160deg,
+      color-mix(in srgb, var(--surface) 80%, #1a1530 20%) 0%,
+      color-mix(in srgb, var(--surface-2) 85%, #0d0a1d 15%) 100%
+    );
+  box-shadow:
+    0 4px 0 0 color-mix(in srgb, #05030f 60%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #ffffff20 48%, transparent),
+    0 16px 28px color-mix(in srgb, #05030f 38%, transparent);
 }
 
 .dots-board {
@@ -1463,7 +1620,7 @@ body[data-mode="dark"] .ttt-board {
   --dots-idle-line-color: color-mix(in srgb, var(--dots-dot-color) 86%, transparent);
   --dots-playable-line-color: color-mix(in srgb, var(--dots-dot-color) 100%, #ffffff 0%);
   --dots-last-move-ring-color: color-mix(in srgb, var(--dots-dot-color) 72%, transparent);
-  width: min(100%, 620px);
+  width: 100%;
   aspect-ratio: 1 / 1;
   margin-inline: auto;
   display: grid;
@@ -1721,71 +1878,62 @@ body[data-mode="dark"] .dots-board {
   box-shadow: none;
   position: relative;
   z-index: 1;
+  cursor: pointer;
   transition:
     background var(--motion-fast) var(--ease-out),
-    box-shadow var(--motion-fast) var(--ease-out),
-    transform var(--motion-fast) var(--ease-out);
+    transform 80ms var(--ease-out);
 }
 
 .ttt-cell:not(:disabled):hover {
-  transform: none;
-  background: color-mix(in srgb, var(--ttt-line-color) 9%, transparent);
+  background: color-mix(in srgb, #ffffff 5%, transparent);
 }
 
 .ttt-board.has-winning-line.is-finished .ttt-cell:not(.is-winning) {
-  opacity: 0.58;
+  opacity: 0.42;
 }
 
 .ttt-cell.is-winning {
-  border: 0;
-  background: color-mix(in srgb, var(--theme-soft, var(--surface)) 26%, transparent);
-  box-shadow: none;
+  background: color-mix(in srgb, var(--theme-soft, var(--cta)) 14%, transparent);
 }
 
 .ttt-cell.is-winning .ttt-mark {
   filter:
     drop-shadow(0 2px 4px rgba(8, 12, 22, 0.34))
-    drop-shadow(0 0 8px color-mix(in srgb, var(--theme-strong, var(--cta)) 30%, transparent));
+    drop-shadow(0 0 10px color-mix(in srgb, var(--theme-strong, var(--cta)) 40%, transparent));
 }
 
 @keyframes ttt-win-reason-pulse {
   0% {
-    background: color-mix(in srgb, var(--theme-soft, var(--surface)) 24%, transparent);
+    background: color-mix(in srgb, var(--theme-soft, var(--surface)) 18%, transparent);
   }
   42% {
-    background: color-mix(in srgb, var(--theme-soft, var(--surface)) 36%, transparent);
+    background: color-mix(in srgb, var(--theme-soft, var(--surface)) 30%, transparent);
   }
   100% {
-    background: color-mix(in srgb, var(--theme-soft, var(--surface)) 30%, transparent);
+    background: color-mix(in srgb, var(--theme-soft, var(--surface)) 24%, transparent);
   }
 }
 
 .ttt-cell.is-win-reason {
-  border: 0;
-  box-shadow: none;
   animation: ttt-win-reason-pulse var(--win-reason-cell-ms, 700ms) var(--ease-out) 1 both;
 }
 
 .ttt-cell.is-win-reason .ttt-mark {
   filter:
     drop-shadow(0 2px 4px rgba(8, 12, 22, 0.34))
-    drop-shadow(0 0 12px color-mix(in srgb, var(--theme-strong, var(--cta)) 46%, transparent));
+    drop-shadow(0 0 14px color-mix(in srgb, var(--theme-strong, var(--cta)) 50%, transparent));
 }
 
 .ttt-cell.is-preview {
-  transform: none;
-  border: 0;
-  background: color-mix(in srgb, var(--theme-soft, var(--cta)) 24%, transparent);
-  box-shadow: none;
+  background: color-mix(in srgb, var(--theme-soft, var(--cta)) 12%, transparent);
 }
 
 .ttt-cell.is-pressing {
-  transform: none;
-  background: color-mix(in srgb, var(--theme-soft, var(--cta)) 30%, transparent);
+  transform: scale(0.95);
+  background: color-mix(in srgb, var(--theme-soft, var(--cta)) 18%, transparent);
 }
 
 .ttt-cell:disabled {
-  background: transparent;
   opacity: 1;
   cursor: default;
 }
@@ -2156,12 +2304,13 @@ body[data-mode="dark"] .dots-board {
   }
 
   .score-duel-panel {
-    padding: 8px;
+    padding: 0;
   }
 
   .score-duel-sides {
     gap: 6px;
     justify-content: flex-start;
+    max-width: none;
   }
 
   .score-duel-side {
@@ -2408,20 +2557,14 @@ body[data-mode="dark"] .dots-board {
   }
 
   .local-avatar-grid .avatar-lower-third {
-    left: 0;
-    right: auto;
-    bottom: 0;
-    max-width: calc(100% - 20px);
-    min-height: 40px;
-    width: auto;
-    justify-content: flex-start;
-    border-radius: 0 8px 0 0;
-    text-align: left;
-    z-index: 2;
+    left: 5px;
+    bottom: 5px;
+    min-height: 26px;
+    padding: 4px 8px;
   }
 
   .local-avatar-grid .avatar-option .avatar-name {
-    font-size: clamp(1.05rem, 4.6vw, 1.35rem);
+    font-size: clamp(0.85rem, 3.8vw, 1.1rem);
   }
 
   .local-header-row {
@@ -2439,27 +2582,39 @@ body[data-mode="dark"] .dots-board {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  body[data-screen="local"] #local-continue,
-  body[data-screen="host"] #create-room,
-  body[data-screen="join"] #join-room {
-    display: none;
-  }
-
   .screen-head {
     justify-content: stretch;
   }
 
   .game-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .game-card {
+    aspect-ratio: 5 / 4;
+    border-width: 2px;
   }
 
   .game-banner {
-    min-height: 140px;
-    padding: 14px;
+    bottom: 38px;
   }
 
   .game-meta {
-    padding: 12px 14px 14px;
+    height: 38px;
+    padding: 0 8px;
+  }
+
+  .game-name {
+    font-size: 0.68rem;
+  }
+
+  .game-cta {
+    min-height: 26px;
+    padding: 0 10px;
+    font-size: 0.65rem;
+    border-width: 1px;
+    border-radius: 8px;
   }
 
   .dots-board {

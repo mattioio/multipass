@@ -12,13 +12,16 @@
     "smoke": "playwright test",
     "smoke:contract": "playwright test tests/smoke/ws-avatar-contract.spec.js tests/smoke/ws-security.spec.js tests/smoke/ws-turn-order-contract.spec.js",
     "smoke:local": "playwright test tests/smoke/local-flow.spec.js",
-    "smoke:online": "playwright test tests/smoke/online-flow.spec.js"
+    "smoke:online": "playwright test tests/smoke/online-flow.spec.js",
+    "test": "vitest run"
   },
   "devDependencies": {
     "@playwright/test": "^1.51.1",
-    "concurrently": "^9.2.1"
+    "concurrently": "^9.2.1",
+    "vitest": "^4.1.0"
   },
   "dependencies": {
+    "better-sqlite3": "^12.8.0",
     "ws": "^8.16.0"
   }
 }

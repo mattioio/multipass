@@ -1,4 +1,6 @@
 export { AppShell } from "./AppShell";
+export { NavBar, HomeIcon, BackIcon, SettingsIcon } from "./NavBar";
+export type { NavBarProps, NavBarAction } from "./NavBar";
 export { AppActionDock } from "./AppActionDock";
 export { Screen } from "./Screen";
 export { Card } from "./Card";

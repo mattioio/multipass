@@ -1,8 +1,11 @@
-import { useCallback, useEffect, useMemo, useState, type PropsWithChildren } from "react";
+import { useCallback, useEffect, useMemo, useState, type PropsWithChildren, type ReactNode } from "react";
 import { useRuntime } from "../../app/runtime";
-import { copyRoomInviteLink } from "../../legacy/shareLink.js";
+import { copyRoomInviteLink } from "../../net/shareLink.js";
 import { useAppRouter } from "../routing/AppRouter";
-import { ActionToast, AppActionDock, AppShell, Button, Modal, Toast } from "../components";
+import { ActionToast, AppShell, NavBar, HomeIcon, BackIcon, SettingsIcon, Button, Modal, Toast } from "../components";
+import { RoomCodeShareRow } from "../patterns/RoomCodeShareRow";
+import { SETUP_SHEET_SCREENS } from "../screens/app/appScreensUtils";
+import multipassLogo from "../../assets/multipass-logo.svg";
 
 export interface AppLayoutProps extends PropsWithChildren {
   isDevBuild: boolean;
@@ -22,21 +25,23 @@ function normalizeUiMode(rawValue: unknown): UiMode | null {
 }
 
 export function AppLayout({ children, isDevBuild }: AppLayoutProps) {
-  const { state, setSettingsOpen } = useRuntime();
+  const { state, setSettingsOpen, setMode, send, connect, disconnect } = useRuntime();
   const { route, goTo } = useAppRouter();
-  const isReactRuntime = state.runtimeMode === "react";
   const [shareLabel, setShareLabel] = useState("Share");
   const [shareBusy, setShareBusy] = useState(false);
   const [uiMode, setUiMode] = useState<UiMode>("light");
 
-  const openSettings = isReactRuntime ? () => setSettingsOpen(true) : undefined;
-  const closeSettings = isReactRuntime ? () => setSettingsOpen(false) : undefined;
+  const openSettings = () => setSettingsOpen(true);
+  const closeSettings = () => setSettingsOpen(false);
+
+  const screen = route.screen;
+  const isLocalMode = state.mode === "local";
+
   const showHeroRoom = useMemo(() => {
-    if (!isReactRuntime) return false;
     if (state.mode !== "online") return false;
     if (!state.room?.code) return false;
-    return route.screen === "lobby" || route.screen === "wait" || route.screen === "winner";
-  }, [isReactRuntime, route.screen, state.mode, state.room?.code]);
+    return screen === "lobby" || screen === "wait" || screen === "winner";
+  }, [screen, state.mode, state.room?.code]);
 
   const handleShareRoom = useCallback(async () => {
     if (!state.room?.code || shareBusy) return;
@@ -52,8 +57,71 @@ export function AppLayout({ children, isDevBuild }: AppLayoutProps) {
     setShareBusy(false);
   }, [shareBusy, state.room?.code]);
 
+  const handleGoHome = useCallback(() => {
+    if (isLocalMode) {
+      setMode("online");
+      goTo("landing", { replace: false });
+      return;
+    }
+    send({ type: "leave_room" });
+    goTo("landing", { replace: false });
+  }, [isLocalMode, setMode, send, goTo]);
+
+  const handleBackToLobby = useCallback(() => {
+    goTo("lobby", { replace: false });
+  }, [goTo]);
+
+  /* ── Nav configuration per screen ───────────────── */
+  const nav = useMemo((): ReactNode => {
+    const isLanding = screen === "landing" || SETUP_SHEET_SCREENS.has(screen);
+    const isLobby = screen === "lobby";
+    const isGame = screen === "game";
+
+    const showNav = isLanding || isLobby || isGame;
+    if (!showNav) return null;
+
+    const logo = (
+      <img
+        className="logo-image"
+        src={multipassLogo}
+        alt="Multipass"
+        style={isLobby || isGame ? { display: "none" } : undefined}
+      />
+    );
+
+    const roomCodeBelow = showHeroRoom ? (
+      <RoomCodeShareRow
+        roomCodeValue={state.room?.code || "----"}
+        shareLabel={shareLabel}
+        onShare={handleShareRoom}
+        shareDisabled={shareBusy || !state.room?.code}
+      />
+    ) : undefined;
+
+    if (isGame) {
+      return (
+        <NavBar
+          className="nav-bar--game"
+          left={{ label: "Back", icon: <BackIcon />, onClick: handleBackToLobby }}
+          center={null}
+          right={{ label: "Settings", icon: <SettingsIcon />, showLabel: false, onClick: openSettings }}
+        />
+      );
+    }
+
+    return (
+      <NavBar
+        className={isLobby ? "nav-bar--lobby" : ""}
+        left={isLobby ? { label: "Home", icon: <HomeIcon />, onClick: handleGoHome } : null}
+        center={logo}
+        right={{ label: "Settings", icon: <SettingsIcon />, showLabel: false, onClick: openSettings }}
+        below={roomCodeBelow}
+      />
+    );
+  }, [screen, showHeroRoom, state.room?.code, shareLabel, shareBusy, handleShareRoom, handleGoHome, handleBackToLobby, openSettings]);
+
   useEffect(() => {
-    if (!isReactRuntime || !state.settingsOpen) return;
+    if (!state.settingsOpen) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       setSettingsOpen(false);
@@ -62,11 +130,9 @@ export function AppLayout({ children, isDevBuild }: AppLayoutProps) {
     return () => {
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, [isReactRuntime, state.settingsOpen, setSettingsOpen]);
+  }, [state.settingsOpen, setSettingsOpen]);
 
   useEffect(() => {
-    if (!isReactRuntime) return;
-
     const media = typeof window.matchMedia === "function"
       ? window.matchMedia("(prefers-color-scheme: dark)")
       : null;
@@ -93,16 +159,14 @@ export function AppLayout({ children, isDevBuild }: AppLayoutProps) {
     return () => {
       media?.removeEventListener("change", onMediaChange);
     };
-  }, [isReactRuntime]);
+  }, []);
 
   useEffect(() => {
-    if (!isReactRuntime) return;
     document.body.dataset.mode = uiMode;
     document.body.dataset.uiVariant = uiMode === "dark" ? "neon_night" : "soft";
-  }, [isReactRuntime, uiMode]);
+  }, [uiMode]);
 
   const handleModeToggle = useCallback((checked: boolean) => {
-    if (!isReactRuntime) return;
     const nextMode: UiMode = checked ? "dark" : "light";
     setUiMode(nextMode);
     try {
@@ -110,22 +174,39 @@ export function AppLayout({ children, isDevBuild }: AppLayoutProps) {
     } catch {
       // Ignore persistence failures.
     }
-  }, [isReactRuntime]);
+  }, []);
 
   return (
     <>
-      <AppShell
-        onOpenSettings={openSettings}
-        roomCode={state.room?.code ?? null}
-        showRoomCode={showHeroRoom}
-        shareLabel={shareLabel}
-        onShareRoom={handleShareRoom}
-        shareDisabled={shareBusy || !state.room?.code}
-      >
+      <AppShell nav={nav}>
         {children}
       </AppShell>
-      <AppActionDock />
-
+      {(state.connectionStatus === "reconnecting" || state.connectionStatus === "disconnected") && state.mode === "online" && (
+        <div
+          className="connection-banner"
+          role="status"
+          aria-live="polite"
+          data-status={state.connectionStatus}
+        >
+          <span className="connection-banner-text">
+            {state.connectionStatus === "reconnecting"
+              ? "Connection lost. Reconnecting\u2026"
+              : "Connection lost."}
+          </span>
+          {state.connectionStatus === "disconnected" && (
+            <button
+              type="button"
+              className="connection-banner-action"
+              onClick={() => {
+                disconnect();
+                connect();
+              }}
+            >
+              Reconnect
+            </button>
+          )}
+        </div>
+      )}
       <Toast />
       <ActionToast />
 
@@ -133,7 +214,7 @@ export function AppLayout({ children, isDevBuild }: AppLayoutProps) {
         id="settings-modal"
         titleId="settings-title"
         title="Settings"
-        open={isReactRuntime ? state.settingsOpen : undefined}
+        open={state.settingsOpen}
         onClose={closeSettings}
       >
         <div className="setting-row">
@@ -144,10 +225,8 @@ export function AppLayout({ children, isDevBuild }: AppLayoutProps) {
               <input
                 id="mode-toggle"
                 type="checkbox"
-                checked={isReactRuntime ? uiMode === "dark" : undefined}
-                onChange={isReactRuntime
-                  ? (event) => handleModeToggle(event.currentTarget.checked)
-                  : undefined}
+                checked={uiMode === "dark"}
+                onChange={(event) => handleModeToggle(event.currentTarget.checked)}
               />
               <span className="slider"></span>
             </label>
@@ -160,10 +239,10 @@ export function AppLayout({ children, isDevBuild }: AppLayoutProps) {
             <Button
               id="open-devkit"
               variant="ghost"
-              onClick={isReactRuntime ? () => {
+              onClick={() => {
                 setSettingsOpen(false);
                 goTo("devkit");
-              } : undefined}
+              }}
             >
               Open component kitchen sink
             </Button>
