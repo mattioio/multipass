@@ -4,7 +4,7 @@ import { createInitialRuntimeState } from "../state";
 
 describe("runtime reducer", () => {
   it("stores session identifiers and room payloads", () => {
-    const initial = createInitialRuntimeState("react");
+    const initial = createInitialRuntimeState();
     const withSession = runtimeReducer(initial, runtimeActions.sessionReceived("client_1", "seat_1"));
     expect(withSession.clientId).toBe("client_1");
     expect(withSession.seatToken).toBe("seat_1");
@@ -29,7 +29,7 @@ describe("runtime reducer", () => {
   });
 
   it("tracks join validation lifecycle", () => {
-    const initial = createInitialRuntimeState("react");
+    const initial = createInitialRuntimeState();
     const validating = runtimeReducer(initial, runtimeActions.joinValidating());
     expect(validating.join.status).toBe("validating");
 
@@ -44,7 +44,7 @@ describe("runtime reducer", () => {
   });
 
   it("resets join preview state when code changes", () => {
-    const initial = createInitialRuntimeState("react");
+    const initial = createInitialRuntimeState();
     const ready = runtimeReducer(initial, runtimeActions.joinReady({ code: "ABCD" }, "ok"));
     const edited = runtimeReducer(ready, runtimeActions.joinCodeSet("WXYZ"));
 
@@ -55,7 +55,7 @@ describe("runtime reducer", () => {
   });
 
   it("stores and clears last-room metadata", () => {
-    const initial = createInitialRuntimeState("react");
+    const initial = createInitialRuntimeState();
     const remembered = runtimeReducer(initial, runtimeActions.lastRoomSet("ROOM", 12345));
     expect(remembered.lastRoomCode).toBe("ROOM");
     expect(remembered.lastRoomStartedAt).toBe(12345);

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import appScreensSource from "../screens/app/AppScreens.tsx?raw";
+import appScreensSource from "../screens/app/appScreensUtils.ts?raw";
 
 describe("Poker Dice motion contract", () => {
-  it("keeps legacy poker roll timing constants in AppScreens", () => {
+  it("keeps poker roll timing constants in appScreensUtils", () => {
     expect(appScreensSource).toContain("const POKER_DICE_ROLL_DURATION_MS = 2000;");
     expect(appScreensSource).toContain("const POKER_DICE_SHUFFLE_MIN_MS = 80;");
     expect(appScreensSource).toContain("const POKER_DICE_SHUFFLE_MAX_MS = 120;");

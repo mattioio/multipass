@@ -22,11 +22,8 @@ const classLiteralDenyList = [
 ];
 
 const forbiddenLegacyPattern = /\bscore-emoji(?:-[a-z-]+)?\b/g;
-const runtimeScoreWrapperPattern = /\bscore-column(?:-[a-z-]+)?\b/g;
 const legacyWinPillPattern = /\bscore-win-pill(?:-[a-z-]+)?\b/g;
-const perSideScorebarPattern = /function buildScoreDuelSide[\s\S]*?side\.appendChild\(\s*build(?:Shared)?ScoreBroadcastRow\(/m;
 const sourceExt = new Set([".js", ".ts", ".tsx", ".css", ".mjs"]);
-const runtimePath = path.join(srcRoot, "legacy/runtime.js");
 const componentsStylePath = path.join(srcRoot, "styles/components.css");
 
 async function listFiles(dir) {
@@ -70,30 +67,6 @@ async function main() {
         }
       }
     }
-  }
-
-  const runtimeContent = await fs.readFile(runtimePath, "utf8");
-  const requiredRuntimeTokens = [
-    "score-duel-panel",
-    "score-duel-sides",
-    "score-duel-side",
-    "score-duel-scorebar-wrap",
-    "score-broadcast-row",
-    "score-broadcast-score"
-  ];
-  requiredRuntimeTokens.forEach((token) => {
-    if (!runtimeContent.includes(token)) {
-      failures.push(`${runtimePath}: missing required scoreboard token \"${token}\"`);
-    }
-  });
-  if (runtimeScoreWrapperPattern.test(runtimeContent)) {
-    failures.push(`${runtimePath}: contains deprecated separate score wrapper token \"score-column*\"`);
-  }
-  if (legacyWinPillPattern.test(runtimeContent)) {
-    failures.push(`${runtimePath}: contains deprecated score token \"score-win-pill*\"`);
-  }
-  if (perSideScorebarPattern.test(runtimeContent)) {
-    failures.push(`${runtimePath}: per-side scorebar mount reintroduced in buildScoreDuelSide`);
   }
 
   const componentStyles = await fs.readFile(componentsStylePath, "utf8");

@@ -5,7 +5,7 @@ import {
   type FormEvent,
   type KeyboardEvent
 } from "react";
-import { normalizeRoomCode } from "../../legacy/hashRoute.js";
+import { normalizeRoomCode } from "../../net/hashRoute.js";
 import playerAvatar from "../../assets/player.svg";
 import playerAvatarAlt from "../../assets/player2.svg";
 import { HonorificToggle } from "../components/HonorificToggle";

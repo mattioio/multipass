@@ -192,6 +192,25 @@ export function createRuntimeWsSession(options: RuntimeWsSessionOptions): Runtim
       },
       onDisconnected() {
         dispatch(runtimeActions.connectionStatusSet("disconnected"));
+      },
+      onReconnecting() {
+        dispatch(runtimeActions.connectionStatusSet("reconnecting"));
+      },
+      onReconnected() {
+        dispatch(runtimeActions.connectionStatusSet("connected"));
+        flushPendingValidate();
+        // Re-join room if we were in one before disconnecting
+        const currentState = getState();
+        if (currentState.you?.roomCode && currentState.clientId) {
+          send(buildJoinRoomMessage({
+            code: currentState.you.roomCode,
+            clientId: currentState.clientId,
+            seatToken: currentState.seatToken
+          }));
+        }
+      },
+      onReconnectFailed() {
+        dispatch(runtimeActions.connectionStatusSet("disconnected"));
       }
     });
 

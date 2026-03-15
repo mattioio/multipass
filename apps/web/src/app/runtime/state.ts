@@ -1,10 +1,9 @@
-import type { RuntimeMode, RuntimeState } from "../../types";
+import type { RuntimeState } from "../../types";
 import { loadRuntimePersistence } from "./persistence";
 
-export function createInitialRuntimeState(runtimeMode: RuntimeMode): RuntimeState {
+export function createInitialRuntimeState(): RuntimeState {
   const persisted = loadRuntimePersistence();
   return {
-    runtimeMode,
     mode: "online",
     ws: null,
     connectionStatus: "disconnected",

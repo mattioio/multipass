@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Vite Dev (frontend)",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "apps/web"],
+      "port": 5173
+    },
+    {
+      "name": "API Server",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev:api", "--prefix", "apps/server"],
+      "port": 3001
+    },
+    {
+      "name": "Full Dev (API + Vite)",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "apps/server"],
+      "port": 3000
+    }
+  ]
+}

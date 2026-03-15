@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import { copyRoomInviteLink } from "../../legacy/shareLink.js";
+import { copyRoomInviteLink } from "../../net/shareLink.js";
 
 export interface UseShareInviteOptions {
   roomCode: string | null | undefined;

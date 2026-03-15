@@ -7,6 +7,7 @@ import { createHttpRequestHandler } from "../http/routes.js";
 import { createWsHandler } from "../ws/handler.js";
 import { createGameService } from "../domain/games/service.js";
 import { createRoomStore } from "../domain/rooms/store.js";
+import { createSqliteRoomStore } from "../domain/rooms/sqliteStore.js";
 import { createRoomService } from "../domain/rooms/service.js";
 
 const DEFAULT_PORT = 3000;
@@ -74,7 +75,13 @@ export function createMultipassServer(overrides = {}) {
   const logger = overrides.logger || createLogger("server");
 
   const gameService = createGameService();
-  const roomStore = createRoomStore();
+  const storeBackend = (overrides.roomStoreBackend ?? process.env.ROOM_STORE_BACKEND ?? "memory").toLowerCase();
+  const roomStore = storeBackend === "sqlite"
+    ? createSqliteRoomStore({ dbPath: overrides.roomStorePath ?? process.env.ROOM_STORE_PATH })
+    : createRoomStore();
+  if (storeBackend === "sqlite") {
+    logger.info("Using SQLite room store");
+  }
   const roomService = createRoomService({
     store: roomStore,
     gameService,

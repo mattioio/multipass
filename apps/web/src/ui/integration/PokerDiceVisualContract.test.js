@@ -1,13 +1,15 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import appScreensSource from "../screens/app/AppScreens.tsx?raw";
+import gameSectionSource from "../screens/app/GameSection.tsx?raw";
 
+const combinedSource = appScreensSource + "\n" + gameSectionSource;
 const screensCssSource = readFileSync("src/styles/screens.css", "utf8");
 
 describe("Poker Dice visual contract", () => {
   it("uses a single cube element path and no rotor wrapper", () => {
-    expect(appScreensSource).toContain("className={`poker-cube${Number.isInteger(dieValue) ? ` show-${dieValue}` : \"\"}`}");
-    expect(appScreensSource).not.toContain("poker-cube-rotor");
+    expect(combinedSource).toContain("className={`poker-cube${Number.isInteger(dieValue) ? ` show-${dieValue}` : \"\"}`}");
+    expect(combinedSource).not.toContain("poker-cube-rotor");
   });
 
   it("keeps resolved show transforms face-forward without tilt offsets", () => {

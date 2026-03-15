@@ -208,6 +208,99 @@ body::after {
   margin-bottom: var(--space-6);
 }
 
+body[data-screen="lobby"] .hero {
+  margin-bottom: 0;
+}
+
+body[data-screen="lobby"] .hero-top {
+  width: 100%;
+  max-width: 1100px;
+  margin-inline: auto;
+}
+
+.lobby-hero-bg {
+  display: none;
+}
+
+/* ── NavBar ───────────────────────────────────────── */
+.nav-bar {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+
+.nav-bar-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  max-width: var(--layout-max-width);
+  margin-inline: auto;
+}
+
+.nav-bar-left {
+  justify-self: start;
+}
+
+.nav-bar-center {
+  justify-self: center;
+  text-align: center;
+}
+
+.nav-bar-right {
+  justify-self: end;
+}
+
+.nav-bar-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 46px;
+  min-width: 56px;
+  justify-content: center;
+  color: var(--muted);
+  transition: color 180ms var(--ease-out);
+}
+
+.nav-bar-action:hover {
+  color: var(--text);
+}
+
+.nav-bar-icon {
+  width: 18px;
+  height: 18px;
+  display: block;
+  flex-shrink: 0;
+}
+
+.nav-bar-action-label {
+  font-size: inherit;
+  white-space: nowrap;
+}
+
+.nav-bar-below {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+}
+
+/* Lobby variant — constrain to content width */
+.nav-bar--lobby .nav-bar-row {
+  max-width: 1100px;
+}
+
+/* Game nav — compact, no margin */
+.nav-bar--game {
+  margin-bottom: var(--space-2);
+}
+
+.nav-bar--game .nav-bar-row {
+  max-width: 920px;
+}
+
 .hero-top {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);

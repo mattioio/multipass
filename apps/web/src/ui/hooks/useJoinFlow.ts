@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { normalizeRoomCode } from "../../legacy/hashRoute.js";
+import { normalizeRoomCode } from "../../net/hashRoute.js";
 
 export function useJoinFlow(inputCode: string) {
   const normalizedCode = useMemo(() => normalizeRoomCode(inputCode), [inputCode]);
