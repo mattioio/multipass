@@ -252,8 +252,13 @@ export function AppScreens() {
   const activeGameWinnerId = typeof activeGameState?.winnerId === "string" ? activeGameState.winnerId : null;
   const activeGameDraw = Boolean(activeGameState?.draw);
 
-  // Reset gameStarted when a new game begins
-  useEffect(() => { setGameStarted(false); }, [activeGameId]);
+  // Reset gameStarted when a new game begins, but if the game state
+  // already has a nextPlayerId it means moves have been made (e.g. page reload)
+  // so skip the intro card.
+  useEffect(() => {
+    const hasProgress = Boolean(activeGameState?.nextPlayerId || activeGameWinnerId || activeGameDraw);
+    setGameStarted(hasProgress);
+  }, [activeGameId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleGameStart = useCallback(() => setGameStarted(true), []);
 
@@ -877,16 +882,18 @@ export function AppScreens() {
     send({ type: "new_round" });
   }, [isLocalMode, send, startNextLocalRound]);
 
+  // "End game" — clear the active game so lobby shows fresh picker
   const handleBackToLobby = useCallback(() => {
+    if (isLocalMode && localRoom?.game) {
+      setLocalRoom({ ...localRoom, game: null as unknown as RoomState["game"] });
+    }
+    goTo("lobby", { replace: false });
+  }, [goTo, isLocalMode, localRoom]);
+
+  // "Return to hub" — navigate to lobby, game stays active/resumable
+  const handleReturnHome = useCallback(() => {
     goTo("lobby", { replace: false });
   }, [goTo]);
-
-  const handleReturnHome = useCallback(() => {
-    if (isLocalMode) {
-      setMode("online");
-    }
-    goTo("landing", { replace: false });
-  }, [isLocalMode, setMode, goTo]);
 
   const acknowledgePass = useCallback(() => {
     if (!isLocalMode || !localRoom) return;
