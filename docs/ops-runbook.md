@@ -1,5 +1,11 @@
 # Multipass Ops Runbook
 
+## Hosting
+
+- **Frontend**: Vercel (static Vite build from `apps/web`)
+- **Server**: Railway (persistent Node.js service from `apps/server`)
+- **Domain**: `loreandorder.com` → Vercel, `api.loreandorder.com` → Railway
+
 ## Endpoint policy
 - Canonical primary WebSocket endpoint: `wss://api.loreandorder.com`
 - No active backup endpoints are configured right now.

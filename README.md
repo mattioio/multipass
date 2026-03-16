@@ -48,12 +48,15 @@ Run this full suite before merging major backend/protocol work:
 - Generated outputs include favicon PNGs, `favicon.ico`, Apple touch icon, and manifest icons.
 - Regenerate icons locally with:
   - `npm --prefix /Users/matthew/Projects/multipass/apps/web run icons:generate`
-- GitHub Pages deploy workflow regenerates icons from `appicon.svg` before building.
+
+## Hosting
+- **Frontend**: Vercel (auto-deploys from `main`, builds `apps/web`)
+- **Server**: Railway (persistent Node.js service, `apps/server`)
+- **Domain**: `loreandorder.com` → Vercel, `api.loreandorder.com` → Railway
 
 ## Production WebSocket endpoint
-- GitHub Pages production builds inject a prioritized list in `VITE_WS_URL`.
 - Canonical primary endpoint: `wss://api.loreandorder.com`.
-- Current production list (priority order): `wss://api.loreandorder.com`.
+- Set via `VITE_WS_URL` environment variable on Vercel.
 - The app retries the next endpoint only if the current candidate fails.
 
 ## Runtime mode override
