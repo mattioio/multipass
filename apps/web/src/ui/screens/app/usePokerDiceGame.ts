@@ -172,7 +172,8 @@ export function usePokerDiceGame(params: UsePokerDiceGameParams): UsePokerDiceGa
     const openingRollPending = Boolean(!isFinished && nextPlayerId && nextPlayerRollsUsed < 1);
 
     const hasRolledOnce = rollsUsed >= 1;
-    const showPassPlay = Boolean(isLocalMode && !isFinished && !localBlocked && (rollsUsed >= 3 || myFinal));
+    const viewerNeedsHandoff = Boolean(isLocalMode && !isFinished && pokerViewerPlayerId && nextPlayerId && nextPlayerId !== pokerViewerPlayerId);
+    const showPassPlay = Boolean(isLocalMode && !isFinished && !localBlocked && (rollsUsed >= 3 || myFinal || viewerNeedsHandoff));
     const showInitialRollOnly = Boolean(!myFinal && !showPassPlay && !hasRolledOnce);
     const isPreRollForViewer = Boolean(pokerViewerPlayerId && !myFinal && rollsUsed === 0);
     const currentHandNumber = Math.max(1, asNumber(pokerState.currentHandNumber, 1));

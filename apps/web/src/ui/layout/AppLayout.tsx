@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState, type PropsWithChildren, type ReactNode 
 import { useRuntime } from "../../app/runtime";
 import { copyRoomInviteLink } from "../../net/shareLink.js";
 import { useAppRouter } from "../routing/AppRouter";
-import { AppShell, NavBar, HomeIcon, BackIcon, Toast, ActionToast } from "../components";
+import { AppShell, NavBar, HomeIcon, Toast, ActionToast } from "../components";
 import { RoomCodeShareRow } from "../patterns/RoomCodeShareRow";
 import { SETUP_SHEET_SCREENS } from "../screens/app/appScreensUtils";
 import multipassLogo from "../../assets/multipass-logo.svg";
@@ -78,14 +78,7 @@ export function AppLayout({ children }: PropsWithChildren) {
     ) : undefined;
 
     if (isGame) {
-      return (
-        <NavBar
-          className="nav-bar--game"
-          left={{ label: "Back", icon: <BackIcon />, onClick: handleBackToLobby }}
-          center={null}
-          right={null}
-        />
-      );
+      return null;
     }
 
     return (
