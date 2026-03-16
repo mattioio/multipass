@@ -50,13 +50,13 @@ Run this full suite before merging major backend/protocol work:
   - `npm --prefix /Users/matthew/Projects/multipass/apps/web run icons:generate`
 
 ## Hosting
-- **Frontend**: Vercel (auto-deploys from `main`, builds `apps/web`)
-- **Server**: Railway (persistent Node.js service, `apps/server`)
-- **Domain**: `loreandorder.com` → Vercel, `api.loreandorder.com` → Railway
+- **Frontend**: Render Static Site (auto-deploys from `main`, builds `apps/web`)
+- **Server**: Render Web Service (persistent Node.js service, `apps/server`)
+- **Domain**: `multipass.loreandorder.com` → frontend, `api.loreandorder.com` → server
 
 ## Production WebSocket endpoint
 - Canonical primary endpoint: `wss://api.loreandorder.com`.
-- Set via `VITE_WS_URL` environment variable on Vercel.
+- Set via `VITE_WS_URL` environment variable on Render.
 - The app retries the next endpoint only if the current candidate fails.
 
 ## Runtime mode override
