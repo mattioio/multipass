@@ -2,9 +2,9 @@
 
 ## Hosting
 
-- **Frontend**: Vercel (static Vite build from `apps/web`)
-- **Server**: Railway (persistent Node.js service from `apps/server`)
-- **Domain**: `loreandorder.com` → Vercel, `api.loreandorder.com` → Railway
+- **Frontend**: Render Static Site (static Vite build from `apps/web`)
+- **Server**: Render Web Service (persistent Node.js service from `apps/server`)
+- **Domain**: `multipass.loreandorder.com` → frontend, `api.loreandorder.com` → server
 
 ## Endpoint policy
 - Canonical primary WebSocket endpoint: `wss://api.loreandorder.com`
