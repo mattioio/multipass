@@ -295,7 +295,7 @@ function resolveFinalizedHand(state) {
     };
   }
 
-  const nextStarter = getOtherPlayerId(state, state.handStarterId) || state.handStarterId;
+  const nextStarter = state.handStarterId;
   return startHand(nextState, {
     handNumber: state.currentHandNumber + 1,
     handStarterId: nextStarter

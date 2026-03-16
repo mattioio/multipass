@@ -103,8 +103,8 @@ export interface AvatarOption {
 }
 
 export const AVATAR_OPTIONS: AvatarOption[] = [
-  { id: "yellow", name: "Yellow", theme: "yellow" },
   { id: "red", name: "Red", theme: "red" },
+  { id: "yellow", name: "Yellow", theme: "yellow" },
   { id: "green", name: "Green", theme: "green" },
   { id: "blue", name: "Blue", theme: "blue" }
 ];

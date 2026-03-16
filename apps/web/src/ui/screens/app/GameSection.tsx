@@ -83,6 +83,8 @@ export interface GameSectionProps {
   // Game panel
   gameStarted: boolean;
   onGameStart: () => void;
+  onBackToLobby: () => void;
+  onReturnHome: () => void;
 }
 
 export function GameSection({
@@ -133,6 +135,8 @@ export function GameSection({
   handlePokerPassPlay,
   gameStarted,
   onGameStart,
+  onBackToLobby,
+  onReturnHome,
 }: GameSectionProps) {
   const panelMode: "intro" | "turn" | "winner" | "draw" = !gameStarted
     ? "intro"
@@ -143,6 +147,47 @@ export function GameSection({
   const catalogGame = activeGameId ? getCatalogGame(activeGameId) : null;
   const gameName = catalogGame?.name ?? activeRoom?.game?.name ?? "Game";
   const gameBlurb = catalogGame?.blurb ?? "";
+
+  // Compute active player's current game score (null for games without scores)
+  const POKER_HAND_POINTS: Record<string, number> = {
+    royal_flush: 16, flush: 12, five_kind: 10, four_kind: 8,
+    full_house: 6, three_kind: 4, two_pair: 2, one_pair: 0,
+  };
+  // Determine "other" player (the one NOT shown in the active turn bar)
+  const otherPlayerId = (() => {
+    const hostId = activeRoom?.players.host?.id ?? null;
+    const guestId = activeRoom?.players.guest?.id ?? null;
+    if (!turnBarActivePlayerId) return guestId ?? hostId;
+    return turnBarActivePlayerId === hostId ? guestId : hostId;
+  })();
+
+  function computePlayerScore(playerId: string | null): number | null {
+    if (!playerId || !activeRoom?.game?.state) return null;
+    const gs = activeRoom.game.state as Record<string, unknown>;
+    if (activeGameId === "word_fight") {
+      const prog = gs.progressByPlayer as Record<string, { score?: number }> | undefined;
+      return prog?.[playerId]?.score ?? null;
+    }
+    if (activeGameId === "poker_dice") {
+      const pts = gs.pointsByPlayer as Record<string, number> | undefined;
+      return asNumber(pts?.[playerId], 0);
+    }
+    return null;
+  }
+
+  let activePlayerScore: number | null = computePlayerScore(turnBarActivePlayerId);
+  // Add projected hand score for active roller in poker dice
+  if (activeGameId === "poker_dice" && activePlayerScore != null) {
+    const isActivelyRolling = pokerContext.rollsUsed >= 1
+      && !pokerContext.showPassPlay
+      && !pokerFxUi.waitingForResolution;
+    const handPts = (isActivelyRolling && pokerProjectedGuideCategory)
+      ? (POKER_HAND_POINTS[pokerProjectedGuideCategory] ?? 0)
+      : 0;
+    activePlayerScore = activePlayerScore + handPts;
+  }
+
+  const otherPlayerScore = computePlayerScore(otherPlayerId);
 
   return (
     <Screen id="screen-game" active={activeScreen === "game"}>
@@ -309,7 +354,7 @@ export function GameSection({
                         <button
                           key={`wf-key-${keyLabel}`}
                           type="button"
-                          className={`word-fight-key${isAction ? " is-action" : ""}${letterState ? ` is-${letterState}` : ""}`}
+                          className={`word-fight-key${isAction ? " is-action" : ""}${letterState ? ` is-${letterState}` : ""}${keyLabel === "ENTER" && wordFightDraft.length === 4 ? " is-ready" : ""}`}
                           data-word-fight-key={keyLabel}
                           disabled={!wordFightContext.canType}
                           onClick={() => handleWordFightKey(keyLabel)}
@@ -381,17 +426,6 @@ export function GameSection({
                 ? `Round ${pokerContext.currentHandNumber} of ${Math.max(1, asNumber(pokerState.bestOfHands, 3))}`
                 : "Round 1 of 3"}
             </p>
-            {pokerPreRollCoach.mode !== "hidden" ? (
-              <p
-                id="poker-dice-preroll-status"
-                className="poker-dice-preroll-status"
-                data-state={pokerPreRollCoach.mode}
-                aria-live="polite"
-              >
-                {pokerPreRollCoach.message}
-              </p>
-            ) : null}
-
             <div id="poker-dice-dice" className="poker-dice-dice">
               {(pokerState ? pokerRenderedDice : []).map((dieValue, index) => {
                 const isHeld = pokerDicePendingHolds.includes(index);
@@ -422,7 +456,7 @@ export function GameSection({
                       });
                     }}
                   >
-                    <span className={`poker-cube${Number.isInteger(dieValue) ? ` show-${dieValue}` : ""}`}>
+                    <span className={`poker-cube${Number.isInteger(dieValue) ? ` show-${dieValue}` : " is-empty"}`}>
                       {POKER_DICE_FACE_VALUES.map((faceValue) => (
                         <span
                           key={`pd-face-${index}-${faceValue}`}
@@ -437,19 +471,24 @@ export function GameSection({
               })}
             </div>
 
-            <div className={`poker-dice-actions${pokerContext.showPassPlay ? " is-pass-only" : ""}`}>
+            <div className={`poker-dice-actions${pokerContext.showPassPlay && !pokerFxUi.waitingForResolution ? " is-pass-only" : ""}`}>
               <Button
                 id="poker-dice-roll"
-                className={`compact-action${pokerContext.showPassPlay ? " hidden" : ""}${pokerPreRollCoach.mode === "ready_to_roll" ? " is-preroll-cta" : ""}`}
+                className={`compact-action${pokerContext.showPassPlay && !pokerFxUi.waitingForResolution ? " hidden" : ""}${pokerPreRollCoach.mode === "ready_to_roll" ? " is-preroll-cta" : ""}`}
                 disabled={!pokerContext.canInteract || pokerContext.rollsUsed >= 3 || Boolean(pokerContext.myFinal?.category) || pokerIsFxRolling}
                 onClick={commitPokerRoll}
               >
-                {pokerContext.rollsUsed < 1 ? "Roll" : `Roll (${pokerContext.rollsUsed}/3)`}
+                {(() => {
+                  const displayRolls = pokerFxUi.waitingForResolution
+                    ? Math.max(0, pokerContext.rollsUsed - 1)
+                    : pokerContext.rollsUsed;
+                  return displayRolls < 1 ? "Roll" : `Roll (${displayRolls}/3)`;
+                })()}
               </Button>
               <Button
                 id="poker-dice-bank"
                 variant="ghost"
-                className={`compact-action${pokerContext.showPassPlay || pokerContext.showInitialRollOnly ? " hidden" : ""}`}
+                className={`compact-action${(pokerContext.showPassPlay && !pokerFxUi.waitingForResolution) || pokerContext.showInitialRollOnly ? " hidden" : ""}`}
                 disabled={!pokerContext.canInteract || pokerContext.rollsUsed < 1 || Boolean(pokerContext.myFinal?.category) || pokerIsFxRolling}
                 onClick={commitPokerBank}
               >
@@ -458,8 +497,8 @@ export function GameSection({
               <Button
                 id="poker-dice-pass-play"
                 variant="ghost"
-                className={`compact-action${pokerContext.showPassPlay ? "" : " hidden"}`}
-                disabled={!pokerContext.showPassPlay}
+                className={`compact-action${pokerContext.showPassPlay && !pokerFxUi.waitingForResolution ? "" : " hidden"}`}
+                disabled={!pokerContext.showPassPlay || pokerFxUi.waitingForResolution}
                 onClick={handlePokerPassPlay}
               >
                 Pass play
@@ -467,7 +506,7 @@ export function GameSection({
               <Button
                 id="poker-dice-clear-hold"
                 variant="ghost"
-                className={`compact-action${pokerContext.showPassPlay || pokerContext.showInitialRollOnly ? " hidden" : ""}`}
+                className={`compact-action${(pokerContext.showPassPlay && !pokerFxUi.waitingForResolution) || pokerContext.showInitialRollOnly ? " hidden" : ""}`}
                 disabled={!pokerContext.canInteract || pokerDicePendingHolds.length === 0 || pokerIsFxRolling}
                 onClick={() => setPokerDicePendingHolds([])}
               >
@@ -506,10 +545,16 @@ export function GameSection({
           mode={panelMode}
           activePlayer={playerById(activeRoom, turnBarActivePlayerId)}
           winnerPlayer={playerById(activeRoom, activeGameWinnerId)}
+          otherPlayer={playerById(activeRoom, otherPlayerId)}
           gameBlurb={gameBlurb}
           gameName={gameName}
+          gameId={activeGameId}
+          score={activePlayerScore}
+          otherPlayerScore={otherPlayerScore}
           onStart={onGameStart}
           onNextGame={onNewRound}
+          onBackToLobby={onBackToLobby}
+          onReturnHome={onReturnHome}
         />
       </div>
     </Screen>

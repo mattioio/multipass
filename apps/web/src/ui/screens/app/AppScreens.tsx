@@ -269,15 +269,28 @@ export function AppScreens() {
     if (isLocalMode && localPrivacy.stage === "handoff" && activeGameId === "word_fight") {
       return localViewerId;
     }
-    if (isLocalMode && activeGameId === "poker_dice" && pokerPassTargetPlayerId) {
-      return localViewerId;
+    // In local poker dice, keep showing the current viewer until they explicitly pass play,
+    // but only when they've banked this hand (finalByPlayer has their entry).
+    // At round boundaries (new hand, viewer hasn't banked), show the engine's nextPlayerId.
+    if (isLocalMode && activeGameId === "poker_dice") {
+      if (activeDisplayState.winnerId) {
+        return typeof activeDisplayState.winnerId === "string" ? activeDisplayState.winnerId : null;
+      }
+      if (activeDisplayState.draw) return null;
+      const stateNext = typeof activeDisplayState.nextPlayerId === "string" ? activeDisplayState.nextPlayerId : null;
+      // Hold on viewer when turn has moved away — either they banked mid-round
+      // or a new round started and they need to hand the device over.
+      if (stateNext && stateNext !== localViewerId) {
+        return localViewerId;
+      }
+      return stateNext;
     }
     if (activeDisplayState.winnerId && typeof activeDisplayState.winnerId === "string") {
       return activeDisplayState.winnerId;
     }
     if (activeDisplayState.draw) return null;
     return typeof activeDisplayState.nextPlayerId === "string" ? activeDisplayState.nextPlayerId : null;
-  }, [activeDisplayState, activeGameId, isLocalMode, localPrivacy.stage, localViewerId, pokerPassTargetPlayerId]);
+  }, [activeDisplayState, activeGameId, isLocalMode, localPrivacy.stage, localViewerId]);
 
   const lobbyGames = useMemo(() => {
     if (!activeRoom) return [];
@@ -864,6 +877,17 @@ export function AppScreens() {
     send({ type: "new_round" });
   }, [isLocalMode, send, startNextLocalRound]);
 
+  const handleBackToLobby = useCallback(() => {
+    goTo("lobby", { replace: false });
+  }, [goTo]);
+
+  const handleReturnHome = useCallback(() => {
+    if (isLocalMode) {
+      setMode("online");
+    }
+    goTo("landing", { replace: false });
+  }, [isLocalMode, setMode, goTo]);
+
   const acknowledgePass = useCallback(() => {
     if (!isLocalMode || !localRoom) return;
 
@@ -1194,6 +1218,8 @@ export function AppScreens() {
         handlePokerPassPlay={pokerGame.handlePokerPassPlay}
         gameStarted={gameStarted}
         onGameStart={handleGameStart}
+        onBackToLobby={handleBackToLobby}
+        onReturnHome={handleReturnHome}
       />
 
       <PassSection

@@ -130,7 +130,7 @@ export function LobbySection({
 
               let ctaText = "Play";
               if (isCurrentActiveGame) {
-                ctaText = "Resume game";
+                ctaText = "Resume";
               } else if (isCountdownTarget) {
                 ctaText = `Starting in ${onlineCountdownSeconds ?? 0}`;
               } else if (!isLocalMode && isPeerChoice && !isMyChoice) {

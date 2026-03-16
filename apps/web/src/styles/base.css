@@ -292,14 +292,7 @@ body[data-screen="lobby"] .hero-top {
   max-width: 1100px;
 }
 
-/* Game nav */
-.nav-bar--game {
-  margin-bottom: var(--space-3);
-}
-
-.nav-bar--game .nav-bar-row {
-  max-width: 920px;
-}
+/* Game nav — removed, menu lives in footer panel now */
 
 
 .hero-top {
