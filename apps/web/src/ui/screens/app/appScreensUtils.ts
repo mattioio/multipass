@@ -193,7 +193,6 @@ export function sanitizeJoinCode(rawCode: string): string {
 export function resolveScreenLayer(screen: ScreenKey): string {
   if (screen === "landing") return "landing";
   if (SETUP_SHEET_SCREENS.has(screen)) return "setup-sheet";
-  if (screen === "devkit") return "devkit";
   return "game-space";
 }
 

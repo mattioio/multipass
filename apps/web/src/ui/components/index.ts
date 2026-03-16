@@ -1,5 +1,5 @@
 export { AppShell } from "./AppShell";
-export { NavBar, HomeIcon, BackIcon, SettingsIcon } from "./NavBar";
+export { NavBar, HomeIcon, BackIcon } from "./NavBar";
 export type { NavBarProps, NavBarAction } from "./NavBar";
 export { AppActionDock } from "./AppActionDock";
 export { Screen } from "./Screen";
@@ -14,7 +14,6 @@ export { AvatarPickerGrid } from "./AvatarPickerGrid";
 export { HonorificToggle } from "./HonorificToggle";
 export { ScoreColumns } from "./ScoreColumns";
 export { Modal } from "./Modal";
-export { SettingsModal } from "./SettingsModal";
 export { Toast } from "./Toast";
 export { ActionToast } from "./ActionToast";
 export { GameTile } from "./GameTile";

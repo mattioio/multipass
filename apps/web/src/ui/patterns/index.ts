@@ -16,3 +16,5 @@ export { ResultBanner } from "./ResultBanner";
 export type { ResultBannerProps } from "./ResultBanner";
 export { GameModulesGallery } from "./GameModulesGallery";
 export type { GameModulesGalleryProps } from "./GameModulesGallery";
+export { GamePanel } from "./GamePanel";
+export type { GamePanelProps } from "./GamePanel";

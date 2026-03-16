@@ -4,7 +4,6 @@ export type RuntimeAction =
   | { type: "RUNTIME_WS_SET"; payload: { ws: WebSocket | null } }
   | { type: "RUNTIME_CONNECTION_STATUS_SET"; payload: { status: RuntimeConnectionStatus } }
   | { type: "RUNTIME_MODE_SET"; payload: { mode: RuntimeAppMode } }
-  | { type: "RUNTIME_SETTINGS_OPEN_SET"; payload: { open: boolean } }
   | { type: "RUNTIME_JOIN_CODE_SET"; payload: { code: string } }
   | { type: "RUNTIME_JOIN_VALIDATING" }
   | { type: "RUNTIME_JOIN_READY"; payload: { preview: RuntimeJoinPreview | null; message?: string } }
@@ -23,9 +22,6 @@ export const runtimeActions = {
   },
   modeSet(mode: RuntimeAppMode): RuntimeAction {
     return { type: "RUNTIME_MODE_SET", payload: { mode } };
-  },
-  settingsOpenSet(open: boolean): RuntimeAction {
-    return { type: "RUNTIME_SETTINGS_OPEN_SET", payload: { open } };
   },
   joinCodeSet(code: string): RuntimeAction {
     return { type: "RUNTIME_JOIN_CODE_SET", payload: { code } };

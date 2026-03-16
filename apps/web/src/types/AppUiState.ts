@@ -6,5 +6,4 @@ export interface AppUiState {
   roomCode: string | null;
   connectionStatus: "connected" | "connecting" | "disconnected" | "reconnecting";
   currentGameId: string | null;
-  isSettingsOpen: boolean;
 }

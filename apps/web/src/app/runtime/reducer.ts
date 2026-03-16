@@ -18,11 +18,6 @@ export function runtimeReducer(state: RuntimeState, action: RuntimeAction): Runt
         ...state,
         mode: action.payload.mode
       };
-    case "RUNTIME_SETTINGS_OPEN_SET":
-      return {
-        ...state,
-        settingsOpen: action.payload.open
-      };
     case "RUNTIME_JOIN_CODE_SET":
       return {
         ...state,

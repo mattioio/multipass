@@ -134,10 +134,13 @@ function createTicTacToeConfig({ id, name, bannerKey = "tic_tac_toe" }) {
 }
 
 export const gameCatalog = {
-  tic_tac_toe: createTicTacToeConfig({
-    id: "tic_tac_toe",
-    name: "Tic Tac Toe"
-  }),
+  tic_tac_toe: {
+    ...createTicTacToeConfig({
+      id: "tic_tac_toe",
+      name: "Tic Tac Toe"
+    }),
+    blurb: "Get three in a row to win. Simple rules, tricky opponents."
+  },
   dots_and_boxes: {
     id: "dots_and_boxes",
     name: "Dots & Boxes",
@@ -162,6 +165,7 @@ export const gameCatalog = {
         indices: completed
       };
     },
+    blurb: "Connect dots to claim boxes. Whoever owns the most boxes wins.",
     localEngine: createDotsAndBoxesEngine()
   },
   word_fight: {
@@ -175,6 +179,7 @@ export const gameCatalog = {
     surfaceType: "word_fight",
     mode: "board",
     visibility: "hidden_pass_device",
+    blurb: "Guess the hidden 4-letter word before your opponent does.",
     getWinRevealReason() {
       return null;
     },
@@ -191,6 +196,7 @@ export const gameCatalog = {
     surfaceType: "poker_dice",
     mode: "dice",
     visibility: "public",
+    blurb: "Roll dice to build the best poker hand. Highest score wins.",
     getWinRevealReason() {
       return null;
     },
