@@ -10,6 +10,7 @@ export interface TurnStatusBarProps {
   displayState?: Record<string, unknown> | null;
   mode?: "idle" | "turn" | "winner" | "draw";
   activePlayerId?: string | null;
+  variant?: "full" | "compact";
 }
 
 interface TurnScore {
@@ -113,7 +114,8 @@ export function TurnStatusBar({
   room = null,
   displayState = null,
   mode = "idle",
-  activePlayerId = null
+  activePlayerId = null,
+  variant = "full"
 }: TurnStatusBarProps) {
   const safeMode = mode === "winner" || mode === "draw" || mode === "turn" ? mode : "idle";
   const activeSide = room ? resolveActiveSide(room, activePlayerId) : "none";
@@ -134,7 +136,47 @@ export function TurnStatusBar({
   const hostData = { side: "host" as const, player: room.players.host, fallback: "Player 1", score: headerScores.host };
   const guestData = { side: "guest" as const, player: room.players.guest, fallback: "Player 2", score: headerScores.guest };
 
-  const renderPane = ({ side, player, fallback, score }: typeof hostData) => {
+  /* ── Compact scoreboard strip ─────────────────────── */
+  if (variant === "compact") {
+    const renderCompactSide = ({ side, player, fallback, score }: { side: "host" | "guest"; player: Player | null; fallback: string; score: TurnScore }) => {
+      const paneName = getDisplayPlayerName(player, fallback);
+      const isActive = activeSide === side;
+      const themeClass = player?.theme ? `theme-${player.theme}` : `theme-${side === "host" ? "red" : "green"}`;
+      return (
+        <span
+          key={side}
+          className={`turn-compact-side ${themeClass}`}
+          data-side={side}
+          data-active={isActive ? "true" : "false"}
+        >
+          <span className="turn-compact-avatar" aria-hidden="true">
+            <img src={getPlayerArtSrc(player)} alt="" />
+          </span>
+          <span className="turn-compact-name">{paneName}</span>
+          {score.showGameScore ? (
+            <span className="turn-compact-score">{score.gameScore}</span>
+          ) : null}
+        </span>
+      );
+    };
+
+    return (
+      <div
+        id={id}
+        className={`turn-compact ${className}`.trim()}
+        aria-live={live}
+        data-mode={safeMode}
+        data-active-side={activeSide}
+      >
+        {renderCompactSide(hostData)}
+        <span className="turn-compact-vs">VS</span>
+        {renderCompactSide(guestData)}
+      </div>
+    );
+  }
+
+  /* ── Full pane layout ─────────────────────────────── */
+  const renderPane = ({ side, player, fallback, score }: { side: "host" | "guest"; player: Player | null; fallback: string; score: TurnScore }) => {
     const modeText = resolveModeText(safeMode, side, activeSide, Boolean(player));
     const paneThemeClass = player?.theme ? `theme-${player.theme}` : `theme-${side === "host" ? "red" : "green"}`;
     const paneName = getDisplayPlayerName(player, fallback);

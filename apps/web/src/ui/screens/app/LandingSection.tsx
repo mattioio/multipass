@@ -1,3 +1,4 @@
+import type { MouseEvent as ReactMouseEvent } from "react";
 import {
   Button,
   Card,
@@ -9,6 +10,25 @@ import {
   SETUP_SHEET_SCREENS,
   formatStartedAgo,
 } from "./appScreensUtils";
+
+function handleCardTilt(e: ReactMouseEvent<HTMLElement>) {
+  const el = e.currentTarget;
+  const rect = el.getBoundingClientRect();
+  const x = (e.clientX - rect.left) / rect.width;
+  const y = (e.clientY - rect.top) / rect.height;
+  el.style.setProperty("--card-rx", `${(0.5 - y) * 4}deg`);
+  el.style.setProperty("--card-ry", `${(x - 0.5) * 6}deg`);
+  el.style.setProperty("--card-shine-x", `${x * 100}%`);
+  el.style.setProperty("--card-shine-y", `${y * 100}%`);
+}
+
+function resetCardTilt(e: ReactMouseEvent<HTMLElement>) {
+  const el = e.currentTarget;
+  el.style.setProperty("--card-rx", "0deg");
+  el.style.setProperty("--card-ry", "0deg");
+  el.style.setProperty("--card-shine-x", "50%");
+  el.style.setProperty("--card-shine-y", "50%");
+}
 
 export interface LandingSectionProps {
   activeScreen: ScreenKey;
@@ -42,7 +62,7 @@ export function LandingSection({
   return (
     <Screen id="screen-landing" active={activeScreen === "landing" || SETUP_SHEET_SCREENS.has(activeScreen)}>
       <div className="home-mode-grid">
-        <Card className="landing-card local-card home-mode-card">
+        <Card className="landing-card local-card home-mode-card" onMouseMove={handleCardTilt} onMouseLeave={resetCardTilt}>
           <CardHeader className="landing-card-header landing-card-header-local">
             <span className="landing-card-icon landing-card-icon-local" aria-hidden="true" />
           </CardHeader>
@@ -56,7 +76,7 @@ export function LandingSection({
             Start
           </Button>
         </Card>
-        <Card className="landing-card online-card home-mode-card">
+        <Card className="landing-card online-card home-mode-card" onMouseMove={handleCardTilt} onMouseLeave={resetCardTilt}>
           <CardHeader className="landing-card-header landing-card-header-online">
             <span className="landing-card-icon landing-card-icon-online" aria-hidden="true" />
           </CardHeader>

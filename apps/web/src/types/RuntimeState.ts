@@ -48,5 +48,4 @@ export interface RuntimeState {
   lastRoomCode: string | null;
   lastRoomStartedAt: number | null;
   join: RuntimeJoinState;
-  settingsOpen: boolean;
 }

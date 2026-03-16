@@ -13,8 +13,7 @@ export function useAppUiState(): AppUiState {
       hasRoom: Boolean(state.room),
       roomCode: state.room?.code ?? null,
       connectionStatus: state.connectionStatus,
-      currentGameId: state.room?.game?.id ?? null,
-      isSettingsOpen: state.settingsOpen
+      currentGameId: state.room?.game?.id ?? null
     };
-  }, [route.screen, state.connectionStatus, state.room, state.settingsOpen]);
+  }, [route.screen, state.connectionStatus, state.room]);
 }

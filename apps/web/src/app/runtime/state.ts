@@ -18,7 +18,6 @@ export function createInitialRuntimeState(): RuntimeState {
       status: "idle",
       message: "",
       preview: null
-    },
-    settingsOpen: false
+    }
   };
 }

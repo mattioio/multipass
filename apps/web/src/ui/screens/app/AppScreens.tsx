@@ -15,10 +15,8 @@ import { getLocalGame } from "../../../domain/localGames.js";
 import { resolvePickerGames } from "../../../domain/games/picker.js";
 import type { Player, RoomState, ScreenKey } from "../../../types";
 import { Screen } from "../../components";
-import { DevKitchenScreen } from "../DevKitchenScreen";
 import {
-  PlayerStatusStrip,
-  ScreenGuardBoundary
+  PlayerStatusStrip
 } from "../../patterns";
 import { useAppRouter } from "../../routing/AppRouter";
 import { normalizeTargetScreen } from "../../routing/normalizeScreen";
@@ -76,11 +74,7 @@ import { GameSection } from "./GameSection";
 import { PassSection } from "./PassSection";
 import { WinnerSection } from "./WinnerSection";
 
-interface AppScreensProps {
-  isDevBuild: boolean;
-}
-
-export function AppScreens({ isDevBuild }: AppScreensProps) {
+export function AppScreens() {
   const { route, goTo } = useAppRouter();
   const {
     state,
@@ -113,6 +107,7 @@ export function AppScreens({ isDevBuild }: AppScreensProps) {
   const [onlineBoardDismissed, setOnlineBoardDismissed] = useState(false);
   const [onlineLeavingToLanding, setOnlineLeavingToLanding] = useState(false);
   const [winReveal, setWinReveal] = useState<WinRevealState | null>(null);
+  const [gameStarted, setGameStarted] = useState(false);
   const [clockTick, setClockTick] = useState(() => Date.now());
   const [closingSetupScreen, setClosingSetupScreen] = useState<ScreenKey | null>(null);
 
@@ -152,6 +147,19 @@ export function AppScreens({ isDevBuild }: AppScreensProps) {
     return resolveOnlineRoomScreen(state.room);
   }, [isLocalMode, localPrivacy, localRoom, pokerPassTargetPlayerId, state.room]);
 
+  /* ── Park local room when user navigates home ──── */
+  // The rejoin snapshot is already kept in sync by a later effect, so we only
+  // need to clear the active localRoom so the landing page renders normally
+  // and the rejoin card appears.
+  useEffect(() => {
+    if (!localRoom) return;
+    // Park when mode switches away from local, or when user navigates to landing/setup
+    const leavingLocal = !isLocalMode;
+    const navigatingHome = isLocalMode && (route.screen === "landing" || SETUP_SHEET_SCREENS.has(route.screen));
+    if (!leavingLocal && !navigatingHome) return;
+    setLocalRoom(null);
+  }, [isLocalMode, localRoom, route.screen]);
+
   const resolvedScreen = useMemo<ScreenKey>(() => {
     if (isLocalMode) {
       if (!localRoom) {
@@ -162,12 +170,10 @@ export function AppScreens({ isDevBuild }: AppScreensProps) {
         return route.screen;
       }
 
-      if (route.screen === "devkit") return "devkit";
       if (route.screen === "lobby") return "lobby";
       if (route.screen === "pick" || route.screen === "wait" || route.screen === "game" || route.screen === "pass" || route.screen === "winner") {
         return resolvedRoomScreen;
       }
-      if (SETUP_SHEET_SCREENS.has(route.screen) || route.screen === "landing") return resolvedRoomScreen;
       return resolvedRoomScreen;
     }
 
@@ -245,6 +251,11 @@ export function AppScreens({ isDevBuild }: AppScreensProps) {
   const activeGameState = activeDisplayState ?? asRecord(activeRoom?.game?.state);
   const activeGameWinnerId = typeof activeGameState?.winnerId === "string" ? activeGameState.winnerId : null;
   const activeGameDraw = Boolean(activeGameState?.draw);
+
+  // Reset gameStarted when a new game begins
+  useEffect(() => { setGameStarted(false); }, [activeGameId]);
+
+  const handleGameStart = useCallback(() => setGameStarted(true), []);
 
   const turnBarMode: "idle" | "turn" | "winner" | "draw" = useMemo(() => {
     if (!activeRoom?.game || !activeDisplayState) return "idle";
@@ -853,27 +864,6 @@ export function AppScreens({ isDevBuild }: AppScreensProps) {
     send({ type: "new_round" });
   }, [isLocalMode, send, startNextLocalRound]);
 
-  const handleEndGame = useCallback(() => {
-    if (!activeRoom || isLocalMode) return;
-    const requesterId = typeof asRecord(activeRoom.endRequest).byId === "string"
-      ? String(asRecord(activeRoom.endRequest).byId)
-      : null;
-
-    if (requesterId && requesterId !== activeYou.playerId) {
-      send({ type: "end_game_agree" });
-      return;
-    }
-
-    send({ type: "end_game_request" });
-  }, [activeRoom, activeYou.playerId, isLocalMode, send]);
-
-  const handleCloseBoard = useCallback(() => {
-    if (!isLocalMode) {
-      setOnlineBoardDismissed(true);
-    }
-    goTo("lobby", { replace: false });
-  }, [goTo, isLocalMode]);
-
   const acknowledgePass = useCallback(() => {
     if (!isLocalMode || !localRoom) return;
 
@@ -968,27 +958,6 @@ export function AppScreens({ isDevBuild }: AppScreensProps) {
   }, [isLocalMode, localPrivacy, localRoom, pokerDicePendingHolds]);
 
   const currentGameEnded = Boolean(activeGameWinnerId || activeGameDraw);
-  const gameFinished = Boolean(activeRoom?.game && currentGameEnded);
-
-  const showEndGameButton = Boolean(
-    !isLocalMode
-    && activeRoom?.game
-    && !currentGameEnded
-    && (activeYou.role === "host" || activeYou.role === "guest")
-  );
-
-  const hasPendingEndRequest = Boolean(activeRoom && asRecord(activeRoom.endRequest).byId);
-  const endRequesterId = hasPendingEndRequest
-    ? String(asRecord(activeRoom?.endRequest).byId || "")
-    : "";
-
-  const isEndRequester = Boolean(endRequesterId && endRequesterId === activeYou.playerId);
-  const endButtonLabel = hasPendingEndRequest && !isEndRequester
-    ? "Agree end game"
-    : (isEndRequester ? "Waiting..." : "End game");
-
-  const newRoundButtonLabel = "Pick next game";
-  const showNewRoundButton = Boolean(gameFinished && (isLocalMode || activeYou.role === "host" || activeYou.role === "guest"));
 
   const waitPlayer = useMemo(() => {
     if (!activeRoom) return null;
@@ -1180,19 +1149,11 @@ export function AppScreens({ isDevBuild }: AppScreensProps) {
       <GameSection
         activeScreen={activeScreen}
         activeRoom={activeRoom}
-        activeDisplayState={activeDisplayState}
         activeGameId={activeGameId}
         activeGameWinnerId={activeGameWinnerId}
         turnBarMode={turnBarMode}
         turnBarActivePlayerId={turnBarActivePlayerId}
-        showEndGameButton={showEndGameButton}
-        isEndRequester={isEndRequester}
-        endButtonLabel={endButtonLabel}
-        showNewRoundButton={showNewRoundButton}
-        newRoundButtonLabel={newRoundButtonLabel}
         winReveal={winReveal}
-        onCloseBoard={handleCloseBoard}
-        onEndGame={handleEndGame}
         onNewRound={handleNewRound}
         tttBoardRef={tttGame.tttBoardRef}
         tttGestureRef={tttGame.tttGestureRef}
@@ -1231,6 +1192,8 @@ export function AppScreens({ isDevBuild }: AppScreensProps) {
         commitPokerRoll={pokerGame.commitPokerRoll}
         commitPokerBank={pokerGame.commitPokerBank}
         handlePokerPassPlay={pokerGame.handlePokerPassPlay}
+        gameStarted={gameStarted}
+        onGameStart={handleGameStart}
       />
 
       <PassSection
@@ -1246,11 +1209,6 @@ export function AppScreens({ isDevBuild }: AppScreensProps) {
         activeGameDraw={activeGameDraw}
       />
 
-      <ScreenGuardBoundary canRender={isDevBuild}>
-        <Screen id="screen-devkit" active={activeScreen === "devkit"}>
-          <DevKitchenScreen />
-        </Screen>
-      </ScreenGuardBoundary>
     </>
   );
 }

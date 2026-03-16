@@ -11,6 +11,7 @@ export interface CatalogGameDefinition {
   surfaceType: string;
   mode: "board" | "dice" | "card";
   visibility: "public" | "hidden_pass_device";
+  blurb?: string;
   localEngine?: LocalGameEngine;
 }
 

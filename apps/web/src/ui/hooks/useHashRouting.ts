@@ -13,8 +13,7 @@ const HASH_TO_SCREEN: Record<string, ScreenKey> = {
   "#wait": "wait",
   "#game": "game",
   "#pass": "pass",
-  "#winner": "winner",
-  "#devkit": "devkit"
+  "#winner": "winner"
 };
 
 function parseRoute(hash: string): RouteState {

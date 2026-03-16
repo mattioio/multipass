@@ -19,7 +19,6 @@ export interface RuntimeContextValue {
   connect: () => void;
   disconnect: () => void;
   setMode: (mode: RuntimeState["mode"]) => void;
-  setSettingsOpen: (open: boolean) => void;
   setJoinCode: (code: string) => void;
   setLastRoom: (code: string | null, startedAt: number | null) => void;
   validateRoom: (code: string) => void;
@@ -73,7 +72,6 @@ export function RuntimeProvider({ children }: PropsWithChildren) {
       connect: () => sessionRef.current?.connect(),
       disconnect: () => sessionRef.current?.disconnect(),
       setMode: (mode) => dispatch(runtimeActions.modeSet(mode)),
-      setSettingsOpen: (open) => dispatch(runtimeActions.settingsOpenSet(open)),
       setJoinCode: (code) => dispatch(runtimeActions.joinCodeSet(code)),
       setLastRoom: (code, startedAt) => {
         dispatch(runtimeActions.lastRoomSet(code, startedAt));

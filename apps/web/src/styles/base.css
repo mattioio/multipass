@@ -292,14 +292,15 @@ body[data-screen="lobby"] .hero-top {
   max-width: 1100px;
 }
 
-/* Game nav — compact, no margin */
+/* Game nav */
 .nav-bar--game {
-  margin-bottom: var(--space-2);
+  margin-bottom: var(--space-3);
 }
 
 .nav-bar--game .nav-bar-row {
   max-width: 920px;
 }
+
 
 .hero-top {
   display: grid;
@@ -559,7 +560,7 @@ h5 {
 }
 
 body[data-screen="game"] #app {
-  padding-top: 0;
+  padding-top: calc(var(--space-2) + var(--safe-top));
 }
 
 body[data-screen="game"] #app > .hero {

@@ -177,21 +177,21 @@ button:disabled {
   border: 1px solid var(--border);
   color: var(--text);
   box-shadow:
-    0 4px 0 0 color-mix(in srgb, var(--surface) 30%, black),
+    0 4px 0 0 color-mix(in srgb, var(--border) 60%, transparent),
     inset 0 1px 0 color-mix(in srgb, #ffffff 6%, transparent);
 }
 
 .ghost:hover:not(:disabled) {
   transform: translateY(-1px);
   box-shadow:
-    0 5px 0 0 color-mix(in srgb, var(--surface) 30%, black),
+    0 5px 0 0 color-mix(in srgb, var(--border) 60%, transparent),
     inset 0 1px 0 color-mix(in srgb, #ffffff 8%, transparent);
 }
 
 .ghost:active:not(:disabled) {
   transform: translateY(4px);
   box-shadow:
-    0 0 0 0 color-mix(in srgb, var(--surface) 30%, black),
+    0 0 0 0 color-mix(in srgb, var(--border) 60%, transparent),
     inset 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
@@ -243,6 +243,10 @@ button:disabled {
 .home-mode-card {
   --card-color: #3dba78;
   --card-color-dark: #163828;
+  --card-rx: 0deg;
+  --card-ry: 0deg;
+  --card-shine-x: 50%;
+  --card-shine-y: 50%;
   position: relative;
   overflow: hidden;
   aspect-ratio: 4 / 3;
@@ -257,7 +261,46 @@ button:disabled {
     inset 0 1px 0 color-mix(in srgb, var(--card-color) 60%, white) !important;
   transform-style: preserve-3d;
   will-change: transform;
-  cursor: default;
+  cursor: pointer;
+  transition:
+    transform 400ms cubic-bezier(0.03, 0.98, 0.52, 0.99),
+    box-shadow 400ms var(--ease-out);
+  transform: perspective(800px) rotateX(var(--card-rx)) rotateY(var(--card-ry));
+}
+
+.home-mode-card:hover {
+  box-shadow:
+    0 20px 40px rgba(0, 0, 0, 0.5),
+    0 0 20px color-mix(in srgb, var(--card-color) 25%, transparent),
+    0 0 0 1px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 color-mix(in srgb, var(--card-color) 80%, white) !important;
+}
+
+.home-mode-card:active {
+  transform: perspective(800px) scale(0.97);
+  transition-duration: 100ms;
+}
+
+/* Gloss highlight — follows mouse position */
+.home-mode-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+  border-radius: inherit;
+  background: radial-gradient(
+    circle at var(--card-shine-x) var(--card-shine-y),
+    rgba(255, 255, 255, 0.12) 0%,
+    rgba(255, 255, 255, 0.04) 40%,
+    transparent 70%
+  );
+  opacity: 0;
+  transition: opacity 400ms var(--ease-out);
+}
+
+.home-mode-card:hover::before {
+  opacity: 1;
 }
 
 .home-main-action {
@@ -773,12 +816,12 @@ button:disabled {
 }
 
 .landing-card-icon {
-  width: 50%;
-  height: 50%;
+  width: 65%;
+  height: 65%;
   display: inline-block;
   position: relative;
   z-index: 1;
-  background-color: rgba(255, 255, 255, 0.18);
+  background-color: rgba(255, 255, 255, 0.32);
   -webkit-mask-repeat: no-repeat;
   -webkit-mask-position: center;
   -webkit-mask-size: contain;
@@ -925,22 +968,22 @@ button:disabled {
   color: color-mix(in srgb, #ffffff 92%, var(--text));
   background: color-mix(in srgb, #140d34 26%, transparent);
   box-shadow:
-    0 2px 0 0 rgba(0, 0, 0, 0.3),
+    0 2px 0 0 rgba(0, 0, 0, 0.14),
     inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 .setup-header-close:hover {
   transform: translateY(-1px);
   box-shadow:
-    0 3px 0 0 rgba(0, 0, 0, 0.3),
+    0 3px 0 0 rgba(0, 0, 0, 0.14),
     inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
 .setup-header-close:active {
   transform: translateY(2px);
   box-shadow:
-    0 0 0 0 rgba(0, 0, 0, 0.3),
-    inset 0 2px 4px rgba(0, 0, 0, 0.3);
+    0 0 0 0 rgba(0, 0, 0, 0.14),
+    inset 0 2px 4px rgba(0, 0, 0, 0.18);
 }
 
 .avatar-picker {
@@ -1569,10 +1612,16 @@ button:disabled {
 
 .lobby-games-title {
   margin: 0;
-  font-size: clamp(1.4rem, 2.2vw, 1.8rem);
+  font-family: var(--title-font);
+  font-size: clamp(1.8rem, 3.2vw, 2.6rem);
   font-weight: 900;
-  letter-spacing: 0.02em;
-  color: color-mix(in srgb, #ffffff 88%, var(--text));
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #f3ebff;
+  text-shadow:
+    0 2px 0 #3a1d6e,
+    0 4px 0 #2a1250,
+    0 6px 10px rgba(0, 0, 0, 0.35);
 }
 
 .lobby-pick-head {

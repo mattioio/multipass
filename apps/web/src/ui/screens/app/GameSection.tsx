@@ -6,10 +6,10 @@ import {
   Screen
 } from "../../components";
 import {
-  GameActionRow,
   GameSurfaceShell,
-  TurnStatusBar
+  GamePanel,
 } from "../../patterns";
+import { getCatalogGame } from "../../../domain/games/catalog.js";
 import type { UseTicTacToeGameResult } from "./useTicTacToeGame";
 import type { UseDotsAndBoxesGameResult } from "./useDotsAndBoxesGame";
 import type { UseWordFightGameResult } from "./useWordFightGame";
@@ -28,19 +28,11 @@ import {
 export interface GameSectionProps {
   activeScreen: ScreenKey;
   activeRoom: RoomState | null;
-  activeDisplayState: Record<string, unknown> | null;
   activeGameId: string | null;
   activeGameWinnerId: string | null;
   turnBarMode: "idle" | "turn" | "winner" | "draw";
   turnBarActivePlayerId: string | null;
-  showEndGameButton: boolean;
-  isEndRequester: boolean;
-  endButtonLabel: string;
-  showNewRoundButton: boolean;
-  newRoundButtonLabel: string;
   winReveal: WinRevealState | null;
-  onCloseBoard: () => void;
-  onEndGame: () => void;
   onNewRound: () => void;
 
   // TTT game
@@ -87,24 +79,20 @@ export interface GameSectionProps {
   commitPokerRoll: UsePokerDiceGameResult["commitPokerRoll"];
   commitPokerBank: UsePokerDiceGameResult["commitPokerBank"];
   handlePokerPassPlay: UsePokerDiceGameResult["handlePokerPassPlay"];
+
+  // Game panel
+  gameStarted: boolean;
+  onGameStart: () => void;
 }
 
 export function GameSection({
   activeScreen,
   activeRoom,
-  activeDisplayState,
   activeGameId,
   activeGameWinnerId,
   turnBarMode,
   turnBarActivePlayerId,
-  showEndGameButton,
-  isEndRequester,
-  endButtonLabel,
-  showNewRoundButton,
-  newRoundButtonLabel,
   winReveal,
-  onCloseBoard,
-  onEndGame,
   onNewRound,
   tttBoardRef,
   tttGestureRef,
@@ -143,44 +131,27 @@ export function GameSection({
   commitPokerRoll,
   commitPokerBank,
   handlePokerPassPlay,
+  gameStarted,
+  onGameStart,
 }: GameSectionProps) {
+  const panelMode: "intro" | "turn" | "winner" | "draw" = !gameStarted
+    ? "intro"
+    : turnBarMode === "winner" ? "winner"
+    : turnBarMode === "draw" ? "draw"
+    : "turn";
+
+  const catalogGame = activeGameId ? getCatalogGame(activeGameId) : null;
+  const gameName = catalogGame?.name ?? activeRoom?.game?.name ?? "Game";
+  const gameBlurb = catalogGame?.blurb ?? "";
+
   return (
     <Screen id="screen-game" active={activeScreen === "game"}>
       <div className="game-screen-layout">
-        <div className="game-turn-footer">
-          <TurnStatusBar
-            room={activeRoom}
-            displayState={activeDisplayState}
-            mode={turnBarMode}
-            activePlayerId={turnBarActivePlayerId}
-          />
-        </div>
-
+        <div className={`game-board-overlay${!gameStarted ? " is-active" : ""}`} />
         <GameSurfaceShell
           showHead={false}
           state={activeRoom?.game ? "active" : "idle"}
-          actions={(
-            <GameActionRow>
-              <Button
-                id="end-game-game"
-                variant="ghost"
-                className={showEndGameButton ? "" : "hidden"}
-                onClick={onEndGame}
-                disabled={isEndRequester}
-              >
-                {endButtonLabel}
-              </Button>
-
-              <Button
-                id="new-round"
-                variant="ghost"
-                className={showNewRoundButton ? "" : "hidden"}
-                onClick={onNewRound}
-              >
-                {newRoundButtonLabel}
-              </Button>
-            </GameActionRow>
-          )}
+          actions={null}
         >
           <div
             id="ttt-board"
@@ -530,6 +501,16 @@ export function GameSection({
             </section>
           </div>
         </GameSurfaceShell>
+
+        <GamePanel
+          mode={panelMode}
+          activePlayer={playerById(activeRoom, turnBarActivePlayerId)}
+          winnerPlayer={playerById(activeRoom, activeGameWinnerId)}
+          gameBlurb={gameBlurb}
+          gameName={gameName}
+          onStart={onGameStart}
+          onNextGame={onNewRound}
+        />
       </div>
     </Screen>
   );
